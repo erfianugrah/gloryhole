@@ -1,20 +1,22 @@
 package dns
 
 import (
-	"sync"
+	"context"
 	"net"
-	"github.com/miekg/dns"
+	"sync"
+
+	"codeberg.org/miekg/dns"
 )
 
 // Handler is a DNS handler
 type Handler struct {
-	Blocklist      map[string]struct{}
-	BlocklistMu    sync.RWMutex
-	Whitelist      map[string]struct{}
-	WhitelistMu    sync.RWMutex
-	Overrides      map[string]net.IP
-	OverridesMu    sync.RWMutex
-	CNAMEOverrides map[string]string
+	Blocklist        map[string]struct{}
+	BlocklistMu      sync.RWMutex
+	Whitelist        map[string]struct{}
+	WhitelistMu      sync.RWMutex
+	Overrides        map[string]net.IP
+	OverridesMu      sync.RWMutex
+	CNAMEOverrides   map[string]string
 	CNAMEOverridesMu sync.RWMutex
 }
 
@@ -29,10 +31,15 @@ func NewHandler() *Handler {
 }
 
 // ServeDNS implements the dns.Handler interface
-func (h *Handler) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
+func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) {
 	// The logic from gemini.md will go here.
 	// For now, we just return a simple response.
 	msg := new(dns.Msg)
-	msg.SetReply(r)
-	w.WriteMsg(msg)
+	msg.ID = r.ID
+	msg.Response = true
+	msg.Authoritative = true
+	msg.Opcode = r.Opcode
+	msg.RecursionDesired = r.RecursionDesired
+	msg.Question = r.Question
+	msg.WriteTo(w)
 }

@@ -41,5 +41,3 @@ glory-hole # The name of our executable
 
 # Configuration files that might contain sensitive info or be user-specific
 config.yml
-
-*gemini*
