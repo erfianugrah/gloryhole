@@ -1,0 +1,46 @@
+# Test configuration with blocklists enabled
+server:
+  listen_address: "127.0.0.1:5354"
+  udp_enabled: true
+  tcp_enabled: true
+
+upstream_dns_servers:
+  - "10.0.10.2:53"
+
+# Blocklist configuration - using multiple large blocklists for performance testing
+blocklists:
+  - "https://big.oisd.nl"
+  - "https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/ultimate.txt"
+  - "https://raw.githubusercontent.com/StevenBlack/hosts/master/alternates/fakenews-gambling/hosts"
+
+# Auto-update settings
+auto_update_blocklists: false  # Disable for testing (manual control)
+update_interval: 24h
+
+# Optional: whitelist for testing
+whitelist: []
+
+storage:
+  type: "memory"
+  sqlite_path: ""
+
+cache:
+  enabled: true
+  max_entries: 10000
+  min_ttl: 60s
+  max_ttl: 24h
+  negative_ttl: 5m
+
+logging:
+  level: "info"          # Use info level to see blocklist activity
+  format: "text"
+  output: "stdout"
+  add_source: false      # Disable for performance
+
+telemetry:
+  enabled: true
+  service_name: "glory-hole-test"
+  service_version: "dev"
+  prometheus_enabled: true
+  prometheus_port: 9090
+  tracing_enabled: false

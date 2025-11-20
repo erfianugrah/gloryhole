@@ -9,6 +9,7 @@ import (
 	"syscall"
 	"time"
 
+	"glory-hole/pkg/blocklist"
 	"glory-hole/pkg/config"
 	"glory-hole/pkg/dns"
 	"glory-hole/pkg/logging"
@@ -62,9 +63,23 @@ func main() {
 	// Create DNS handler
 	handler := dns.NewHandler()
 
-	// Load blocklist if configured
+	// Initialize blocklist manager if configured (lock-free, high performance)
+	var blocklistMgr *blocklist.Manager
 	if len(cfg.Blocklists) > 0 {
-		logger.Info("Blocklist loading not yet implemented", "count", len(cfg.Blocklists))
+		logger.Info("Initializing blocklist manager", "sources", len(cfg.Blocklists))
+		blocklistMgr = blocklist.NewManager(cfg, logger)
+
+		// Start blocklist manager (downloads lists and starts auto-update)
+		if err := blocklistMgr.Start(ctx); err != nil {
+			logger.Error("Failed to start blocklist manager", "error", err)
+			// Continue anyway - server can run without blocklists
+		} else {
+			handler.SetBlocklistManager(blocklistMgr)
+			logger.Info("Blocklist manager started",
+				"domains", blocklistMgr.Size(),
+				"auto_update", cfg.AutoUpdateBlocklists,
+			)
+		}
 	}
 
 	// Load whitelist if configured
@@ -110,6 +125,11 @@ func main() {
 
 		if err := server.Shutdown(shutdownCtx); err != nil {
 			logger.Error("Error during server shutdown", "error", err)
+		}
+
+		// Shutdown blocklist manager
+		if blocklistMgr != nil {
+			blocklistMgr.Stop()
 		}
 
 		if err := telem.Shutdown(shutdownCtx); err != nil {
