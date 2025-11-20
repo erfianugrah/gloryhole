@@ -2,6 +2,22 @@
 
 A high-performance DNS server written in Go, designed as a modern, extensible replacement for Pi-hole and similar solutions. Glory-Hole provides advanced DNS filtering, caching, and analytics capabilities in a single, self-contained binary.
 
+## 🚧 Project Status
+
+**Current Phase**: Phase 0 (Foundation) ✅ Complete
+**Next Phase**: Phase 1 (MVP - Basic DNS Server)
+**Version**: 0.1.0-dev
+
+> **Note**: This project is under active development. The foundation layer (configuration, logging, telemetry) is complete and production-ready. Core DNS functionality is being implemented in Phase 1.
+
+### Quick Links
+
+- 📊 **[Current Status](STATUS.md)** - What's working and what's not
+- 🗺️ **[Development Roadmap](PHASES.md)** - Detailed phase-by-phase plan
+- 🏗️ **[Architecture Guide](ARCHITECTURE.md)** - System architecture (3,700+ lines)
+- 📐 **[Design Document](DESIGN.md)** - Feature specifications (1,900+ lines)
+- 📝 **[Example Configuration](config.example.yml)** - Complete config example
+
 ## Features
 
 - **DNS Filtering**: Block unwanted domains using customizable blocklists
@@ -177,11 +193,57 @@ go build -v ./...
 go test -v ./...
 ```
 
+All tests currently pass (26 tests in foundation packages):
+```
+ok      glory-hole/pkg/config           0.271s
+ok      glory-hole/pkg/logging          0.002s
+ok      glory-hole/pkg/telemetry        0.005s
+```
+
 ### Linting
 
 ```bash
 golangci-lint run
 ```
+
+### Project Structure
+
+```
+glory-hole/
+├── cmd/glory-hole/          # Main application entry point
+├── pkg/
+│   ├── config/              # ✅ Configuration management (COMPLETE)
+│   ├── logging/             # ✅ Structured logging (COMPLETE)
+│   ├── telemetry/           # ✅ OpenTelemetry metrics (COMPLETE)
+│   ├── dns/                 # 🔴 DNS server (TODO - Phase 1)
+│   ├── policy/              # 🔴 Policy engine (TODO - Phase 2)
+│   └── storage/             # 🔴 Database layer (TODO - Phase 1)
+├── config.example.yml       # Example configuration
+├── PHASES.md                # Development roadmap
+├── STATUS.md                # Current project status
+├── ARCHITECTURE.md          # System architecture
+└── DESIGN.md                # Feature specifications
+```
+
+### Current Implementation Status
+
+**✅ Complete (Phase 0)**:
+- Configuration system with YAML loading
+- Hot-reload capability (file watching)
+- Structured logging (slog)
+- OpenTelemetry metrics integration
+- Prometheus exporter
+- Comprehensive test coverage
+
+**🔴 TODO (Phase 1 - MVP)**:
+- DNS server implementation
+- Blocklist management
+- Upstream forwarding
+- DNS caching
+- Query logging
+- Basic API
+
+See [PHASES.md](PHASES.md) for the complete roadmap.
 
 ## Contributing
 

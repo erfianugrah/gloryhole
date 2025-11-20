@@ -1,0 +1,70 @@
+# Glory-Hole DNS Server Configuration
+
+# Server settings
+server:
+  listen_address: ":53"
+  tcp_enabled: true
+  udp_enabled: true
+  web_ui_address: ":8080"
+
+# Upstream DNS servers
+upstream_dns_servers:
+  - "1.1.1.1:53"
+  - "8.8.8.8:53"
+
+# Update settings
+update_interval: "24h"
+auto_update_blocklists: true
+
+# Blocklists
+blocklists:
+  - "https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts"
+
+# Whitelist
+whitelist:
+  - "example-allowed-domain.com"
+
+# Local DNS overrides
+overrides:
+  nas.local: "192.168.1.100"
+  router.local: "192.168.1.1"
+
+# CNAME overrides
+cname_overrides:
+  storage.local: "nas.local."
+
+# Storage
+storage:
+  database_path: "./gloryhole.db"
+  log_queries: true
+  log_retention_days: 30
+  buffer_size: 1000
+
+# Cache
+cache:
+  enabled: true
+  max_entries: 10000
+  min_ttl: "60s"
+  max_ttl: "24h"
+  negative_ttl: "5m"
+
+# Logging
+logging:
+  level: "info"          # debug, info, warn, error
+  format: "text"         # json, text
+  output: "stdout"       # stdout, stderr, file
+  add_source: true       # include file:line in logs (great for debugging, adds ~1-2μs overhead per log)
+  file_path: ""          # required if output=file
+  max_size: 100          # MB
+  max_backups: 3
+  max_age: 7             # days
+
+# Telemetry (OpenTelemetry)
+telemetry:
+  enabled: true
+  service_name: "glory-hole"
+  service_version: "dev"
+  prometheus_enabled: true
+  prometheus_port: 9090
+  tracing_enabled: false
+  tracing_endpoint: ""

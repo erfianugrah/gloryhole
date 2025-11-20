@@ -8,7 +8,8 @@
 
 # Output of the go command
 bin/
-pkg/
+# Note: We use pkg/ for source code (standard Go layout), not for build artifacts
+# Go modules don't create a pkg/ directory for build output anymore
 
 # Editor/IDE specific files
 .idea/
