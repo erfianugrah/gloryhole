@@ -1,1 +1,45 @@
-gemini.md
+# Binaries for programs and plugins
+*.exe
+*.dll
+*.so
+*.dylib
+*.test
+*.prof
+
+# Output of the go command
+bin/
+pkg/
+
+# Editor/IDE specific files
+.idea/
+.vscode/
+.DS_Store
+*~
+*.swp
+.env
+
+# Log files
+*.log
+
+# Database files
+*.db
+
+# Dependency directories
+vendor/
+
+# GoLand
+.idea/
+
+# VS Code
+.vscode/
+
+# macOS
+.DS_Store
+
+# Build output
+glory-hole # The name of our executable
+
+# Configuration files that might contain sensitive info or be user-specific
+config.yml
+
+*gemini*
