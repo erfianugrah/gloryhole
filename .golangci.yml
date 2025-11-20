@@ -1,0 +1,63 @@
+run:
+  timeout: 5m
+  skip-dirs:
+    - vendor/
+
+linters:
+  enable-all: true
+  disable:
+    - exhaustivestruct
+    - golint
+    - interfacer
+    - maligned
+    - scopelint
+    - structcheck
+    - varcheck
+    - deadcode
+    - ifshort
+    - nosnakecase
+    - nonamedreturns
+    - exhaustruct
+    - gochecknoinits
+    - gochecknoglobals
+    - godox
+    - testpackage
+    - goerr113
+    - wrapcheck
+    - nlreturn
+    - tparallel
+    - paralleltest
+
+linters-settings:
+  gofmt:
+    simplify: true
+  goimports:
+    local-prefixes: glory-hole
+  govet:
+    check-shadowing: true
+  cyclop:
+    max-complexity: 15
+  maligned:
+    suggest-new: true
+  goconst:
+    min-len: 2
+    min-occurrences: 3
+  misspell:
+    locale: US
+  funlen:
+    lines: 100
+    statements: 50
+  gocritic:
+    enabled-tags:
+      - diagnostic
+      - experimental
+      - opinionated
+      - performance
+      - style
+  errorlint:
+    errorf: true
+
+issues:
+  exclude-use-default: false
+  max-issues-per-linter: 0
+  max-same-issues: 0
