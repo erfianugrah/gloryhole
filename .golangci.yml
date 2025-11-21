@@ -55,6 +55,10 @@ linters:
     - forbidigo    # Forbidden identifiers
     - ireturn      # Accept interfaces, return structs
     - interfacebloat # Interface method count
+    - nestif       # Nested if complexity
+    - mirror       # Allocation optimizations
+    - maintidx     # Maintainability index
+    - lll          # Line length limit
 
 linters-settings:
   gofmt:
