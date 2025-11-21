@@ -33,6 +33,47 @@ overrides:
 cname_overrides:
   storage.local: "nas.local."
 
+# Local DNS Records (Advanced)
+# This section provides more control than simple overrides
+# Features: Multiple IPs, AAAA records, wildcards, custom TTLs
+local_records:
+  enabled: true
+  records:
+    # A record with single IPv4 address
+    - domain: "nas.local"
+      type: "A"
+      ips:
+        - "192.168.1.100"
+      ttl: 300  # optional, defaults to 300
+
+    # A record with multiple IPs (round-robin)
+    - domain: "server.local"
+      type: "A"
+      ips:
+        - "192.168.1.10"
+        - "192.168.1.11"
+        - "192.168.1.12"
+
+    # AAAA record for IPv6
+    - domain: "server.local"
+      type: "AAAA"
+      ips:
+        - "fe80::1"
+        - "fe80::2"
+
+    # CNAME record
+    - domain: "storage.local"
+      type: "CNAME"
+      target: "nas.local"
+
+    # Wildcard record (matches *.dev.local)
+    # Note: Only matches one level (server.dev.local, NOT sub.server.dev.local)
+    - domain: "*.dev.local"
+      type: "A"
+      wildcard: true
+      ips:
+        - "192.168.1.200"
+
 # Database (Query Logging & Statistics)
 database:
   enabled: true

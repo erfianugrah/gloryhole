@@ -10,6 +10,7 @@ import (
 	"glory-hole/pkg/blocklist"
 	"glory-hole/pkg/cache"
 	"glory-hole/pkg/forwarder"
+	"glory-hole/pkg/localrecords"
 	"glory-hole/pkg/storage"
 
 	"github.com/miekg/dns"
@@ -37,6 +38,9 @@ type Handler struct {
 	Whitelist      map[string]struct{}
 	Overrides      map[string]net.IP
 	CNAMEOverrides map[string]string
+
+	// Local DNS records manager (e.g., nas.local -> 192.168.1.100)
+	LocalRecords *localrecords.Manager // Optional local DNS records
 
 	Forwarder *forwarder.Forwarder
 	Cache     *cache.Cache      // Optional DNS response cache
@@ -71,6 +75,11 @@ func (h *Handler) SetBlocklistManager(m *blocklist.Manager) {
 // SetStorage sets the query logging storage
 func (h *Handler) SetStorage(s storage.Storage) {
 	h.Storage = s
+}
+
+// SetLocalRecords sets the local DNS records manager
+func (h *Handler) SetLocalRecords(l *localrecords.Manager) {
+	h.LocalRecords = l
 }
 
 // ServeDNS implements the dns.Handler interface
@@ -155,6 +164,124 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 			responseCode = cachedResp.Rcode
 			w.WriteMsg(cachedResp)
 			return
+		}
+	}
+
+	// Check local records (highest priority for authoritative answers)
+	// Local records are for custom domain resolution (e.g., nas.local -> 192.168.1.100)
+	if h.LocalRecords != nil {
+		switch qtype {
+		case dns.TypeA:
+			// Check for direct A record
+			if ips, ttl, found := h.LocalRecords.LookupA(domain); found {
+				for _, ip := range ips {
+					if ip.To4() != nil {
+						rr := &dns.A{
+							Hdr: dns.RR_Header{
+								Name:   domain,
+								Rrtype: dns.TypeA,
+								Class:  dns.ClassINET,
+								Ttl:    ttl,
+							},
+							A: ip.To4(),
+						}
+						msg.Answer = append(msg.Answer, rr)
+					}
+				}
+				if len(msg.Answer) > 0 {
+					responseCode = dns.RcodeSuccess
+					w.WriteMsg(msg)
+					return
+				}
+			}
+
+			// Check for CNAME and resolve it
+			if ips, ttl, found := h.LocalRecords.ResolveCNAME(domain, 10); found {
+				for _, ip := range ips {
+					if ip.To4() != nil {
+						rr := &dns.A{
+							Hdr: dns.RR_Header{
+								Name:   domain,
+								Rrtype: dns.TypeA,
+								Class:  dns.ClassINET,
+								Ttl:    ttl,
+							},
+							A: ip.To4(),
+						}
+						msg.Answer = append(msg.Answer, rr)
+					}
+				}
+				if len(msg.Answer) > 0 {
+					responseCode = dns.RcodeSuccess
+					w.WriteMsg(msg)
+					return
+				}
+			}
+
+		case dns.TypeAAAA:
+			// Check for direct AAAA record
+			if ips, ttl, found := h.LocalRecords.LookupAAAA(domain); found {
+				for _, ip := range ips {
+					if ip.To4() == nil {
+						rr := &dns.AAAA{
+							Hdr: dns.RR_Header{
+								Name:   domain,
+								Rrtype: dns.TypeAAAA,
+								Class:  dns.ClassINET,
+								Ttl:    ttl,
+							},
+							AAAA: ip.To16(),
+						}
+						msg.Answer = append(msg.Answer, rr)
+					}
+				}
+				if len(msg.Answer) > 0 {
+					responseCode = dns.RcodeSuccess
+					w.WriteMsg(msg)
+					return
+				}
+			}
+
+			// Check for CNAME and resolve it (may return IPv6)
+			if ips, ttl, found := h.LocalRecords.ResolveCNAME(domain, 10); found {
+				for _, ip := range ips {
+					if ip.To4() == nil {
+						rr := &dns.AAAA{
+							Hdr: dns.RR_Header{
+								Name:   domain,
+								Rrtype: dns.TypeAAAA,
+								Class:  dns.ClassINET,
+								Ttl:    ttl,
+							},
+							AAAA: ip.To16(),
+						}
+						msg.Answer = append(msg.Answer, rr)
+					}
+				}
+				if len(msg.Answer) > 0 {
+					responseCode = dns.RcodeSuccess
+					w.WriteMsg(msg)
+					return
+				}
+			}
+
+		case dns.TypeCNAME:
+			// Check for CNAME record
+			if target, ttl, found := h.LocalRecords.LookupCNAME(domain); found {
+				rr := &dns.CNAME{
+					Hdr: dns.RR_Header{
+						Name:   domain,
+						Rrtype: dns.TypeCNAME,
+						Class:  dns.ClassINET,
+						Ttl:    ttl,
+					},
+					Target: target,
+				}
+				msg.Answer = append(msg.Answer, rr)
+				responseCode = dns.RcodeSuccess
+				w.WriteMsg(msg)
+				return
+			}
 		}
 	}
 

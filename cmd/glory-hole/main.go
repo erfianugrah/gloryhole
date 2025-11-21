@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"net"
 	"os"
 	"os/signal"
 	"syscall"
@@ -12,6 +13,7 @@ import (
 	"glory-hole/pkg/blocklist"
 	"glory-hole/pkg/config"
 	"glory-hole/pkg/dns"
+	"glory-hole/pkg/localrecords"
 	"glory-hole/pkg/logging"
 	"glory-hole/pkg/storage"
 	"glory-hole/pkg/telemetry"
@@ -110,6 +112,113 @@ func main() {
 				"retention_days", cfg.Database.RetentionDays,
 			)
 		}
+	}
+
+	// Initialize local DNS records if configured
+	if cfg.LocalRecords.Enabled && len(cfg.LocalRecords.Records) > 0 {
+		logger.Info("Initializing local DNS records", "count", len(cfg.LocalRecords.Records))
+		localMgr := localrecords.NewManager()
+
+		for _, entry := range cfg.LocalRecords.Records {
+			var record *localrecords.LocalRecord
+
+			switch entry.Type {
+			case "A":
+				// Parse IPs and create A record
+				if len(entry.IPs) == 0 {
+					logger.Error("A record has no IPs", "domain", entry.Domain)
+					continue
+				}
+
+				ips := make([]net.IP, 0, len(entry.IPs))
+				for _, ipStr := range entry.IPs {
+					ip := net.ParseIP(ipStr)
+					if ip == nil || ip.To4() == nil {
+						logger.Error("Invalid IPv4 address", "domain", entry.Domain, "ip", ipStr)
+						continue
+					}
+					ips = append(ips, ip.To4())
+				}
+
+				if len(ips) == 0 {
+					logger.Error("A record has no valid IPs", "domain", entry.Domain)
+					continue
+				}
+
+				record = localrecords.NewARecord(entry.Domain, ips[0])
+				if len(ips) > 1 {
+					record.IPs = ips
+				}
+
+			case "AAAA":
+				// Parse IPs and create AAAA record
+				if len(entry.IPs) == 0 {
+					logger.Error("AAAA record has no IPs", "domain", entry.Domain)
+					continue
+				}
+
+				ips := make([]net.IP, 0, len(entry.IPs))
+				for _, ipStr := range entry.IPs {
+					ip := net.ParseIP(ipStr)
+					if ip == nil || ip.To4() != nil {
+						logger.Error("Invalid IPv6 address", "domain", entry.Domain, "ip", ipStr)
+						continue
+					}
+					ips = append(ips, ip.To16())
+				}
+
+				if len(ips) == 0 {
+					logger.Error("AAAA record has no valid IPs", "domain", entry.Domain)
+					continue
+				}
+
+				record = localrecords.NewAAAARecord(entry.Domain, ips[0])
+				if len(ips) > 1 {
+					record.IPs = ips
+				}
+
+			case "CNAME":
+				// Create CNAME record
+				if entry.Target == "" {
+					logger.Error("CNAME record has no target", "domain", entry.Domain)
+					continue
+				}
+				record = localrecords.NewCNAMERecord(entry.Domain, entry.Target)
+
+			default:
+				logger.Error("Unsupported record type", "domain", entry.Domain, "type", entry.Type)
+				continue
+			}
+
+			// Apply custom TTL if specified
+			if entry.TTL > 0 {
+				record.TTL = entry.TTL
+			}
+
+			// Apply wildcard flag
+			record.Wildcard = entry.Wildcard
+
+			// Add record to manager
+			if err := localMgr.AddRecord(record); err != nil {
+				logger.Error("Failed to add local record",
+					"domain", entry.Domain,
+					"type", entry.Type,
+					"error", err,
+				)
+				continue
+			}
+
+			logger.Debug("Added local DNS record",
+				"domain", entry.Domain,
+				"type", entry.Type,
+				"wildcard", entry.Wildcard,
+			)
+		}
+
+		handler.SetLocalRecords(localMgr)
+		logger.Info("Local DNS records initialized",
+			"total_records", localMgr.Count(),
+		)
 	}
 
 	// Create DNS server

@@ -34,6 +34,9 @@ type Config struct {
 	// Cache settings
 	Cache CacheConfig `yaml:"cache"`
 
+	// Local DNS records
+	LocalRecords LocalRecordsConfig `yaml:"local_records"`
+
 	// Logging
 	Logging LoggingConfig `yaml:"logging"`
 
@@ -70,6 +73,22 @@ type CacheConfig struct {
 	MinTTL      time.Duration `yaml:"min_ttl"`
 	MaxTTL      time.Duration `yaml:"max_ttl"`
 	NegativeTTL time.Duration `yaml:"negative_ttl"`
+}
+
+// LocalRecordsConfig holds local DNS records configuration
+type LocalRecordsConfig struct {
+	Enabled bool               `yaml:"enabled"`
+	Records []LocalRecordEntry `yaml:"records"`
+}
+
+// LocalRecordEntry represents a single local DNS record in the config
+type LocalRecordEntry struct {
+	Domain   string   `yaml:"domain"`   // Domain name (e.g., "nas.local", "*.dev.local")
+	Type     string   `yaml:"type"`     // Record type (A, AAAA, CNAME)
+	IPs      []string `yaml:"ips"`      // IP addresses for A/AAAA records
+	Target   string   `yaml:"target"`   // Target for CNAME records
+	TTL      uint32   `yaml:"ttl"`      // TTL in seconds (default: 300)
+	Wildcard bool     `yaml:"wildcard"` // True if this is a wildcard record (*.domain)
 }
 
 // LoggingConfig holds logging settings

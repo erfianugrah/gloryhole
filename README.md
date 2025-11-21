@@ -37,6 +37,11 @@ A high-performance DNS server written in Go, designed as a modern, extensible re
   - 63% performance boost on repeated queries
   - Configurable cache size and TTL ranges
   - Negative response caching
+- **Local DNS Records**: Custom DNS records for local network
+  - A/AAAA records for IPv4/IPv6 hosts
+  - CNAME records with automatic chain resolution
+  - Wildcard domain support (*.local)
+  - Multiple IPs per record (round-robin)
 - **Whitelist Support**: Ensure critical domains are never blocked
 - **Auto-Updating Blocklists**: Automatic periodic updates from remote sources
 - **Telemetry**: OpenTelemetry + Prometheus metrics built-in
@@ -44,8 +49,6 @@ A high-performance DNS server written in Go, designed as a modern, extensible re
 
 ### 🚧 In Development (Phase 2)
 
-- **Local DNS Overrides**: Custom A/AAAA records for local network hosts
-- **CNAME Aliases**: CNAME mappings for local services
 - **Policy Engine**: Advanced rule-based filtering with complex expressions
 - **Web UI**: Built-in web interface for monitoring and configuration
 - **REST API**: Programmatic access for stats and management
@@ -58,14 +61,15 @@ Glory-Hole is built following Domain-Driven Design principles with a clean separ
 /
 ├── cmd/glory-hole/          Main application entry point
 ├── pkg/
-│   ├── blocklist/           Lock-free blocklist management (NEW!)
+│   ├── blocklist/           Lock-free blocklist management
 │   ├── cache/               LRU cache with TTL support
 │   ├── config/              Configuration management
 │   ├── dns/                 Core DNS server and request handling
 │   ├── forwarder/           Upstream DNS forwarding with retry
+│   ├── localrecords/        Local DNS records (A/AAAA/CNAME, wildcards) (NEW!)
 │   ├── logging/             Structured logging with levels
 │   ├── policy/              Policy engine for rule evaluation (stub)
-│   ├── storage/             Multi-backend storage (SQLite, D1) (NEW!)
+│   ├── storage/             Multi-backend storage (SQLite, D1)
 │   └── telemetry/           OpenTelemetry + Prometheus metrics
 └── ui/                      Web interface assets (future)
 ```
@@ -186,17 +190,144 @@ sudo systemctl enable glory-hole
 sudo systemctl start glory-hole
 ```
 
+## Local DNS Records
+
+Glory-Hole supports custom DNS records for your local network, perfect for resolving internal hostnames without relying on external DNS servers.
+
+### Features
+
+- **A/AAAA Records**: Define IPv4 and IPv6 addresses for local hosts
+- **CNAME Records**: Create aliases that point to other domains
+- **Wildcard Domains**: Use `*.dev.local` to match any subdomain (one level only)
+- **Multiple IPs**: Assign multiple IP addresses to a single domain
+- **Custom TTL**: Set custom time-to-live values (default: 300 seconds)
+- **CNAME Chain Resolution**: Automatically follows CNAME chains with loop detection
+
+### Example Configuration
+
+```yaml
+local_records:
+  enabled: true
+  records:
+    # Simple A record
+    - domain: "nas.local"
+      type: "A"
+      ips:
+        - "192.168.1.100"
+
+    # A record with multiple IPs (round-robin)
+    - domain: "server.local"
+      type: "A"
+      ips:
+        - "192.168.1.10"
+        - "192.168.1.11"
+        - "192.168.1.12"
+
+    # IPv6 AAAA record
+    - domain: "server.local"
+      type: "AAAA"
+      ips:
+        - "fe80::1"
+        - "fe80::2"
+
+    # CNAME record (alias)
+    - domain: "storage.local"
+      type: "CNAME"
+      target: "nas.local"
+
+    # Wildcard record (matches any *.dev.local)
+    # Note: Only matches one level deep
+    # ✅ api.dev.local → matches
+    # ✅ web.dev.local → matches
+    # ❌ api.staging.dev.local → does not match
+    - domain: "*.dev.local"
+      type: "A"
+      wildcard: true
+      ips:
+        - "192.168.1.200"
+
+    # Custom TTL example
+    - domain: "gateway.local"
+      type: "A"
+      ips:
+        - "192.168.1.1"
+      ttl: 600  # 10 minutes
+```
+
+### CNAME Chain Resolution
+
+Glory-Hole automatically resolves CNAME chains up to 10 levels deep with loop detection:
+
+```yaml
+local_records:
+  enabled: true
+  records:
+    # Final A record
+    - domain: "server.local"
+      type: "A"
+      ips:
+        - "192.168.1.100"
+
+    # CNAME chain: storage -> nas -> server
+    - domain: "nas.local"
+      type: "CNAME"
+      target: "server.local"
+
+    - domain: "storage.local"
+      type: "CNAME"
+      target: "nas.local"
+
+# Query for storage.local will automatically resolve to 192.168.1.100
+```
+
+### Legacy Overrides vs Local Records
+
+Glory-Hole supports both legacy overrides (simpler) and the new local records feature (more powerful):
+
+**Legacy Overrides** (still supported):
+```yaml
+overrides:
+  nas.local: "192.168.1.100"
+
+cname_overrides:
+  storage.local: "nas.local."
+```
+
+**New Local Records** (recommended):
+```yaml
+local_records:
+  enabled: true
+  records:
+    - domain: "nas.local"
+      type: "A"
+      ips: ["192.168.1.100"]
+    - domain: "storage.local"
+      type: "CNAME"
+      target: "nas.local"
+```
+
+Use local records for:
+- Multiple IPs per domain
+- IPv6 (AAAA) records
+- Wildcard domains
+- Custom TTLs
+- CNAME chain resolution
+
 ## DNS Request Processing Order
 
 Glory-Hole processes DNS requests in the following order:
 
 1. **Cache Check**: Return cached response if available and not expired
-2. **Policy Engine**: Evaluate against user-defined rules
-3. **Local Overrides**: Check for exact A/AAAA record overrides
-4. **CNAME Overrides**: Check for CNAME alias definitions
-5. **Allowlist**: If domain is allowlisted, bypass blocking and forward
-6. **Blocklist**: If domain is blocklisted, return blocked response
-7. **Forward**: Forward to upstream DNS resolver
+2. **Local DNS Records**: Check for custom A/AAAA/CNAME records (highest priority for authoritative answers)
+   - Supports exact domain matches
+   - Wildcard domain matches (*.dev.local)
+   - CNAME chain resolution with loop detection
+3. **Policy Engine**: Evaluate against user-defined rules
+4. **Local Overrides**: Check for legacy exact A/AAAA record overrides
+5. **CNAME Overrides**: Check for legacy CNAME alias definitions
+6. **Allowlist**: If domain is allowlisted, bypass blocking and forward
+7. **Blocklist**: If domain is blocklisted, return blocked response
+8. **Forward**: Forward to upstream DNS resolver
 
 ## Policy Engine
 
