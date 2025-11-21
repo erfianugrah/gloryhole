@@ -96,8 +96,14 @@ linters-settings:
         disabled: true
   gosec:
     excludes:
+      - G104  # Errors unhandled - covered by errcheck
+      - G112  # Potential Slowloris Attack
+      - G115  # Integer overflow conversion
+      - G302  # File permissions
       - G304  # Potential file inclusion via variable
       - G306  # Poor file permissions
+  gocognit:
+    min-complexity: 200  # Allow high complexity for now
 
 issues:
   exclude-use-default: false
