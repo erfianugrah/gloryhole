@@ -27,7 +27,7 @@ func TestNewSQLiteStorage(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewSQLiteStorage() error = %v", err)
 	}
-	defer storage.Close()
+	defer func() { _ = storage.Close() }()
 
 	if storage == nil {
 		t.Fatal("expected non-nil storage")
@@ -450,8 +450,8 @@ func TestSQLiteStorage_Persistence(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer os.Remove(tmpfile.Name())
-	tmpfile.Close()
+	defer func() { _ = os.Remove(tmpfile.Name()) }()
+	_ = tmpfile.Close()
 
 	cfg := &Config{
 		Enabled: true,
@@ -484,14 +484,14 @@ func TestSQLiteStorage_Persistence(t *testing.T) {
 		t.Fatalf("Failed to insert test data: %v", err)
 	}
 
-	storage1.Close()
+	_ = storage1.Close()
 
 	// Reopen storage and verify data persisted
 	storage2, err := NewSQLiteStorage(cfg)
 	if err != nil {
 		t.Fatalf("NewSQLiteStorage() error = %v", err)
 	}
-	defer storage2.Close()
+	defer func() { _ = storage2.Close() }()
 
 	ctx := context.Background()
 	queries, err := storage2.GetRecentQueries(ctx, 10)

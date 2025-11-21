@@ -36,7 +36,7 @@ func NewWatcher(path string, logger *slog.Logger) (*Watcher, error) {
 
 	// Add config file to watcher
 	if err := watcher.Add(path); err != nil {
-		watcher.Close()
+		_ = watcher.Close()
 		return nil, fmt.Errorf("failed to watch config file: %w", err)
 	}
 

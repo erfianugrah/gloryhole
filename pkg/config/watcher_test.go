@@ -16,7 +16,7 @@ func TestNewWatcher(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewWatcher() failed: %v", err)
 	}
-	defer watcher.Close()
+	defer func() { _ = watcher.Close() }()
 
 	if watcher == nil {
 		t.Fatal("NewWatcher() returned nil")
@@ -45,7 +45,7 @@ func TestWatcherReload(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer os.Remove(tmpfile.Name())
+	defer func() { _ = os.Remove(tmpfile.Name()) }()
 
 	// Write initial config
 	initialConfig := `
@@ -59,14 +59,14 @@ logging:
 	if _, err := tmpfile.Write([]byte(initialConfig)); err != nil {
 		t.Fatal(err)
 	}
-	tmpfile.Close()
+	_ = tmpfile.Close()
 
 	// Create watcher
 	watcher, err := NewWatcher(tmpfile.Name(), logger)
 	if err != nil {
 		t.Fatalf("NewWatcher() failed: %v", err)
 	}
-	defer watcher.Close()
+	defer func() { _ = watcher.Close() }()
 
 	// Verify initial config
 	cfg := watcher.Config()
@@ -129,7 +129,7 @@ func TestWatcherConcurrentAccess(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewWatcher() failed: %v", err)
 	}
-	defer watcher.Close()
+	defer func() { _ = watcher.Close() }()
 
 	// Test concurrent reads
 	done := make(chan bool)
