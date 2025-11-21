@@ -1,0 +1,60 @@
+[Unit]
+Description=Glory-Hole DNS Server
+Documentation=https://github.com/USER/glory-hole
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=glory-hole
+Group=glory-hole
+
+# Binary and configuration
+ExecStart=/usr/local/bin/glory-hole -config /etc/glory-hole/config.yml
+ExecReload=/bin/kill -HUP $MAINPID
+
+# Working directory
+WorkingDirectory=/var/lib/glory-hole
+
+# Restart policy
+Restart=on-failure
+RestartSec=5s
+
+# Capabilities (required for port 53)
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+SystemCallArchitectures=native
+
+# File system access
+ReadWritePaths=/var/lib/glory-hole
+ReadOnlyPaths=/etc/glory-hole
+ConfigurationDirectory=glory-hole
+StateDirectory=glory-hole
+LogsDirectory=glory-hole
+
+# Resource limits (adjust as needed)
+LimitNOFILE=65536
+LimitNPROC=512
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=glory-hole
+
+[Install]
+WantedBy=multi-user.target

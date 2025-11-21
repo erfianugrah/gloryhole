@@ -1,0 +1,52 @@
+# Git
+.git
+.gitignore
+.github
+
+# Build artifacts
+glory-hole
+glory-hole-*
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool
+*.out
+coverage.out
+
+# Dependency directories
+vendor/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Documentation (not needed in image)
+*.md
+!README.md
+docs/
+cf-docs/
+
+# Config files (will be mounted)
+config.yml
+config.test.yml
+config.blocklist-test.yml
+*.db
+*.db-shm
+*.db-wal
+
+# Scripts
+test-dns.sh
+
+# Temporary files
+tmp/
+temp/
+*.tmp

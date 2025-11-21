@@ -1,0 +1,56 @@
+# Prometheus Configuration for Glory-Hole DNS Server
+
+global:
+  scrape_interval: 15s          # Set the scrape interval to every 15 seconds
+  evaluation_interval: 15s      # Evaluate rules every 15 seconds
+  scrape_timeout: 10s
+
+  # Attach these labels to any time series or alerts
+  external_labels:
+    monitor: 'glory-hole'
+    environment: 'production'
+
+# Alertmanager configuration (optional)
+# alerting:
+#   alertmanagers:
+#     - static_configs:
+#         - targets:
+#           - alertmanager:9093
+
+# Load rules once and periodically evaluate them
+# rule_files:
+#   - "alert_rules.yml"
+
+# Scrape configurations
+scrape_configs:
+  # Prometheus itself
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+        labels:
+          instance: 'prometheus'
+
+  # Glory-Hole DNS Server metrics
+  - job_name: 'glory-hole'
+    scrape_interval: 10s        # Scrape DNS metrics more frequently
+    static_configs:
+      - targets: ['glory-hole:9090']
+        labels:
+          service: 'dns-server'
+          instance: 'glory-hole-01'
+
+    # Relabel to add more informative labels
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: glory-hole:9090
+
+  # Optional: Scrape Grafana metrics
+  - job_name: 'grafana'
+    static_configs:
+      - targets: ['grafana:3000']
+        labels:
+          instance: 'grafana'
