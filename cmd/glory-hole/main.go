@@ -5,8 +5,10 @@ import (
 	"flag"
 	"fmt"
 	"net"
+	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -22,13 +24,30 @@ import (
 )
 
 var (
-	configPath = flag.String("config", "config.yml", "Path to configuration file")
-	version    = "dev"
-	buildTime  = "unknown"
+	configPath  = flag.String("config", "config.yml", "Path to configuration file")
+	showVersion = flag.Bool("version", false, "Show version information and exit")
+	healthCheck = flag.Bool("health-check", false, "Perform health check and exit (for Docker HEALTHCHECK)")
+	apiAddress  = flag.String("api-address", "", "Override API address for health check (default: from config)")
+	version     = "dev"
+	buildTime   = "unknown"
 )
 
 func main() {
 	flag.Parse()
+
+	// Handle --version flag
+	if *showVersion {
+		fmt.Printf("Glory-Hole DNS Server\n")
+		fmt.Printf("Version:    %s\n", version)
+		fmt.Printf("Build Time: %s\n", buildTime)
+		fmt.Printf("Go Version: %s\n", fmt.Sprintf("%s", os.Getenv("GOVERSION")))
+		os.Exit(0)
+	}
+
+	// Handle --health-check flag
+	if *healthCheck {
+		os.Exit(performHealthCheck(*apiAddress, *configPath))
+	}
 
 	// Parse configuration
 	cfg, err := config.Load(*configPath)
@@ -344,4 +363,47 @@ func main() {
 		logger.Error("Server error", "error", err)
 		os.Exit(1)
 	}
+}
+
+// performHealthCheck performs a health check against the API server
+// Returns exit code 0 if healthy, 1 if unhealthy
+func performHealthCheck(apiAddr, configPath string) int {
+	// If API address not provided, try to load from config
+	if apiAddr == "" {
+		cfg, err := config.Load(configPath)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Health check failed: cannot load config: %v\n", err)
+			return 1
+		}
+		apiAddr = cfg.Server.WebUIAddress
+
+		// If WebUIAddress doesn't have http:// prefix, add it
+		if apiAddr != "" && apiAddr[0] == ':' {
+			apiAddr = "http://localhost" + apiAddr
+		} else if !strings.HasPrefix(apiAddr, "http://") && !strings.HasPrefix(apiAddr, "https://") {
+			apiAddr = "http://" + apiAddr
+		}
+	}
+
+	// Make HTTP request to health endpoint
+	client := &http.Client{
+		Timeout: 2 * time.Second,
+	}
+
+	healthURL := apiAddr + "/api/health"
+	resp, err := client.Get(healthURL)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Health check failed: %v\n", err)
+		return 1
+	}
+	defer resp.Body.Close()
+
+	// Check status code
+	if resp.StatusCode != http.StatusOK {
+		fmt.Fprintf(os.Stderr, "Health check failed: status code %d\n", resp.StatusCode)
+		return 1
+	}
+
+	fmt.Println("Health check passed")
+	return 0
 }
