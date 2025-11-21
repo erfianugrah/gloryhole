@@ -47,8 +47,8 @@ type Handler struct {
 	PolicyEngine *policy.Engine // Optional policy engine
 
 	Forwarder *forwarder.Forwarder
-	Cache     *cache.Cache      // Optional DNS response cache
-	Storage   storage.Storage   // Optional query logging storage
+	Cache     *cache.Cache    // Optional DNS response cache
+	Storage   storage.Storage // Optional query logging storage
 }
 
 // NewHandler creates a new DNS handler

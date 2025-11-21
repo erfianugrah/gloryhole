@@ -7,9 +7,9 @@ import (
 
 func TestIsValidDomain(t *testing.T) {
 	tests := []struct {
-		name    string
-		domain  string
-		want    bool
+		name   string
+		domain string
+		want   bool
 	}{
 		{
 			name:   "valid simple domain",

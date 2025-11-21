@@ -28,7 +28,7 @@ type StatsResponse struct {
 // QueryResponse represents a single DNS query log entry
 type QueryResponse struct {
 	ID             int64  `json:"id"`
-	Timestamp      string `json:"timestamp"`      // ISO 8601 format
+	Timestamp      string `json:"timestamp"` // ISO 8601 format
 	ClientIP       string `json:"client_ip"`
 	Domain         string `json:"domain"`
 	QueryType      string `json:"query_type"`
@@ -49,7 +49,7 @@ type QueriesResponse struct {
 
 // DomainStatsResponse represents statistics for a single domain
 type DomainStatsResponse struct {
-	Domain string `json:"domain"`
+	Domain  string `json:"domain"`
 	Queries int64  `json:"queries"`
 	Blocked bool   `json:"blocked"`
 }

@@ -37,15 +37,15 @@ const (
 
 // Context represents the evaluation context for a DNS query
 type Context struct {
-	Domain   string    // Fully qualified domain name
-	ClientIP string    // Client IP address
-	QueryType string   // Query type (A, AAAA, CNAME, etc.)
-	Hour     int       // Current hour (0-23)
-	Minute   int       // Current minute (0-59)
-	Day      int       // Day of month (1-31)
-	Month    int       // Month (1-12)
-	Weekday  int       // Day of week (0-6, Sunday=0)
-	Time     time.Time // Full timestamp
+	Domain    string    // Fully qualified domain name
+	ClientIP  string    // Client IP address
+	QueryType string    // Query type (A, AAAA, CNAME, etc.)
+	Hour      int       // Current hour (0-23)
+	Minute    int       // Current minute (0-59)
+	Day       int       // Day of month (1-31)
+	Month     int       // Month (1-12)
+	Weekday   int       // Day of week (0-6, Sunday=0)
+	Time      time.Time // Full timestamp
 }
 
 // NewEngine creates a new policy engine

@@ -32,26 +32,26 @@ type QueryLog struct {
 	Timestamp      time.Time `json:"timestamp"`
 	ClientIP       string    `json:"client_ip"`
 	Domain         string    `json:"domain"`
-	QueryType      string    `json:"query_type"`      // A, AAAA, CNAME, etc.
-	ResponseCode   int       `json:"response_code"`   // DNS response code
-	Blocked        bool      `json:"blocked"`         // Was query blocked?
-	Cached         bool      `json:"cached"`          // Was response from cache?
-	ResponseTimeMs int64     `json:"response_time_ms"` // Response time in milliseconds
+	QueryType      string    `json:"query_type"`         // A, AAAA, CNAME, etc.
+	ResponseCode   int       `json:"response_code"`      // DNS response code
+	Blocked        bool      `json:"blocked"`            // Was query blocked?
+	Cached         bool      `json:"cached"`             // Was response from cache?
+	ResponseTimeMs int64     `json:"response_time_ms"`   // Response time in milliseconds
 	Upstream       string    `json:"upstream,omitempty"` // Which upstream was used
 }
 
 // Statistics represents aggregated query statistics
 type Statistics struct {
-	Since              time.Time `json:"since"`
-	Until              time.Time `json:"until"`
-	TotalQueries       int64     `json:"total_queries"`
-	BlockedQueries     int64     `json:"blocked_queries"`
-	CachedQueries      int64     `json:"cached_queries"`
-	UniqueDomains      int64     `json:"unique_domains"`
-	UniqueClients      int64     `json:"unique_clients"`
-	AvgResponseTimeMs  float64   `json:"avg_response_time_ms"`
-	BlockRate          float64   `json:"block_rate"`          // Percentage of blocked queries
-	CacheHitRate       float64   `json:"cache_hit_rate"`      // Percentage of cached responses
+	Since             time.Time `json:"since"`
+	Until             time.Time `json:"until"`
+	TotalQueries      int64     `json:"total_queries"`
+	BlockedQueries    int64     `json:"blocked_queries"`
+	CachedQueries     int64     `json:"cached_queries"`
+	UniqueDomains     int64     `json:"unique_domains"`
+	UniqueClients     int64     `json:"unique_clients"`
+	AvgResponseTimeMs float64   `json:"avg_response_time_ms"`
+	BlockRate         float64   `json:"block_rate"`     // Percentage of blocked queries
+	CacheHitRate      float64   `json:"cache_hit_rate"` // Percentage of cached responses
 }
 
 // DomainStats represents statistics for a specific domain
@@ -73,15 +73,15 @@ const (
 
 // Config represents storage configuration
 type Config struct {
-	Enabled  bool        `yaml:"enabled"`
-	Backend  BackendType `yaml:"backend"`
-	SQLite   SQLiteConfig `yaml:"sqlite"`
-	D1       D1Config     `yaml:"d1"`
+	Enabled bool         `yaml:"enabled"`
+	Backend BackendType  `yaml:"backend"`
+	SQLite  SQLiteConfig `yaml:"sqlite"`
+	D1      D1Config     `yaml:"d1"`
 
 	// Buffer settings
-	BufferSize    int           `yaml:"buffer_size"`     // Number of queries to buffer
-	FlushInterval time.Duration `yaml:"flush_interval"`  // How often to flush buffer
-	BatchSize     int           `yaml:"batch_size"`      // Max queries per batch
+	BufferSize    int           `yaml:"buffer_size"`    // Number of queries to buffer
+	FlushInterval time.Duration `yaml:"flush_interval"` // How often to flush buffer
+	BatchSize     int           `yaml:"batch_size"`     // Max queries per batch
 
 	// Retention settings
 	RetentionDays int `yaml:"retention_days"` // Days to keep detailed logs
@@ -92,17 +92,17 @@ type Config struct {
 
 // SQLiteConfig represents SQLite-specific configuration
 type SQLiteConfig struct {
-	Path        string `yaml:"path"`          // Database file path
-	BusyTimeout int    `yaml:"busy_timeout"`  // Busy timeout in milliseconds
-	WALMode     bool   `yaml:"wal_mode"`      // Enable WAL mode
-	CacheSize   int    `yaml:"cache_size"`    // Cache size in KB
+	Path        string `yaml:"path"`         // Database file path
+	BusyTimeout int    `yaml:"busy_timeout"` // Busy timeout in milliseconds
+	WALMode     bool   `yaml:"wal_mode"`     // Enable WAL mode
+	CacheSize   int    `yaml:"cache_size"`   // Cache size in KB
 }
 
 // D1Config represents D1-specific configuration
 type D1Config struct {
-	AccountID  string `yaml:"account_id"`   // Cloudflare account ID
-	DatabaseID string `yaml:"database_id"`  // D1 database ID
-	APIToken   string `yaml:"api_token"`    // Cloudflare API token
+	AccountID  string `yaml:"account_id"`  // Cloudflare account ID
+	DatabaseID string `yaml:"database_id"` // D1 database ID
+	APIToken   string `yaml:"api_token"`   // Cloudflare API token
 }
 
 // StatisticsConfig represents statistics aggregation configuration

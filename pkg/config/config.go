@@ -19,7 +19,7 @@ type Config struct {
 	UpstreamDNSServers []string `yaml:"upstream_dns_servers"`
 
 	// Update settings
-	UpdateInterval      time.Duration `yaml:"update_interval"`
+	UpdateInterval       time.Duration `yaml:"update_interval"`
 	AutoUpdateBlocklists bool          `yaml:"auto_update_blocklists"`
 
 	// Blocklists and filtering
@@ -58,10 +58,10 @@ type ServerConfig struct {
 // StorageConfig is deprecated - use storage.Config instead
 // Kept for backwards compatibility with old config files
 type StorageConfig struct {
-	DatabasePath      string `yaml:"database_path"`
-	LogQueries        bool   `yaml:"log_queries"`
-	LogRetentionDays  int    `yaml:"log_retention_days"`
-	BufferSize        int    `yaml:"buffer_size"`
+	DatabasePath     string `yaml:"database_path"`
+	LogQueries       bool   `yaml:"log_queries"`
+	LogRetentionDays int    `yaml:"log_retention_days"`
+	BufferSize       int    `yaml:"buffer_size"`
 }
 
 // Storage field for backwards compatibility
@@ -111,14 +111,14 @@ type PolicyRuleEntry struct {
 
 // LoggingConfig holds logging settings
 type LoggingConfig struct {
-	Level      string `yaml:"level"`        // debug, info, warn, error
-	Format     string `yaml:"format"`       // json, text
-	Output     string `yaml:"output"`       // stdout, stderr, file
-	FilePath   string `yaml:"file_path"`    // if output=file
-	AddSource  bool   `yaml:"add_source"`   // include source file/line (adds ~1-2μs overhead per log)
-	MaxSize    int    `yaml:"max_size"`     // MB
-	MaxBackups int    `yaml:"max_backups"`  // number of old log files
-	MaxAge     int    `yaml:"max_age"`      // days
+	Level      string `yaml:"level"`       // debug, info, warn, error
+	Format     string `yaml:"format"`      // json, text
+	Output     string `yaml:"output"`      // stdout, stderr, file
+	FilePath   string `yaml:"file_path"`   // if output=file
+	AddSource  bool   `yaml:"add_source"`  // include source file/line (adds ~1-2μs overhead per log)
+	MaxSize    int    `yaml:"max_size"`    // MB
+	MaxBackups int    `yaml:"max_backups"` // number of old log files
+	MaxAge     int    `yaml:"max_age"`     // days
 }
 
 // TelemetryConfig holds OpenTelemetry settings

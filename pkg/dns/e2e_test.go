@@ -105,13 +105,13 @@ func TestE2E_FullDNSServer(t *testing.T) {
 
 	// Run test cases
 	testCases := []struct {
-		name           string
-		domain         string
-		qtype          uint16
-		expectRcode    int
-		expectAnswers  int
-		expectBlocked  bool
-		checkAnswer    func(*testing.T, *dns.Msg)
+		name          string
+		domain        string
+		qtype         uint16
+		expectRcode   int
+		expectAnswers int
+		expectBlocked bool
+		checkAnswer   func(*testing.T, *dns.Msg)
 	}{
 		{
 			name:          "Local Record Resolution",

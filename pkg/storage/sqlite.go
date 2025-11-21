@@ -56,9 +56,9 @@ func NewSQLiteStorage(cfg *Config) (Storage, error) {
 	pragmas := []string{
 		fmt.Sprintf("PRAGMA busy_timeout = %d", cfg.SQLite.BusyTimeout),
 		fmt.Sprintf("PRAGMA cache_size = %d", -cfg.SQLite.CacheSize), // Negative means KB
-		"PRAGMA synchronous = NORMAL", // Balance between safety and performance
-		"PRAGMA temp_store = MEMORY",  // Use memory for temp tables
-		"PRAGMA mmap_size = 30000000000", // 30GB mmap
+		"PRAGMA synchronous = NORMAL",                                // Balance between safety and performance
+		"PRAGMA temp_store = MEMORY",                                 // Use memory for temp tables
+		"PRAGMA mmap_size = 30000000000",                             // 30GB mmap
 	}
 
 	if cfg.SQLite.WALMode {
@@ -90,10 +90,10 @@ func NewSQLiteStorage(cfg *Config) (Storage, error) {
 	}
 
 	storage := &SQLiteStorage{
-		db:                  db,
-		cfg:                 cfg,
-		buffer:              make(chan *QueryLog, cfg.BufferSize),
-		stmtInsertQuery:     stmtInsert,
+		db:              db,
+		cfg:             cfg,
+		buffer:          make(chan *QueryLog, cfg.BufferSize),
+		stmtInsertQuery: stmtInsert,
 	}
 
 	// Start background flush worker

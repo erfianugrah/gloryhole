@@ -209,14 +209,14 @@ func TestWildcardMatch(t *testing.T) {
 
 	// Test wildcard matches
 	tests := []struct {
-		domain string
+		domain      string
 		shouldMatch bool
 	}{
 		{"server.dev.local", true},
 		{"web.dev.local", true},
 		{"api.dev.local", true},
-		{"dev.local", false},  // Exact match of base domain
-		{"other.local", false}, // Different domain
+		{"dev.local", false},            // Exact match of base domain
+		{"other.local", false},          // Different domain
 		{"sub.server.dev.local", false}, // Too many labels
 	}
 

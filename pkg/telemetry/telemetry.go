@@ -44,9 +44,9 @@ type Metrics struct {
 	RateLimitDropped    metric.Int64Counter
 
 	// System metrics
-	ActiveClients       metric.Int64UpDownCounter
-	BlocklistSize       metric.Int64UpDownCounter
-	CacheSize           metric.Int64UpDownCounter
+	ActiveClients metric.Int64UpDownCounter
+	BlocklistSize metric.Int64UpDownCounter
+	CacheSize     metric.Int64UpDownCounter
 }
 
 // New creates a new telemetry instance
