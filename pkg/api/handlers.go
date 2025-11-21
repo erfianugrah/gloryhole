@@ -23,6 +23,86 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	s.writeJSON(w, http.StatusOK, response)
 }
 
+// handleHealthz handles GET /healthz (Kubernetes liveness probe)
+// This endpoint indicates if the application is running and should be restarted if not responding
+func (s *Server) handleHealthz(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		s.writeError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		return
+	}
+
+	// Simple liveness check - if we can respond, we're alive
+	response := LivenessResponse{
+		Status: "alive",
+	}
+
+	s.writeJSON(w, http.StatusOK, response)
+}
+
+// handleReadyz handles GET /readyz (Kubernetes readiness probe)
+// This endpoint indicates if the application is ready to accept traffic
+func (s *Server) handleReadyz(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		s.writeError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		return
+	}
+
+	// Check if critical dependencies are available
+	checks := make(map[string]string)
+	ready := true
+
+	// Check storage (optional - degraded mode allowed)
+	if s.storage != nil {
+		// Try a quick ping to storage
+		ctx, cancel := context.WithTimeout(r.Context(), 1*time.Second)
+		defer cancel()
+
+		// Just try to get statistics to verify storage is responsive
+		if _, err := s.storage.GetStatistics(ctx, time.Now().Add(-1*time.Hour)); err != nil {
+			checks["storage"] = "degraded"
+			// Don't mark as not ready - we can operate without storage
+		} else {
+			checks["storage"] = "ok"
+		}
+	} else {
+		checks["storage"] = "not_configured"
+	}
+
+	// Check blocklist manager (optional)
+	if s.blocklistManager != nil {
+		if s.blocklistManager.Size() > 0 {
+			checks["blocklist"] = "ok"
+		} else {
+			checks["blocklist"] = "empty"
+			// Don't mark as not ready - we can operate without blocklists
+		}
+	} else {
+		checks["blocklist"] = "not_configured"
+	}
+
+	// Check policy engine (optional)
+	if s.policyEngine != nil {
+		checks["policy_engine"] = "ok"
+	} else {
+		checks["policy_engine"] = "not_configured"
+	}
+
+	status := "ready"
+	statusCode := http.StatusOK
+
+	if !ready {
+		status = "not_ready"
+		statusCode = http.StatusServiceUnavailable
+	}
+
+	response := ReadinessResponse{
+		Status: status,
+		Checks: checks,
+	}
+
+	s.writeJSON(w, statusCode, response)
+}
+
 // handleStats handles GET /api/stats
 func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {

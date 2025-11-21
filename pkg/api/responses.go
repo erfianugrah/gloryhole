@@ -13,6 +13,17 @@ type HealthResponse struct {
 	Version string `json:"version"`
 }
 
+// LivenessResponse represents the liveness probe response
+type LivenessResponse struct {
+	Status string `json:"status"` // "alive"
+}
+
+// ReadinessResponse represents the readiness probe response
+type ReadinessResponse struct {
+	Status string            `json:"status"` // "ready" or "not_ready"
+	Checks map[string]string `json:"checks"` // Component health status
+}
+
 // StatsResponse represents query statistics
 type StatsResponse struct {
 	TotalQueries   int64   `json:"total_queries"`
