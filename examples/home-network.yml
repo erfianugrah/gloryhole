@@ -77,6 +77,13 @@ policy:
       action: "block"
       enabled: false  # Enable per your family's needs
 
+    # Redirect blocked adult content to warning page (optional)
+    - name: "Redirect adult content to warning page"
+      logic: 'DomainMatches(Domain, "porn") || DomainMatches(Domain, "xxx")'
+      action: "redirect"
+      action_data: "192.168.1.2"  # IP of warning page (this DNS server)
+      enabled: false  # Alternative to blocking, shows warning page
+
 # Cache for faster responses
 cache:
   enabled: true

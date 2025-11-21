@@ -357,8 +357,55 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 				return
 
 			case policy.ActionRedirect:
-				// TODO: Implement redirect action
-				// For now, treat as allow
+				// Redirect to specified IP address
+				redirectIP := net.ParseIP(rule.ActionData)
+				if redirectIP == nil {
+					// Invalid redirect IP, log and treat as block
+					responseCode = dns.RcodeNameError
+					msg.SetRcode(r, dns.RcodeNameError)
+					w.WriteMsg(msg)
+					return
+				}
+
+				// Create response based on query type and IP version
+				if qtype == dns.TypeA && redirectIP.To4() != nil {
+					// IPv4 A record
+					rr := &dns.A{
+						Hdr: dns.RR_Header{
+							Name:   domain,
+							Rrtype: dns.TypeA,
+							Class:  dns.ClassINET,
+							Ttl:    300, // 5 minutes TTL for redirects
+						},
+						A: redirectIP.To4(),
+					}
+					msg.Answer = append(msg.Answer, rr)
+					responseCode = dns.RcodeSuccess
+				} else if qtype == dns.TypeAAAA && redirectIP.To4() == nil {
+					// IPv6 AAAA record
+					rr := &dns.AAAA{
+						Hdr: dns.RR_Header{
+							Name:   domain,
+							Rrtype: dns.TypeAAAA,
+							Class:  dns.ClassINET,
+							Ttl:    300,
+						},
+						AAAA: redirectIP,
+					}
+					msg.Answer = append(msg.Answer, rr)
+					responseCode = dns.RcodeSuccess
+				} else {
+					// Query type doesn't match redirect IP version, return NODATA
+					responseCode = dns.RcodeSuccess
+				}
+
+				// Cache the redirect response
+				if h.Cache != nil {
+					h.Cache.Set(ctx, r, msg)
+				}
+
+				w.WriteMsg(msg)
+				return
 			}
 		}
 	}

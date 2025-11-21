@@ -110,6 +110,29 @@ policy:
       action: "block"
       enabled: false
 
+    # ===== REDIRECT Action Examples =====
+
+    # Redirect blocked sites to a captive portal
+    - name: "Redirect gambling sites to warning page"
+      logic: 'DomainMatches(Domain, "casino") || DomainMatches(Domain, "poker")'
+      action: "redirect"
+      action_data: "192.168.1.254"  # IP of captive portal/warning page
+      enabled: false  # Example only
+
+    # Redirect ads to blackhole IP
+    - name: "Redirect ad domains to 0.0.0.0"
+      logic: 'DomainMatches(Domain, "doubleclick") || DomainMatches(Domain, "googlesyndication")'
+      action: "redirect"
+      action_data: "0.0.0.0"  # Blackhole IP
+      enabled: false  # Use blocklist instead for better performance
+
+    # Redirect specific domain to internal server
+    - name: "Redirect external service to internal mirror"
+      logic: 'Domain == "example.com" && IPInCIDR(ClientIP, "10.0.0.0/8")'
+      action: "redirect"
+      action_data: "10.0.1.100"  # Internal mirror server
+      enabled: false  # Example only
+
     # ===== Catchall Rules =====
 
     # Default allow (place last) - if no other rule matches
@@ -179,3 +202,12 @@ telemetry:
 #   QueryType  - The DNS query type (e.g., "A", "AAAA", "CNAME")
 #   Hour       - Current hour (0-23)
 #   Weekday    - true if Monday-Friday, false if Saturday-Sunday
+#
+# Actions Available:
+#   BLOCK      - Return NXDOMAIN (domain not found)
+#   ALLOW      - Bypass all filtering and forward to upstream
+#   REDIRECT   - Return a specific IP address instead of real resolution
+#                Requires action_data field with target IP
+#                Example: action_data: "0.0.0.0" (blackhole)
+#                         action_data: "192.168.1.254" (captive portal)
+#                Supports both IPv4 and IPv6

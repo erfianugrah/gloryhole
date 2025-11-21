@@ -489,6 +489,179 @@ func TestServeDNS_WithStorage(t *testing.T) {
 	}
 }
 
+// Test policy REDIRECT action with IPv4
+func TestServeDNS_PolicyEngineRedirect_IPv4(t *testing.T) {
+	handler := NewHandler()
+
+	// Setup policy engine with REDIRECT rule
+	policyEngine := policy.NewEngine()
+	rule := &policy.Rule{
+		Name:       "Redirect to local server",
+		Logic:      `Domain == "redirect.test"`, // No trailing dot in policy logic
+		Action:     policy.ActionRedirect,
+		ActionData: "192.168.1.250", // Redirect IP
+		Enabled:    true,
+	}
+	policyEngine.AddRule(rule)
+	handler.SetPolicyEngine(policyEngine)
+
+	req := new(dns.Msg)
+	req.SetQuestion("redirect.test.", dns.TypeA)
+
+	w := &mockResponseWriter{
+		remoteAddr: &net.UDPAddr{IP: net.ParseIP("192.168.1.100"), Port: 12345},
+	}
+
+	ctx := context.Background()
+	handler.ServeDNS(ctx, w, req)
+
+	if w.msg == nil {
+		t.Fatal("Expected response")
+	}
+
+	if w.msg.Rcode != dns.RcodeSuccess {
+		t.Errorf("Expected NOERROR, got %s", dns.RcodeToString[w.msg.Rcode])
+	}
+
+	if len(w.msg.Answer) != 1 {
+		t.Fatalf("Expected 1 answer, got %d", len(w.msg.Answer))
+	}
+
+	aRecord, ok := w.msg.Answer[0].(*dns.A)
+	if !ok {
+		t.Fatalf("Expected A record, got %T", w.msg.Answer[0])
+	}
+
+	if aRecord.A.String() != "192.168.1.250" {
+		t.Errorf("Expected redirect IP 192.168.1.250, got %s", aRecord.A.String())
+	}
+}
+
+// Test policy REDIRECT action with IPv6
+func TestServeDNS_PolicyEngineRedirect_IPv6(t *testing.T) {
+	handler := NewHandler()
+
+	// Setup policy engine with REDIRECT rule
+	policyEngine := policy.NewEngine()
+	rule := &policy.Rule{
+		Name:       "Redirect to IPv6 local server",
+		Logic:      `Domain == "redirect6.test"`, // No trailing dot
+		Action:     policy.ActionRedirect,
+		ActionData: "fe80::1", // IPv6 redirect
+		Enabled:    true,
+	}
+	policyEngine.AddRule(rule)
+	handler.SetPolicyEngine(policyEngine)
+
+	req := new(dns.Msg)
+	req.SetQuestion("redirect6.test.", dns.TypeAAAA)
+
+	w := &mockResponseWriter{
+		remoteAddr: &net.UDPAddr{IP: net.ParseIP("192.168.1.100"), Port: 12345},
+	}
+
+	ctx := context.Background()
+	handler.ServeDNS(ctx, w, req)
+
+	if w.msg == nil {
+		t.Fatal("Expected response")
+	}
+
+	if w.msg.Rcode != dns.RcodeSuccess {
+		t.Errorf("Expected NOERROR, got %s", dns.RcodeToString[w.msg.Rcode])
+	}
+
+	if len(w.msg.Answer) != 1 {
+		t.Fatalf("Expected 1 answer, got %d", len(w.msg.Answer))
+	}
+
+	aaaaRecord, ok := w.msg.Answer[0].(*dns.AAAA)
+	if !ok {
+		t.Fatalf("Expected AAAA record, got %T", w.msg.Answer[0])
+	}
+
+	if aaaaRecord.AAAA.String() != "fe80::1" {
+		t.Errorf("Expected redirect IP fe80::1, got %s", aaaaRecord.AAAA.String())
+	}
+}
+
+// Test policy REDIRECT with invalid IP
+func TestServeDNS_PolicyEngineRedirect_InvalidIP(t *testing.T) {
+	handler := NewHandler()
+
+	// Setup policy engine with REDIRECT rule with invalid IP
+	policyEngine := policy.NewEngine()
+	rule := &policy.Rule{
+		Name:       "Redirect with invalid IP",
+		Logic:      `Domain == "badredirect.test"`, // No trailing dot
+		Action:     policy.ActionRedirect,
+		ActionData: "not-an-ip", // Invalid IP
+		Enabled:    true,
+	}
+	policyEngine.AddRule(rule)
+	handler.SetPolicyEngine(policyEngine)
+
+	req := new(dns.Msg)
+	req.SetQuestion("badredirect.test.", dns.TypeA)
+
+	w := &mockResponseWriter{
+		remoteAddr: &net.UDPAddr{IP: net.ParseIP("192.168.1.100"), Port: 12345},
+	}
+
+	ctx := context.Background()
+	handler.ServeDNS(ctx, w, req)
+
+	if w.msg == nil {
+		t.Fatal("Expected response")
+	}
+
+	// Should return NXDOMAIN for invalid redirect IP
+	if w.msg.Rcode != dns.RcodeNameError {
+		t.Errorf("Expected NXDOMAIN for invalid redirect IP, got %s", dns.RcodeToString[w.msg.Rcode])
+	}
+}
+
+// Test policy REDIRECT with mismatched query type
+func TestServeDNS_PolicyEngineRedirect_TypeMismatch(t *testing.T) {
+	handler := NewHandler()
+
+	// Setup policy engine with IPv4 redirect
+	policyEngine := policy.NewEngine()
+	rule := &policy.Rule{
+		Name:       "Redirect to IPv4",
+		Logic:      `Domain == "redirect.test"`, // No trailing dot
+		Action:     policy.ActionRedirect,
+		ActionData: "192.168.1.250", // IPv4
+		Enabled:    true,
+	}
+	policyEngine.AddRule(rule)
+	handler.SetPolicyEngine(policyEngine)
+
+	// Query for AAAA but redirect is IPv4
+	req := new(dns.Msg)
+	req.SetQuestion("redirect.test.", dns.TypeAAAA)
+
+	w := &mockResponseWriter{
+		remoteAddr: &net.UDPAddr{IP: net.ParseIP("192.168.1.100"), Port: 12345},
+	}
+
+	ctx := context.Background()
+	handler.ServeDNS(ctx, w, req)
+
+	if w.msg == nil {
+		t.Fatal("Expected response")
+	}
+
+	// Should return NOERROR with no answers (NODATA)
+	if w.msg.Rcode != dns.RcodeSuccess {
+		t.Errorf("Expected NOERROR for type mismatch, got %s", dns.RcodeToString[w.msg.Rcode])
+	}
+
+	if len(w.msg.Answer) != 0 {
+		t.Errorf("Expected 0 answers for type mismatch, got %d", len(w.msg.Answer))
+	}
+}
+
 // Test policy BLOCK action
 func TestServeDNS_PolicyEngineBlock(t *testing.T) {
 	handler := NewHandler()
