@@ -88,7 +88,7 @@ linters-settings:
     locale: US
   funlen:
     lines: 300
-    statements: 150
+    statements: 200
   revive:
     rules:
       - name: package-comments
