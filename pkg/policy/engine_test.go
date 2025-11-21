@@ -297,8 +297,8 @@ func TestGetRules(t *testing.T) {
 	rule1 := &Rule{Name: "Rule 1", Logic: "true", Action: ActionBlock, Enabled: true}
 	rule2 := &Rule{Name: "Rule 2", Logic: "false", Action: ActionAllow, Enabled: true}
 
-	e.AddRule(rule1)
-	e.AddRule(rule2)
+	_ = e.AddRule(rule1)
+	_ = e.AddRule(rule2)
 
 	rules := e.GetRules()
 	if len(rules) != 2 {
@@ -323,7 +323,7 @@ func TestClear(t *testing.T) {
 			Action:  ActionBlock,
 			Enabled: true,
 		}
-		e.AddRule(rule)
+		_ = e.AddRule(rule)
 	}
 
 	if e.Count() != 5 {
@@ -480,7 +480,7 @@ func TestConcurrentAccess(t *testing.T) {
 			Action:  ActionBlock,
 			Enabled: true,
 		}
-		e.AddRule(rule)
+		_ = e.AddRule(rule)
 	}
 
 	done := make(chan bool)
@@ -508,7 +508,7 @@ func TestConcurrentAccess(t *testing.T) {
 					Action:  ActionBlock,
 					Enabled: true,
 				}
-				e.AddRule(rule)
+				_ = e.AddRule(rule)
 			}
 			done <- true
 		}()

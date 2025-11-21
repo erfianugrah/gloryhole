@@ -48,7 +48,7 @@ func NewSQLiteStorage(cfg *Config) (Storage, error) {
 
 	// Test connection
 	if err := db.Ping(); err != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, fmt.Errorf("%w: %v", ErrConnectionFailed, err)
 	}
 
@@ -67,14 +67,14 @@ func NewSQLiteStorage(cfg *Config) (Storage, error) {
 
 	for _, pragma := range pragmas {
 		if _, err := db.Exec(pragma); err != nil {
-			db.Close()
+			_ = db.Close()
 			return nil, fmt.Errorf("failed to set pragma: %w", err)
 		}
 	}
 
 	// Apply migrations
 	if err := applyMigrations(db); err != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, fmt.Errorf("failed to apply migrations: %w", err)
 	}
 
@@ -85,7 +85,7 @@ func NewSQLiteStorage(cfg *Config) (Storage, error) {
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`)
 	if err != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, fmt.Errorf("failed to prepare insert statement: %w", err)
 	}
 
@@ -206,7 +206,7 @@ func (s *SQLiteStorage) flushBatch(queries []*QueryLog) error {
 	if err != nil {
 		return fmt.Errorf("%w: %v", ErrQueryFailed, err)
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	stmt := tx.Stmt(s.stmtInsertQuery)
 
@@ -274,7 +274,7 @@ func (s *SQLiteStorage) GetRecentQueries(ctx context.Context, limit int) ([]*Que
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrQueryFailed, err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	return scanQueryLogs(rows)
 }
@@ -299,7 +299,7 @@ func (s *SQLiteStorage) GetQueriesByDomain(ctx context.Context, domain string, l
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrQueryFailed, err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	return scanQueryLogs(rows)
 }
@@ -324,7 +324,7 @@ func (s *SQLiteStorage) GetQueriesByClientIP(ctx context.Context, clientIP strin
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrQueryFailed, err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	return scanQueryLogs(rows)
 }
@@ -394,7 +394,7 @@ func (s *SQLiteStorage) GetTopDomains(ctx context.Context, limit int, blocked bo
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrQueryFailed, err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var domains []*DomainStats
 	for rows.Next() {
@@ -507,7 +507,7 @@ func (s *SQLiteStorage) Close() error {
 
 	// Close prepared statements
 	if s.stmtInsertQuery != nil {
-		s.stmtInsertQuery.Close()
+		_ = s.stmtInsertQuery.Close()
 	}
 
 	// Close database
