@@ -14,7 +14,7 @@ func BenchmarkEvaluate_SimpleRule(b *testing.B) {
 		Action:  ActionBlock,
 		Enabled: true,
 	}
-	e.AddRule(rule)
+	_ = e.AddRule(rule)
 
 	ctx := NewContext("example.com", "192.168.1.100", "A")
 
@@ -33,7 +33,7 @@ func BenchmarkEvaluate_DomainMatch(b *testing.B) {
 		Action:  ActionBlock,
 		Enabled: true,
 	}
-	e.AddRule(rule)
+	_ = e.AddRule(rule)
 
 	ctx := NewContext("facebook.com", "192.168.1.100", "A")
 
@@ -52,7 +52,7 @@ func BenchmarkEvaluate_ComplexRule(b *testing.B) {
 		Action:  ActionBlock,
 		Enabled: true,
 	}
-	e.AddRule(rule)
+	_ = e.AddRule(rule)
 
 	ctx := NewContext("facebook.com", "192.168.1.50", "A")
 
@@ -71,7 +71,7 @@ func BenchmarkEvaluate_DomainMatchesHelper(b *testing.B) {
 		Action:  ActionBlock,
 		Enabled: true,
 	}
-	e.AddRule(rule)
+	_ = e.AddRule(rule)
 
 	ctx := NewContext("www.facebook.com", "192.168.1.100", "A")
 
@@ -90,7 +90,7 @@ func BenchmarkEvaluate_IPInCIDRHelper(b *testing.B) {
 		Action:  ActionBlock,
 		Enabled: true,
 	}
-	e.AddRule(rule)
+	_ = e.AddRule(rule)
 
 	ctx := NewContext("example.com", "192.168.1.50", "A")
 
@@ -112,7 +112,7 @@ func BenchmarkEvaluate_MultipleRules(b *testing.B) {
 			Action:  ActionBlock,
 			Enabled: true,
 		}
-		e.AddRule(rule)
+		_ = e.AddRule(rule)
 	}
 
 	// Add a matching rule at the end
@@ -122,7 +122,7 @@ func BenchmarkEvaluate_MultipleRules(b *testing.B) {
 		Action:  ActionBlock,
 		Enabled: true,
 	}
-	e.AddRule(matchRule)
+	_ = e.AddRule(matchRule)
 
 	ctx := NewContext("test.com", "192.168.1.100", "A")
 
@@ -144,7 +144,7 @@ func BenchmarkEvaluate_ManyRules(b *testing.B) {
 			Action:  ActionBlock,
 			Enabled: true,
 		}
-		e.AddRule(rule)
+		_ = e.AddRule(rule)
 	}
 
 	// Add a matching rule at the end (worst case)
@@ -154,7 +154,7 @@ func BenchmarkEvaluate_ManyRules(b *testing.B) {
 		Action:  ActionBlock,
 		Enabled: true,
 	}
-	e.AddRule(matchRule)
+	_ = e.AddRule(matchRule)
 
 	ctx := NewContext("test.com", "192.168.1.100", "A")
 
@@ -176,7 +176,7 @@ func BenchmarkEvaluate_NoMatch(b *testing.B) {
 			Action:  ActionBlock,
 			Enabled: true,
 		}
-		e.AddRule(rule)
+		_ = e.AddRule(rule)
 	}
 
 	ctx := NewContext("test.com", "192.168.1.100", "A")
@@ -202,7 +202,7 @@ func BenchmarkAddRule(b *testing.B) {
 		}
 		b.StartTimer()
 
-		e.AddRule(rule)
+		_ = e.AddRule(rule)
 	}
 }
 
@@ -236,7 +236,7 @@ func BenchmarkConcurrentEvaluate(b *testing.B) {
 		Action:  ActionBlock,
 		Enabled: true,
 	}
-	e.AddRule(rule)
+	_ = e.AddRule(rule)
 
 	ctx := NewContext("facebook.com", "192.168.1.100", "A")
 

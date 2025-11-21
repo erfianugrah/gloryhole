@@ -302,9 +302,15 @@ func TestResolveCNAME_Loop(t *testing.T) {
 	cname2 := NewCNAMERecord("b.local", "c.local")
 	cname3 := NewCNAMERecord("c.local", "a.local")
 
-	mgr.AddRecord(cname1)
-	mgr.AddRecord(cname2)
-	mgr.AddRecord(cname3)
+	if err := mgr.AddRecord(cname1); err != nil {
+		t.Fatalf("Failed to add cname1: %v", err)
+	}
+	if err := mgr.AddRecord(cname2); err != nil {
+		t.Fatalf("Failed to add cname2: %v", err)
+	}
+	if err := mgr.AddRecord(cname3); err != nil {
+		t.Fatalf("Failed to add cname3: %v", err)
+	}
 
 	// Should detect loop and return not found
 	_, _, found := mgr.ResolveCNAME("a.local", 10)
@@ -352,7 +358,9 @@ func TestHasRecord(t *testing.T) {
 
 	ip := net.ParseIP("192.168.1.100")
 	record := NewARecord("nas.local", ip)
-	mgr.AddRecord(record)
+	if err := mgr.AddRecord(record); err != nil {
+		t.Fatalf("Failed to add record: %v", err)
+	}
 
 	if !mgr.HasRecord("nas.local") {
 		t.Error("HasRecord should return true")
@@ -371,9 +379,15 @@ func TestGetAllRecords(t *testing.T) {
 	mgr := NewManager()
 
 	// Add multiple records
-	mgr.AddRecord(NewARecord("server1.local", net.ParseIP("192.168.1.100")))
-	mgr.AddRecord(NewARecord("server2.local", net.ParseIP("192.168.1.101")))
-	mgr.AddRecord(NewCNAMERecord("alias.local", "server1.local"))
+	if err := mgr.AddRecord(NewARecord("server1.local", net.ParseIP("192.168.1.100"))); err != nil {
+		t.Fatalf("Failed to add server1 record: %v", err)
+	}
+	if err := mgr.AddRecord(NewARecord("server2.local", net.ParseIP("192.168.1.101"))); err != nil {
+		t.Fatalf("Failed to add server2 record: %v", err)
+	}
+	if err := mgr.AddRecord(NewCNAMERecord("alias.local", "server1.local")); err != nil {
+		t.Fatalf("Failed to add alias record: %v", err)
+	}
 
 	all := mgr.GetAllRecords()
 	if len(all) != 3 {
@@ -385,8 +399,12 @@ func TestClear(t *testing.T) {
 	mgr := NewManager()
 
 	// Add some records
-	mgr.AddRecord(NewARecord("server1.local", net.ParseIP("192.168.1.100")))
-	mgr.AddRecord(NewARecord("server2.local", net.ParseIP("192.168.1.101")))
+	if err := mgr.AddRecord(NewARecord("server1.local", net.ParseIP("192.168.1.100"))); err != nil {
+		t.Fatalf("Failed to add server1 record: %v", err)
+	}
+	if err := mgr.AddRecord(NewARecord("server2.local", net.ParseIP("192.168.1.101"))); err != nil {
+		t.Fatalf("Failed to add server2 record: %v", err)
+	}
 
 	if mgr.Count() != 2 {
 		t.Errorf("expected 2 records before clear, got %d", mgr.Count())
@@ -436,7 +454,9 @@ func TestConcurrentAccess(t *testing.T) {
 
 	// Add initial record
 	ip := net.ParseIP("192.168.1.100")
-	mgr.AddRecord(NewARecord("server.local", ip))
+	if err := mgr.AddRecord(NewARecord("server.local", ip)); err != nil {
+		t.Fatalf("Failed to add record: %v", err)
+	}
 
 	// Concurrent reads and writes
 	done := make(chan bool)
@@ -457,7 +477,7 @@ func TestConcurrentAccess(t *testing.T) {
 		go func(n int) {
 			for j := 0; j < 50; j++ {
 				domain := fmt.Sprintf("server%d.local", n)
-				mgr.AddRecord(NewARecord(domain, net.ParseIP("192.168.1.100")))
+				_ = mgr.AddRecord(NewARecord(domain, net.ParseIP("192.168.1.100")))
 			}
 			done <- true
 		}(i)
