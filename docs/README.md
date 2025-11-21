@@ -16,6 +16,20 @@ Welcome to the Glory-Hole DNS server documentation!
   - Performance tuning
   - Troubleshooting guide
 
+- **[Performance](PERFORMANCE.md)** - Performance benchmarks, architecture decisions, and optimization strategies:
+  - Blocklist performance (8ns lookups, 372M QPS)
+  - DNS cache performance (<1ms cache hits)
+  - Memory usage analysis
+  - Lock-free design patterns
+  - Benchmarking guide
+
+- **[Testing](TESTING.md)** - Comprehensive testing guide and coverage report:
+  - Test coverage (82.5% average, 208 tests, 9,209 test lines)
+  - Running tests (unit, integration, E2E, benchmarks)
+  - CI/CD testing with race detection
+  - Writing new tests
+  - Best practices
+
 ### Configuration Examples
 
 Located in `../examples/`:

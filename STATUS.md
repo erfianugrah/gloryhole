@@ -1,7 +1,7 @@
 # Glory-Hole Project Status
 
 **Last Updated**: 2025-11-21
-**Version**: 0.5.0-dev
+**Version**: 0.5.1
 **Phase**: Phase 1 - 100% Complete ✅
 
 ---
@@ -11,10 +11,12 @@
 | Metric | Value |
 |--------|-------|
 | **Current Phase** | Phase 1: MVP - Basic DNS Server (100%) ✅ |
-| **Next Milestone** | Phase 2: Essential Features |
+| **Next Milestone** | Phase 2: CI/CD & Production Readiness |
 | **Lines of Code** | 7,174 (3,533 prod + 3,641 test) |
-| **Test Coverage** | 95%+ (all packages) |
-| **Tests Passing** | ✅ 101/101 |
+| **Test Code** | 9,209 lines across 208 tests |
+| **Test Coverage** | 82.5% average across all packages |
+| **CI Status** | ✅ All checks passing |
+| **Race Detection** | ✅ Clean (0 races) |
 | **Build Status** | ✅ Success |
 | **Performance** | 8ns blocklist lookup, <10µs query logging |
 | **Blocklists Tested** | 473,873 domains (3 major sources) |
@@ -314,11 +316,11 @@ Overall Progress:         [█████████████████�
 
 ### Code Quality
 
-- **Test Coverage**: 100% on core packages
-- **Documentation**: 8 docs, 9,357 lines
+- **Test Coverage**: 82.5% average across 12 packages (208 tests, 9,209 test lines)
+- **Documentation**: 9 core docs, 11,000+ lines
 - **Code Style**: Clean Code + DDD principles
 - **Performance**: 8ns blocklist lookup, 372M concurrent QPS
-- **Observability**: Full tracing with source locations
+- **CI/CD**: ✅ All checks passing, race detection enabled
 - **Memory Efficiency**: 164 bytes per domain
 
 ---
@@ -441,18 +443,19 @@ All 86 tests passing ✅
 | Document | Status | Lines | Completeness |
 |----------|--------|-------|--------------|
 | README.md | ✅ Updated | 393 | 100% |
+| CHANGELOG.md | ✅ **Updated** | 339 | 100% |
 | ARCHITECTURE.md | ✅ Complete | 1,605 | 100% |
 | DESIGN.md | ✅ Complete | 2,968 | 100% |
 | PHASES.md | ✅ Complete | 1,248 | 100% |
-| STATUS.md | ✅ **Updated** | 530 | 100% |
-| PERFORMANCE.md | ✅ Complete | 333 | 100% |
-| CACHE-SUMMARY.md | ✅ Complete | 279 | 100% |
-| BLOCKLIST-PERFORMANCE.md | ✅ **New** | 363 | 100% |
-| BLOCKLIST-TESTING-RESULTS.md | ✅ **New** | 264 | 100% |
+| STATUS.md | ✅ **Updated** | 617 | 100% |
+| docs/PERFORMANCE.md | ✅ **New** | 400 | 100% |
+| docs/TESTING.md | ✅ **New** | 577 | 100% |
+| docs/POLICY_ENGINE.md | ✅ Complete | 2,100+ | 100% |
+| docs/README.md | ⏳ Needs update | - | 90% |
 | API.md | 🔴 Not started | 0 | 0% |
 | DEPLOYMENT.md | 🔴 Not started | 0 | 0% |
 
-**Total Documentation**: 9,357 lines (+1,700 lines blocklist docs)
+**Total Documentation**: 11,000+ lines (consolidated and organized)
 
 ---
 

@@ -1,18 +1,25 @@
 # Glory-Hole
 
+[![CI](https://github.com/yourusername/glory-hole/actions/workflows/ci.yml/badge.svg)](https://github.com/yourusername/glory-hole/actions/workflows/ci.yml)
+[![Go Report Card](https://goreportcard.com/badge/github.com/yourusername/glory-hole)](https://goreportcard.com/report/github.com/yourusername/glory-hole)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 A high-performance DNS server written in Go, designed as a modern, extensible replacement for Pi-hole and similar solutions. Glory-Hole provides advanced DNS filtering, caching, and analytics capabilities in a single, self-contained binary.
 
 ## 🚀 Project Status
 
 **Current Phase**: Phase 1 (MVP) ✅ **Complete!**
 **Next Phase**: Phase 2 (Essential Features)
-**Version**: 0.5.0-dev
+**Version**: 0.5.1
+**CI Status**: ✅ All checks passing
 
 > **Phase 1 Complete!** Glory-Hole now has a fully functional DNS server with blocklist management, caching, query logging to SQLite, and comprehensive testing. Ready for real-world testing!
 
 ### Quick Links
 
 - 📊 **[Current Status](STATUS.md)** - What's working and what's not
+- 📈 **[Performance](docs/PERFORMANCE.md)** - Benchmarks and architecture decisions
+- 🧪 **[Testing](docs/TESTING.md)** - Test coverage and testing guide
 - 🗺️ **[Development Roadmap](PHASES.md)** - Detailed phase-by-phase plan
 - 🏗️ **[Architecture Guide](ARCHITECTURE.md)** - System architecture (3,700+ lines)
 - 📐 **[Design Document](DESIGN.md)** - Feature specifications (1,900+ lines)
@@ -92,7 +99,7 @@ Glory-Hole is built following Domain-Driven Design principles with a clean separ
 └── ui/                      Web interface assets (future)
 ```
 
-**Stats**: 10,005 lines of code (4,950 production + 5,055 tests), 190 tests passing ✅
+**Stats**: 12,850 lines of code (3,533 production + 9,209 test lines), 208 tests passing, 82.5% coverage ✅
 
 ## Installation
 

@@ -4,13 +4,12 @@ import (
 	"testing"
 )
 
-// These tests will be replaced with proper SQLite backend tests in Phase 1B
-// For now, they're disabled to allow the new storage abstraction layer to compile
+// Storage interface tests
+// SQLite implementation tests are in sqlite_test.go
+// Factory and NoOp implementation tests are in factory_test.go
 
 func TestStorageInterface(t *testing.T) {
 	// This test verifies that our storage interface is properly defined
-	// Actual implementations will be tested in their respective test files
+	// Actual implementations are tested in their respective test files
 	t.Log("Storage interface defined successfully")
 }
-
-// TODO: Add comprehensive tests in Phase 1B (SQLite) and Phase 1C (D1)
