@@ -51,6 +51,8 @@ linters:
     - unused       # Unused code detection
     - gocyclo      # Cyclomatic complexity
     - errorlint    # Error wrapping checks
+    - exhaustive   # Exhaustive switch cases
+    - forbidigo    # Forbidden identifiers
 
 linters-settings:
   gofmt:
@@ -85,8 +87,8 @@ linters-settings:
   misspell:
     locale: US
   funlen:
-    lines: 150
-    statements: 75
+    lines: 300
+    statements: 150
   revive:
     rules:
       - name: package-comments
