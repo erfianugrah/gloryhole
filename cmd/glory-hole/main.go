@@ -40,7 +40,7 @@ func main() {
 		fmt.Printf("Glory-Hole DNS Server\n")
 		fmt.Printf("Version:    %s\n", version)
 		fmt.Printf("Build Time: %s\n", buildTime)
-		fmt.Printf("Go Version: %s\n", fmt.Sprintf("%s", os.Getenv("GOVERSION")))
+		fmt.Printf("Go Version: %s\n", os.Getenv("GOVERSION"))
 		os.Exit(0)
 	}
 

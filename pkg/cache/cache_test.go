@@ -5,9 +5,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/miekg/dns"
 	"glory-hole/pkg/config"
 	"glory-hole/pkg/logging"
+
+	"github.com/miekg/dns"
 )
 
 func testLogger(t *testing.T) *logging.Logger {

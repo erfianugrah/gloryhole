@@ -6,9 +6,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/miekg/dns"
 	"glory-hole/pkg/config"
 	"glory-hole/pkg/logging"
+
+	"github.com/miekg/dns"
 )
 
 // Cache is a thread-safe DNS response cache with LRU eviction and TTL support

@@ -53,6 +53,8 @@ linters:
     - errorlint    # Error wrapping checks
     - exhaustive   # Exhaustive switch cases
     - forbidigo    # Forbidden identifiers
+    - ireturn      # Accept interfaces, return structs
+    - interfacebloat # Interface method count
 
 linters-settings:
   gofmt:

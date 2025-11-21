@@ -9,8 +9,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/miekg/dns"
 	"glory-hole/pkg/logging"
+
+	"github.com/miekg/dns"
 )
 
 // Downloader downloads and parses blocklists

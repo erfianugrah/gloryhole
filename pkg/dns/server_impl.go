@@ -204,7 +204,7 @@ func (w *wrappedHandler) serveDNS(rw dns.ResponseWriter, r *dns.Msg) {
 	// Record metrics
 	if w.metrics != nil {
 		w.metrics.DNSQueriesTotal.Add(ctx, 1)
-		w.metrics.DNSQueriesByType.Add(ctx, 1)// attribute.String("type", dns.TypeToString[qtype]),
+		w.metrics.DNSQueriesByType.Add(ctx, 1) // attribute.String("type", dns.TypeToString[qtype]),
 
 	}
 
