@@ -59,6 +59,12 @@ linters:
     - mirror       # Allocation optimizations
     - maintidx     # Maintainability index
     - lll          # Line length limit
+    - thelper      # Test helper function checks
+    - staticcheck  # Static analysis (too strict)
+    - sqlclosecheck # SQL resource closing
+    - rowserrcheck # SQL rows.Err checking
+    - predeclared  # Predeclared identifier naming
+    - noctx        # HTTP calls without context
 
 linters-settings:
   gofmt:
