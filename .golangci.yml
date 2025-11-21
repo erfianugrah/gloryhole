@@ -44,13 +44,8 @@ linters:
     - intrange           # Go 1.22+ range syntax
     - usetesting         # Test-specific improvements
 
-    # Field alignment - useful but creates noise
-    - fieldalignment
-
     # Other noisy linters
     - stylecheck   # Style recommendations
-    - unused       # Unused code detection (can be noisy)
-    - shadow       # Variable shadowing
 
 linters-settings:
   gofmt:
