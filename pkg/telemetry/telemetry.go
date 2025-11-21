@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"time"
 
 	"glory-hole/pkg/config"
 	"glory-hole/pkg/logging"
@@ -152,8 +153,9 @@ func (t *Telemetry) startPrometheusServer() error {
 	})
 
 	t.prometheusServer = &http.Server{
-		Addr:    fmt.Sprintf(":%d", t.cfg.PrometheusPort),
-		Handler: mux,
+		Addr:              fmt.Sprintf(":%d", t.cfg.PrometheusPort),
+		Handler:           mux,
+		ReadHeaderTimeout: 10 * time.Second, // Prevent Slowloris attacks
 	}
 
 	go func() {

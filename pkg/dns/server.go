@@ -91,6 +91,17 @@ func (h *Handler) SetPolicyEngine(e *policy.Engine) {
 	h.PolicyEngine = e
 }
 
+// writeMsg writes a DNS message to the response writer with error handling
+// If the write fails (e.g., client disconnected), the error is silently ignored
+// as there's no way to notify the client at that point
+func (h *Handler) writeMsg(w dns.ResponseWriter, msg *dns.Msg) {
+	if err := w.WriteMsg(msg); err != nil {
+		// Client likely disconnected - nothing we can do
+		// Telemetry will track the overall error rate if needed
+		_ = err
+	}
+}
+
 // ServeDNS implements the dns.Handler interface
 func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) {
 	// Track query start time and details for logging
@@ -154,7 +165,7 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 	if len(r.Question) == 0 {
 		msg.SetRcode(r, dns.RcodeFormatError)
 		responseCode = dns.RcodeFormatError
-		w.WriteMsg(msg)
+		h.writeMsg(w, msg)
 		return
 	}
 
@@ -171,7 +182,7 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 			cachedResp.Id = r.Id
 			cached = true
 			responseCode = cachedResp.Rcode
-			w.WriteMsg(cachedResp)
+			h.writeMsg(w, cachedResp)
 			return
 		}
 	}
@@ -199,7 +210,7 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 				}
 				if len(msg.Answer) > 0 {
 					responseCode = dns.RcodeSuccess
-					w.WriteMsg(msg)
+					h.writeMsg(w, msg)
 					return
 				}
 			}
@@ -222,7 +233,7 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 				}
 				if len(msg.Answer) > 0 {
 					responseCode = dns.RcodeSuccess
-					w.WriteMsg(msg)
+					h.writeMsg(w, msg)
 					return
 				}
 			}
@@ -246,7 +257,7 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 				}
 				if len(msg.Answer) > 0 {
 					responseCode = dns.RcodeSuccess
-					w.WriteMsg(msg)
+					h.writeMsg(w, msg)
 					return
 				}
 			}
@@ -269,7 +280,7 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 				}
 				if len(msg.Answer) > 0 {
 					responseCode = dns.RcodeSuccess
-					w.WriteMsg(msg)
+					h.writeMsg(w, msg)
 					return
 				}
 			}
@@ -288,7 +299,7 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 				}
 				msg.Answer = append(msg.Answer, rr)
 				responseCode = dns.RcodeSuccess
-				w.WriteMsg(msg)
+				h.writeMsg(w, msg)
 				return
 			}
 		}
@@ -321,7 +332,7 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 				blocked = true
 				responseCode = dns.RcodeNameError
 				msg.SetRcode(r, dns.RcodeNameError)
-				w.WriteMsg(msg)
+				h.writeMsg(w, msg)
 				return
 
 			case policy.ActionAllow:
@@ -331,7 +342,7 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 					if err != nil {
 						responseCode = dns.RcodeServerFailure
 						msg.SetRcode(r, dns.RcodeServerFailure)
-						w.WriteMsg(msg)
+						h.writeMsg(w, msg)
 						return
 					}
 
@@ -347,13 +358,13 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 					}
 
 					responseCode = resp.Rcode
-					w.WriteMsg(resp)
+					h.writeMsg(w, resp)
 					return
 				}
 				// No forwarder, return NXDOMAIN
 				responseCode = dns.RcodeNameError
 				msg.SetRcode(r, dns.RcodeNameError)
-				w.WriteMsg(msg)
+				h.writeMsg(w, msg)
 				return
 
 			case policy.ActionRedirect:
@@ -363,7 +374,7 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 					// Invalid redirect IP, log and treat as block
 					responseCode = dns.RcodeNameError
 					msg.SetRcode(r, dns.RcodeNameError)
-					w.WriteMsg(msg)
+					h.writeMsg(w, msg)
 					return
 				}
 
@@ -404,7 +415,7 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 					h.Cache.Set(ctx, r, msg)
 				}
 
-				w.WriteMsg(msg)
+				h.writeMsg(w, msg)
 				return
 			}
 		}
@@ -448,7 +459,7 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 		if blocked {
 			responseCode = dns.RcodeNameError
 			msg.SetRcode(r, dns.RcodeNameError)
-			w.WriteMsg(msg)
+			h.writeMsg(w, msg)
 			return
 		}
 
@@ -476,7 +487,7 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 				}
 				msg.Answer = append(msg.Answer, rr)
 			}
-			w.WriteMsg(msg)
+			h.writeMsg(w, msg)
 			return
 		}
 
@@ -491,7 +502,7 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 				Target: cnameTarget,
 			}
 			msg.Answer = append(msg.Answer, rr)
-			w.WriteMsg(msg)
+			h.writeMsg(w, msg)
 			return
 		}
 	} else {
@@ -528,7 +539,7 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 		if blocked {
 			responseCode = dns.RcodeNameError
 			msg.SetRcode(r, dns.RcodeNameError)
-			w.WriteMsg(msg)
+			h.writeMsg(w, msg)
 			return
 		}
 
@@ -556,7 +567,7 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 				}
 				msg.Answer = append(msg.Answer, rr)
 			}
-			w.WriteMsg(msg)
+			h.writeMsg(w, msg)
 			return
 		}
 
@@ -571,7 +582,7 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 				Target: cnameTarget,
 			}
 			msg.Answer = append(msg.Answer, rr)
-			w.WriteMsg(msg)
+			h.writeMsg(w, msg)
 			return
 		}
 	}
@@ -584,7 +595,7 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 			// Forwarding failed, return SERVFAIL
 			responseCode = dns.RcodeServerFailure
 			msg.SetRcode(r, dns.RcodeServerFailure)
-			w.WriteMsg(msg)
+			h.writeMsg(w, msg)
 			return
 		}
 
@@ -604,12 +615,12 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 
 		// Return the upstream response
 		responseCode = resp.Rcode
-		w.WriteMsg(resp)
+		h.writeMsg(w, resp)
 		return
 	}
 
 	// No forwarder configured, return NXDOMAIN
 	responseCode = dns.RcodeNameError
 	msg.SetRcode(r, dns.RcodeNameError)
-	w.WriteMsg(msg)
+	h.writeMsg(w, msg)
 }

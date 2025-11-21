@@ -27,7 +27,7 @@ func New(cfg *config.LoggingConfig) (*Logger, error) {
 	case "file":
 		// For file output, we'll use a simple file writer
 		// In production, you might want to use lumberjack for rotation
-		f, err := os.OpenFile(cfg.FilePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+		f, err := os.OpenFile(cfg.FilePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0600)
 		if err != nil {
 			return nil, err
 		}

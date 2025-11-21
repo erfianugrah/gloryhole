@@ -200,7 +200,12 @@ func (f *Forwarder) ForwardTCP(ctx context.Context, r *dns.Msg) (*dns.Msg, error
 
 // selectUpstream selects the next upstream server using round-robin
 func (f *Forwarder) selectUpstream() string {
-	idx := f.index.Add(1) % uint32(len(f.upstreams))
+	// #nosec G115 - Conversion is safe: len(f.upstreams) will never exceed uint32 max (4 billion upstreams is unrealistic)
+	upstreamCount := uint32(len(f.upstreams))
+	if upstreamCount == 0 {
+		return ""
+	}
+	idx := f.index.Add(1) % upstreamCount
 	return f.upstreams[idx]
 }
 

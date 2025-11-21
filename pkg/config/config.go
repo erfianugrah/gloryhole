@@ -135,6 +135,7 @@ type TelemetryConfig struct {
 // Load loads the configuration from a YAML file
 func Load(path string) (*Config, error) {
 	// Read the file
+	// #nosec G304 - Config file path is provided by user via CLI flag, this is intentional
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read config file: %w", err)
