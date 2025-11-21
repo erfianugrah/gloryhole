@@ -224,9 +224,10 @@ func main() {
 	}
 
 	// Initialize policy engine if configured
+	var policyEngine *policy.Engine
 	if cfg.Policy.Enabled && len(cfg.Policy.Rules) > 0 {
 		logger.Info("Initializing policy engine", "rules", len(cfg.Policy.Rules))
-		policyEngine := policy.NewEngine()
+		policyEngine = policy.NewEngine()
 
 		for _, entry := range cfg.Policy.Rules {
 			rule := &policy.Rule{
@@ -266,6 +267,7 @@ func main() {
 		ListenAddress:    cfg.Server.WebUIAddress,
 		Storage:          stor,
 		BlocklistManager: blocklistMgr,
+		PolicyEngine:     policyEngine,
 		Logger:           logger.Logger, // Get underlying slog.Logger
 		Version:          version,
 	})

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"glory-hole/pkg/blocklist"
+	"glory-hole/pkg/policy"
 	"glory-hole/pkg/storage"
 )
 
@@ -21,6 +22,7 @@ type Server struct {
 	// Dependencies
 	storage          storage.Storage
 	blocklistManager *blocklist.Manager
+	policyEngine     *policy.Engine
 
 	// Metadata
 	version   string
@@ -32,6 +34,7 @@ type Config struct {
 	ListenAddress    string
 	Storage          storage.Storage
 	BlocklistManager *blocklist.Manager
+	PolicyEngine     *policy.Engine
 	Logger           *slog.Logger
 	Version          string
 }
@@ -45,6 +48,7 @@ func New(cfg *Config) *Server {
 	s := &Server{
 		storage:          cfg.Storage,
 		blocklistManager: cfg.BlocklistManager,
+		policyEngine:     cfg.PolicyEngine,
 		logger:           cfg.Logger,
 		version:          cfg.Version,
 		startTime:        time.Now(),
@@ -67,6 +71,13 @@ func New(cfg *Config) *Server {
 
 	// Blocklist management
 	mux.HandleFunc("POST /api/blocklist/reload", s.handleBlocklistReload)
+
+	// Policy management
+	mux.HandleFunc("GET /api/policies", s.handleGetPolicies)
+	mux.HandleFunc("POST /api/policies", s.handleAddPolicy)
+	mux.HandleFunc("GET /api/policies/{id}", s.handleGetPolicy)
+	mux.HandleFunc("PUT /api/policies/{id}", s.handleUpdatePolicy)
+	mux.HandleFunc("DELETE /api/policies/{id}", s.handleDeletePolicy)
 
 	// Apply middleware
 	handler := s.loggingMiddleware(mux)
