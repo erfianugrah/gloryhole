@@ -68,7 +68,6 @@ func (s *Server) Start(ctx context.Context) error {
 		return fmt.Errorf("server already running")
 	}
 	s.running = true
-	s.mu.Unlock()
 
 	// Wrap handler with telemetry and logging
 	wrappedHandler := &wrappedHandler{
@@ -79,33 +78,48 @@ func (s *Server) Start(ctx context.Context) error {
 
 	errChan := make(chan error, 2)
 
-	// Start UDP server
+	// Create and assign UDP server
 	if s.cfg.Server.UDPEnabled {
 		s.udpServer = &dns.Server{
 			Addr:    s.cfg.Server.ListenAddress,
 			Net:     "udp",
 			Handler: dns.HandlerFunc(wrappedHandler.serveDNS),
 		}
-
-		go func() {
-			s.logger.Info("Starting UDP DNS server", "address", s.cfg.Server.ListenAddress)
-			if err := s.udpServer.ListenAndServe(); err != nil {
-				errChan <- fmt.Errorf("UDP server failed: %w", err)
-			}
-		}()
 	}
 
-	// Start TCP server
+	// Create and assign TCP server
 	if s.cfg.Server.TCPEnabled {
 		s.tcpServer = &dns.Server{
 			Addr:    s.cfg.Server.ListenAddress,
 			Net:     "tcp",
 			Handler: dns.HandlerFunc(wrappedHandler.serveDNS),
 		}
+	}
 
+	// Unlock before starting goroutines
+	s.mu.Unlock()
+
+	// Start UDP server in goroutine
+	if s.cfg.Server.UDPEnabled {
+		go func() {
+			s.logger.Info("Starting UDP DNS server", "address", s.cfg.Server.ListenAddress)
+			s.mu.RLock()
+			udpSrv := s.udpServer
+			s.mu.RUnlock()
+			if err := udpSrv.ListenAndServe(); err != nil {
+				errChan <- fmt.Errorf("UDP server failed: %w", err)
+			}
+		}()
+	}
+
+	// Start TCP server in goroutine
+	if s.cfg.Server.TCPEnabled {
 		go func() {
 			s.logger.Info("Starting TCP DNS server", "address", s.cfg.Server.ListenAddress)
-			if err := s.tcpServer.ListenAndServe(); err != nil {
+			s.mu.RLock()
+			tcpSrv := s.tcpServer
+			s.mu.RUnlock()
+			if err := tcpSrv.ListenAndServe(); err != nil {
 				errChan <- fmt.Errorf("TCP server failed: %w", err)
 			}
 		}()

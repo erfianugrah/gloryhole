@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -317,12 +318,12 @@ func TestManager_AutoUpdate(t *testing.T) {
 		t.Skip("Skipping auto-update test in short mode")
 	}
 
-	// Create test HTTP server
-	updateCount := 0
+	// Create test HTTP server with atomic counter
+	var updateCount atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		updateCount++
+		updateCount.Add(1)
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("0.0.0.0 ads.example.com\n"))
+		_, _ = w.Write([]byte("0.0.0.0 ads.example.com\n"))
 	}))
 	defer server.Close()
 
@@ -343,14 +344,15 @@ func TestManager_AutoUpdate(t *testing.T) {
 	}
 	defer m.Stop()
 
-	initialCount := updateCount
+	initialCount := updateCount.Load()
 
 	// Wait for at least one auto-update
 	time.Sleep(1 * time.Second)
 
 	// Should have performed additional update(s)
-	if updateCount <= initialCount {
-		t.Errorf("Expected at least %d updates, got %d", initialCount+1, updateCount)
+	finalCount := updateCount.Load()
+	if finalCount <= initialCount {
+		t.Errorf("Expected at least %d updates, got %d", initialCount+1, finalCount)
 	}
 }
 
