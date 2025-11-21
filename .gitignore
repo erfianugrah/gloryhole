@@ -41,7 +41,7 @@ vendor/
 glory-hole # The name of our executable
 
 # Configuration files that might contain sensitive info or be user-specific
-config.yml
+/config.yml
 
 # Claude Code artifacts
 .claude/

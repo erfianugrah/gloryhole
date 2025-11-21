@@ -1,0 +1,11 @@
+server:
+  listen_address: ":5353"
+  tcp_enabled: true
+  udp_enabled: true
+
+upstream_dns_servers:
+  - "1.1.1.1:53"
+
+logging:
+  level: "debug"
+  format: "json"
