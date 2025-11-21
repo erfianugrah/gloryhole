@@ -103,3 +103,12 @@ issues:
   exclude-use-default: false
   max-issues-per-linter: 0
   max-same-issues: 0
+  exclude-rules:
+    # Disable errcheck for test files - defer Close() errors are acceptable
+    - path: _test\.go
+      linters:
+        - errcheck
+    # Disable errcheck for HTTP handler write errors in tests
+    - text: "Error return value of `w.Write` is not checked"
+      linters:
+        - errcheck

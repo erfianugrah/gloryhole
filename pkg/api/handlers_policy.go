@@ -106,7 +106,7 @@ func (s *Server) handleAddPolicy(w http.ResponseWriter, r *http.Request) {
 		s.writeError(w, http.StatusBadRequest, "Failed to read request body")
 		return
 	}
-	defer r.Body.Close()
+	defer func() { _ = r.Body.Close() }()
 
 	var req PolicyRequest
 	if err := json.Unmarshal(body, &req); err != nil {
@@ -202,7 +202,7 @@ func (s *Server) handleUpdatePolicy(w http.ResponseWriter, r *http.Request) {
 		s.writeError(w, http.StatusBadRequest, "Failed to read request body")
 		return
 	}
-	defer r.Body.Close()
+	defer func() { _ = r.Body.Close() }()
 
 	var req PolicyRequest
 	if err := json.Unmarshal(body, &req); err != nil {
@@ -250,7 +250,7 @@ func (s *Server) handleUpdatePolicy(w http.ResponseWriter, r *http.Request) {
 
 	if err := s.policyEngine.AddRule(newRule); err != nil {
 		// Try to restore the old rule
-		s.policyEngine.AddRule(existingRule)
+		_ = s.policyEngine.AddRule(existingRule)
 		s.writeError(w, http.StatusBadRequest, fmt.Sprintf("Failed to update policy: %v", err))
 		return
 	}

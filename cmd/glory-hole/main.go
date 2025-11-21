@@ -396,7 +396,7 @@ func performHealthCheck(apiAddr, configPath string) int {
 		fmt.Fprintf(os.Stderr, "Health check failed: %v\n", err)
 		return 1
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	// Check status code
 	if resp.StatusCode != http.StatusOK {
