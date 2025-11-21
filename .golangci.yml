@@ -46,6 +46,10 @@ linters:
 
     # Other noisy linters
     - stylecheck   # Style recommendations
+    - errchkjson   # JSON marshal error checking
+    - contextcheck # Context propagation
+    - unused       # Unused code detection
+    - gocyclo      # Cyclomatic complexity
 
 linters-settings:
   gofmt:
