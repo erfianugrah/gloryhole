@@ -65,6 +65,8 @@ linters:
     - rowserrcheck # SQL rows.Err checking
     - predeclared  # Predeclared identifier naming
     - noctx        # HTTP calls without context
+    - usestdlibvars # Stdlib constant usage
+    - unparam      # Unused function parameters
 
 linters-settings:
   gofmt:
