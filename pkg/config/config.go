@@ -5,6 +5,8 @@ import (
 	"os"
 	"time"
 
+	"glory-hole/pkg/storage"
+
 	"gopkg.in/yaml.v3"
 )
 
@@ -26,8 +28,8 @@ type Config struct {
 	Overrides      map[string]string `yaml:"overrides"`
 	CNAMEOverrides map[string]string `yaml:"cname_overrides"`
 
-	// Storage
-	Storage StorageConfig `yaml:"storage"`
+	// Database (uses storage.Config from pkg/storage)
+	Database storage.Config `yaml:"database"`
 
 	// Cache settings
 	Cache CacheConfig `yaml:"cache"`
@@ -47,12 +49,18 @@ type ServerConfig struct {
 	WebUIAddress  string `yaml:"web_ui_address"`
 }
 
-// StorageConfig holds storage settings
+// StorageConfig is deprecated - use storage.Config instead
+// Kept for backwards compatibility with old config files
 type StorageConfig struct {
 	DatabasePath      string `yaml:"database_path"`
 	LogQueries        bool   `yaml:"log_queries"`
 	LogRetentionDays  int    `yaml:"log_retention_days"`
 	BufferSize        int    `yaml:"buffer_size"`
+}
+
+// Storage field for backwards compatibility
+type deprecatedStorage struct {
+	Storage StorageConfig `yaml:"storage"`
 }
 
 // CacheConfig holds cache settings
@@ -146,16 +154,36 @@ func (c *Config) applyDefaults() {
 		c.UpdateInterval = 24 * time.Hour
 	}
 
-	// Storage defaults
-	if c.Storage.DatabasePath == "" {
-		c.Storage.DatabasePath = "./gloryhole.db"
+	// Database defaults
+	if c.Database.Backend == "" {
+		c.Database.Backend = storage.BackendSQLite
 	}
-	if c.Storage.LogRetentionDays == 0 {
-		c.Storage.LogRetentionDays = 30
+	if c.Database.SQLite.Path == "" {
+		c.Database.SQLite.Path = "./glory-hole.db"
 	}
-	if c.Storage.BufferSize == 0 {
-		c.Storage.BufferSize = 1000
+	if c.Database.SQLite.BusyTimeout == 0 {
+		c.Database.SQLite.BusyTimeout = 5000
 	}
+	if c.Database.SQLite.CacheSize == 0 {
+		c.Database.SQLite.CacheSize = 10000
+	}
+	if c.Database.BufferSize == 0 {
+		c.Database.BufferSize = 1000
+	}
+	if c.Database.FlushInterval == 0 {
+		c.Database.FlushInterval = 5 * time.Second
+	}
+	if c.Database.BatchSize == 0 {
+		c.Database.BatchSize = 100
+	}
+	if c.Database.RetentionDays == 0 {
+		c.Database.RetentionDays = 7
+	}
+	if c.Database.Statistics.AggregationInterval == 0 {
+		c.Database.Statistics.AggregationInterval = 1 * time.Hour
+	}
+	// Enable WAL mode by default for better concurrency
+	c.Database.SQLite.WALMode = true
 
 	// Cache defaults
 	if c.Cache.MaxEntries == 0 {

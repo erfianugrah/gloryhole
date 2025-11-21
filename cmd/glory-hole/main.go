@@ -13,6 +13,7 @@ import (
 	"glory-hole/pkg/config"
 	"glory-hole/pkg/dns"
 	"glory-hole/pkg/logging"
+	"glory-hole/pkg/storage"
 	"glory-hole/pkg/telemetry"
 )
 
@@ -90,6 +91,27 @@ func main() {
 		logger.Info("Whitelist loaded", "domains", len(cfg.Whitelist))
 	}
 
+	// Initialize storage (database for query logging)
+	var stor storage.Storage
+	if cfg.Database.Enabled {
+		logger.Info("Initializing storage",
+			"backend", cfg.Database.Backend,
+			"path", cfg.Database.SQLite.Path,
+		)
+		stor, err = storage.New(&cfg.Database)
+		if err != nil {
+			logger.Error("Failed to initialize storage", "error", err)
+			// Continue anyway - server can run without query logging
+		} else {
+			handler.SetStorage(stor)
+			logger.Info("Storage initialized successfully",
+				"backend", cfg.Database.Backend,
+				"buffer_size", cfg.Database.BufferSize,
+				"retention_days", cfg.Database.RetentionDays,
+			)
+		}
+	}
+
 	// Create DNS server
 	server := dns.NewServer(cfg, handler, logger, metrics)
 
@@ -130,6 +152,13 @@ func main() {
 		// Shutdown blocklist manager
 		if blocklistMgr != nil {
 			blocklistMgr.Stop()
+		}
+
+		// Shutdown storage
+		if stor != nil {
+			if err := stor.Close(); err != nil {
+				logger.Error("Error during storage shutdown", "error", err)
+			}
 		}
 
 		if err := telem.Shutdown(shutdownCtx); err != nil {

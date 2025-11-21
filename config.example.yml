@@ -33,12 +33,36 @@ overrides:
 cname_overrides:
   storage.local: "nas.local."
 
-# Storage
-storage:
-  database_path: "./gloryhole.db"
-  log_queries: true
-  log_retention_days: 30
-  buffer_size: 1000
+# Database (Query Logging & Statistics)
+database:
+  enabled: true
+  backend: "sqlite"              # sqlite or d1 (cloudflare)
+
+  # SQLite configuration
+  sqlite:
+    path: "./glory-hole.db"
+    busy_timeout: 5000           # milliseconds
+    wal_mode: true               # write-ahead logging for better concurrency
+    cache_size: 10000            # KB
+
+  # D1 configuration (Cloudflare edge database)
+  d1:
+    account_id: ""               # Cloudflare account ID
+    database_id: ""              # D1 database ID
+    api_token: ""                # Cloudflare API token with D1 access
+
+  # Buffer settings (async writes for performance)
+  buffer_size: 1000              # queries to buffer before flush
+  flush_interval: "5s"           # how often to flush buffer
+  batch_size: 100                # max queries per batch insert
+
+  # Retention policy
+  retention_days: 7              # days to keep detailed logs
+
+  # Statistics aggregation
+  statistics:
+    enabled: true
+    aggregation_interval: "1h"   # hourly rollups
 
 # Cache
 cache:

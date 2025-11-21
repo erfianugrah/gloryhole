@@ -45,3 +45,6 @@ config.yml
 
 # Claude Code artifacts
 .claude/
+cf-docs
+glory-hole
+glory-hole.db

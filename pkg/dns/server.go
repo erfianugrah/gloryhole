@@ -3,11 +3,14 @@ package dns
 import (
 	"context"
 	"net"
+	"strings"
 	"sync"
+	"time"
 
 	"glory-hole/pkg/blocklist"
 	"glory-hole/pkg/cache"
 	"glory-hole/pkg/forwarder"
+	"glory-hole/pkg/storage"
 
 	"github.com/miekg/dns"
 )
@@ -36,7 +39,8 @@ type Handler struct {
 	CNAMEOverrides map[string]string
 
 	Forwarder *forwarder.Forwarder
-	Cache     *cache.Cache // Optional DNS response cache
+	Cache     *cache.Cache      // Optional DNS response cache
+	Storage   storage.Storage   // Optional query logging storage
 }
 
 // NewHandler creates a new DNS handler
@@ -64,8 +68,63 @@ func (h *Handler) SetBlocklistManager(m *blocklist.Manager) {
 	h.BlocklistManager = m
 }
 
+// SetStorage sets the query logging storage
+func (h *Handler) SetStorage(s storage.Storage) {
+	h.Storage = s
+}
+
 // ServeDNS implements the dns.Handler interface
 func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) {
+	// Track query start time and details for logging
+	startTime := time.Now()
+	var blocked, cached bool
+	var upstream string
+	var responseCode int
+
+	// Async logging at the end (non-blocking, <10µs overhead)
+	defer func() {
+		if h.Storage != nil {
+			// Extract domain and query type
+			domain := ""
+			queryType := ""
+			if len(r.Question) > 0 {
+				domain = strings.TrimSuffix(r.Question[0].Name, ".")
+				queryType = dns.TypeToString[r.Question[0].Qtype]
+			}
+
+			// Get client IP
+			clientIP := ""
+			if addr, ok := w.RemoteAddr().(*net.UDPAddr); ok {
+				clientIP = addr.IP.String()
+			} else if addr, ok := w.RemoteAddr().(*net.TCPAddr); ok {
+				clientIP = addr.IP.String()
+			}
+
+			// Log query asynchronously (fire and forget)
+			go func() {
+				logCtx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+				defer cancel()
+
+				queryLog := &storage.QueryLog{
+					Timestamp:      startTime,
+					ClientIP:       clientIP,
+					Domain:         domain,
+					QueryType:      queryType,
+					ResponseCode:   responseCode,
+					Blocked:        blocked,
+					Cached:         cached,
+					ResponseTimeMs: time.Since(startTime).Milliseconds(),
+					Upstream:       upstream,
+				}
+
+				if err := h.Storage.LogQuery(logCtx, queryLog); err != nil {
+					// Silently fail - don't let logging errors affect DNS service
+					// In production, this would go to a separate error log
+				}
+			}()
+		}
+	}()
+
 	// Create response message
 	// Note: We don't pool these because ResponseWriter may hold references
 	msg := new(dns.Msg)
@@ -76,6 +135,7 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 	// Validate request
 	if len(r.Question) == 0 {
 		msg.SetRcode(r, dns.RcodeFormatError)
+		responseCode = dns.RcodeFormatError
 		w.WriteMsg(msg)
 		return
 	}
@@ -87,18 +147,19 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 	// Check cache first (before any lookups)
 	// Cache lookups are fast (~100ns) and can save upstream roundtrip (~10ms)
 	if h.Cache != nil {
-		if cached := h.Cache.Get(ctx, r); cached != nil {
+		if cachedResp := h.Cache.Get(ctx, r); cachedResp != nil {
 			// Important: Update the message ID to match the query
 			// Cached responses have the original query's ID, but we need this query's ID
-			cached.Id = r.Id
-			w.WriteMsg(cached)
+			cachedResp.Id = r.Id
+			cached = true
+			responseCode = cachedResp.Rcode
+			w.WriteMsg(cachedResp)
 			return
 		}
 	}
 
 	// FAST PATH: Use lock-free blocklist manager if available
 	// This path is ~10x faster than the locked path below (~10ns vs ~110ns)
-	var blocked bool
 	var whitelisted bool
 
 	if h.BlocklistManager != nil {
@@ -133,6 +194,7 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 
 		// Handle results (shared with slow path below)
 		if blocked {
+			responseCode = dns.RcodeNameError
 			msg.SetRcode(r, dns.RcodeNameError)
 			w.WriteMsg(msg)
 			return
@@ -212,6 +274,7 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 
 		// Handle results (duplicate code for simplicity)
 		if blocked {
+			responseCode = dns.RcodeNameError
 			msg.SetRcode(r, dns.RcodeNameError)
 			w.WriteMsg(msg)
 			return
@@ -267,9 +330,18 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 		resp, err := h.Forwarder.Forward(ctx, r)
 		if err != nil {
 			// Forwarding failed, return SERVFAIL
+			responseCode = dns.RcodeServerFailure
 			msg.SetRcode(r, dns.RcodeServerFailure)
 			w.WriteMsg(msg)
 			return
+		}
+
+		// Track upstream server used (approximation - before the query)
+		upstreams := h.Forwarder.Upstreams()
+		if len(upstreams) > 0 {
+			// Note: This is an approximation since we don't know which exact upstream was used
+			// The forwarder uses round-robin and retries, so this may not be 100% accurate
+			upstream = upstreams[0] // Just use the first upstream as a placeholder
 		}
 
 		// Cache the upstream response (if cache is enabled)
@@ -279,11 +351,13 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 		}
 
 		// Return the upstream response
+		responseCode = resp.Rcode
 		w.WriteMsg(resp)
 		return
 	}
 
 	// No forwarder configured, return NXDOMAIN
+	responseCode = dns.RcodeNameError
 	msg.SetRcode(r, dns.RcodeNameError)
 	w.WriteMsg(msg)
 }
