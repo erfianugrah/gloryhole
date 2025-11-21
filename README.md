@@ -47,11 +47,18 @@ A high-performance DNS server written in Go, designed as a modern, extensible re
 - **Telemetry**: OpenTelemetry + Prometheus metrics built-in
 - **Single Binary**: No external dependencies, easy deployment
 
+- **REST API**: Comprehensive HTTP API for monitoring and management
+  - Health check endpoint
+  - Query statistics with time periods
+  - Recent queries with pagination
+  - Top domains (allowed and blocked)
+  - Blocklist reload endpoint
+  - CORS support for web dashboards
+
 ### 🚧 In Development (Phase 2)
 
 - **Policy Engine**: Advanced rule-based filtering with complex expressions
 - **Web UI**: Built-in web interface for monitoring and configuration
-- **REST API**: Programmatic access for stats and management
 
 ## Architecture
 
@@ -61,12 +68,13 @@ Glory-Hole is built following Domain-Driven Design principles with a clean separ
 /
 ├── cmd/glory-hole/          Main application entry point
 ├── pkg/
+│   ├── api/                 REST API for monitoring and management (NEW!)
 │   ├── blocklist/           Lock-free blocklist management
 │   ├── cache/               LRU cache with TTL support
 │   ├── config/              Configuration management
 │   ├── dns/                 Core DNS server and request handling
 │   ├── forwarder/           Upstream DNS forwarding with retry
-│   ├── localrecords/        Local DNS records (A/AAAA/CNAME, wildcards) (NEW!)
+│   ├── localrecords/        Local DNS records (A/AAAA/CNAME, wildcards)
 │   ├── logging/             Structured logging with levels
 │   ├── policy/              Policy engine for rule evaluation (stub)
 │   ├── storage/             Multi-backend storage (SQLite, D1)
@@ -74,7 +82,7 @@ Glory-Hole is built following Domain-Driven Design principles with a clean separ
 └── ui/                      Web interface assets (future)
 ```
 
-**Stats**: 7,174 lines of code (3,533 production + 3,641 tests), 101 tests passing ✅
+**Stats**: 9,158 lines of code (4,640 production + 4,518 tests), 164 tests passing ✅
 
 ## Installation
 
@@ -344,13 +352,152 @@ rules:
     action: "ALLOW"
 ```
 
-## API Endpoints
+## REST API
 
-- `GET /api/stats` - Query statistics
-- `GET /api/queries` - Recent queries
-- `GET /api/top-domains` - Most queried domains
-- `POST /api/blocklist/reload` - Reload blocklists
-- `GET /api/health` - Health check
+Glory-Hole provides a comprehensive REST API for monitoring and management. The API server runs on port 8080 by default (configurable via `server.web_ui_address`).
+
+### Health Check
+
+**GET /api/health**
+
+Returns server health and uptime information.
+
+**Response:**
+```json
+{
+  "status": "ok",
+  "uptime": "2h15m30s",
+  "version": "0.5.0"
+}
+```
+
+### Statistics
+
+**GET /api/stats**
+
+Returns query statistics for a time period.
+
+**Query Parameters:**
+- `since` - Duration (e.g., "1h", "24h", "7d") - defaults to 24h
+
+**Response:**
+```json
+{
+  "total_queries": 10000,
+  "blocked_queries": 2500,
+  "cached_queries": 5000,
+  "block_rate": 25.0,
+  "cache_hit_rate": 50.0,
+  "avg_response_ms": 5.2,
+  "period": "24h0m0s",
+  "timestamp": "2025-11-21T10:30:00Z"
+}
+```
+
+**Example:**
+```bash
+curl http://localhost:8080/api/stats?since=1h
+```
+
+### Recent Queries
+
+**GET /api/queries**
+
+Returns recent DNS queries with optional filtering.
+
+**Query Parameters:**
+- `limit` - Number of results (1-1000, default: 100)
+- `offset` - Pagination offset (default: 0)
+
+**Response:**
+```json
+{
+  "queries": [
+    {
+      "id": 12345,
+      "timestamp": "2025-11-21T10:30:00Z",
+      "client_ip": "192.168.1.100",
+      "domain": "example.com",
+      "query_type": "A",
+      "response_code": 0,
+      "blocked": false,
+      "cached": true,
+      "response_time_ms": 5,
+      "upstream": "1.1.1.1:53"
+    }
+  ],
+  "total": 1,
+  "limit": 100,
+  "offset": 0
+}
+```
+
+**Example:**
+```bash
+curl http://localhost:8080/api/queries?limit=50
+```
+
+### Top Domains
+
+**GET /api/top-domains**
+
+Returns most queried domains.
+
+**Query Parameters:**
+- `limit` - Number of results (1-100, default: 10)
+- `blocked` - Filter by blocked status (true/false, default: false)
+
+**Response:**
+```json
+{
+  "domains": [
+    {
+      "domain": "google.com",
+      "queries": 1250,
+      "blocked": false
+    },
+    {
+      "domain": "facebook.com",
+      "queries": 850,
+      "blocked": false
+    }
+  ],
+  "limit": 10
+}
+```
+
+**Examples:**
+```bash
+# Top allowed domains
+curl http://localhost:8080/api/top-domains?limit=20
+
+# Top blocked domains
+curl http://localhost:8080/api/top-domains?limit=20&blocked=true
+```
+
+### Blocklist Management
+
+**POST /api/blocklist/reload**
+
+Manually triggers a blocklist reload from configured sources.
+
+**Response:**
+```json
+{
+  "status": "ok",
+  "domains": 101348,
+  "message": "Blocklists reloaded successfully"
+}
+```
+
+**Example:**
+```bash
+curl -X POST http://localhost:8080/api/blocklist/reload
+```
+
+### CORS
+
+The API includes CORS headers allowing cross-origin requests, making it easy to build web-based dashboards and monitoring tools.
 
 ## Performance
 

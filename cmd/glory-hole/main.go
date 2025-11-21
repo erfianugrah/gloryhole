@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	"glory-hole/pkg/api"
 	"glory-hole/pkg/blocklist"
 	"glory-hole/pkg/config"
 	"glory-hole/pkg/dns"
@@ -224,23 +225,42 @@ func main() {
 	// Create DNS server
 	server := dns.NewServer(cfg, handler, logger, metrics)
 
+	// Create API server
+	apiServer := api.New(&api.Config{
+		ListenAddress:    cfg.Server.WebUIAddress,
+		Storage:          stor,
+		BlocklistManager: blocklistMgr,
+		Logger:           logger.Logger, // Get underlying slog.Logger
+		Version:          version,
+	})
+
 	// Setup signal handling for graceful shutdown
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
 
-	// Start server in background
+	// Start servers in background
 	serverCtx, serverCancel := context.WithCancel(ctx)
 	defer serverCancel()
 
-	errChan := make(chan error, 1)
+	errChan := make(chan error, 2) // Buffer for both DNS and API errors
+
+	// Start DNS server
 	go func() {
 		if err := server.Start(serverCtx); err != nil {
-			errChan <- err
+			errChan <- fmt.Errorf("DNS server error: %w", err)
+		}
+	}()
+
+	// Start API server
+	go func() {
+		if err := apiServer.Start(serverCtx); err != nil {
+			errChan <- fmt.Errorf("API server error: %w", err)
 		}
 	}()
 
 	logger.Info("Glory Hole DNS server is running",
-		"address", cfg.Server.ListenAddress,
+		"dns_address", cfg.Server.ListenAddress,
+		"api_address", cfg.Server.WebUIAddress,
 		"upstreams", cfg.UpstreamDNSServers,
 	)
 
@@ -254,8 +274,14 @@ func main() {
 		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer shutdownCancel()
 
+		// Shutdown DNS server
 		if err := server.Shutdown(shutdownCtx); err != nil {
-			logger.Error("Error during server shutdown", "error", err)
+			logger.Error("Error during DNS server shutdown", "error", err)
+		}
+
+		// Shutdown API server
+		if err := apiServer.Shutdown(shutdownCtx); err != nil {
+			logger.Error("Error during API server shutdown", "error", err)
 		}
 
 		// Shutdown blocklist manager
