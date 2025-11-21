@@ -7,6 +7,11 @@ import (
 	"time"
 )
 
+const (
+	statusOK            = "ok"
+	statusNotConfigured = "not_configured"
+)
+
 // handleHealth handles GET /api/health
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
@@ -62,29 +67,29 @@ func (s *Server) handleReadyz(w http.ResponseWriter, r *http.Request) {
 			checks["storage"] = "degraded"
 			// Don't mark as not ready - we can operate without storage
 		} else {
-			checks["storage"] = "ok"
+			checks["storage"] = statusOK
 		}
 	} else {
-		checks["storage"] = "not_configured"
+		checks["storage"] = statusNotConfigured
 	}
 
 	// Check blocklist manager (optional)
 	if s.blocklistManager != nil {
 		if s.blocklistManager.Size() > 0 {
-			checks["blocklist"] = "ok"
+			checks["blocklist"] = statusOK
 		} else {
 			checks["blocklist"] = "empty"
 			// Don't mark as not ready - we can operate without blocklists
 		}
 	} else {
-		checks["blocklist"] = "not_configured"
+		checks["blocklist"] = statusNotConfigured
 	}
 
 	// Check policy engine (optional)
 	if s.policyEngine != nil {
-		checks["policy_engine"] = "ok"
+		checks["policy_engine"] = statusOK
 	} else {
-		checks["policy_engine"] = "not_configured"
+		checks["policy_engine"] = statusNotConfigured
 	}
 
 	status := "ready"

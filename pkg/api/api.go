@@ -59,8 +59,8 @@ func New(cfg *Config) *Server {
 
 	// Health checks
 	mux.HandleFunc("/api/health", s.handleHealth)
-	mux.HandleFunc("/healthz", s.handleHealthz)     // Kubernetes liveness probe
-	mux.HandleFunc("/readyz", s.handleReadyz)       // Kubernetes readiness probe
+	mux.HandleFunc("/healthz", s.handleHealthz) // Kubernetes liveness probe
+	mux.HandleFunc("/readyz", s.handleReadyz)   // Kubernetes readiness probe
 
 	// Statistics
 	mux.HandleFunc("/api/stats", s.handleStats)
