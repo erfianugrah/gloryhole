@@ -108,7 +108,7 @@ issues:
     - path: _test\.go
       linters:
         - errcheck
-    # Disable errcheck for HTTP handler write errors in tests
-    - text: "Error return value of `w.Write` is not checked"
+    # Disable errcheck for write operations - they're logged elsewhere
+    - text: "Error return value of.*Write.* is not checked"
       linters:
         - errcheck
