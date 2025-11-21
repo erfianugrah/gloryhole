@@ -531,7 +531,7 @@ func setupTestStorage(t *testing.T) (Storage, func()) {
 	}
 
 	cleanup := func() {
-		storage.Close()
+		_ = storage.Close()
 	}
 
 	return storage, cleanup

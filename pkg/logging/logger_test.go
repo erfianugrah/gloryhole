@@ -188,8 +188,8 @@ func TestFileOutput(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer os.Remove(tmpfile.Name())
-	tmpfile.Close()
+	defer func() { _ = os.Remove(tmpfile.Name()) }()
+	_ = tmpfile.Close()
 
 	cfg := &config.LoggingConfig{
 		Level:    "info",
