@@ -11,6 +11,7 @@ import (
 	"glory-hole/pkg/cache"
 	"glory-hole/pkg/forwarder"
 	"glory-hole/pkg/localrecords"
+	"glory-hole/pkg/policy"
 	"glory-hole/pkg/storage"
 
 	"github.com/miekg/dns"
@@ -41,6 +42,9 @@ type Handler struct {
 
 	// Local DNS records manager (e.g., nas.local -> 192.168.1.100)
 	LocalRecords *localrecords.Manager // Optional local DNS records
+
+	// Policy engine for advanced rule-based filtering
+	PolicyEngine *policy.Engine // Optional policy engine
 
 	Forwarder *forwarder.Forwarder
 	Cache     *cache.Cache      // Optional DNS response cache
@@ -80,6 +84,11 @@ func (h *Handler) SetStorage(s storage.Storage) {
 // SetLocalRecords sets the local DNS records manager
 func (h *Handler) SetLocalRecords(l *localrecords.Manager) {
 	h.LocalRecords = l
+}
+
+// SetPolicyEngine sets the policy engine
+func (h *Handler) SetPolicyEngine(e *policy.Engine) {
+	h.PolicyEngine = e
 }
 
 // ServeDNS implements the dns.Handler interface
@@ -281,6 +290,75 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 				responseCode = dns.RcodeSuccess
 				w.WriteMsg(msg)
 				return
+			}
+		}
+	}
+
+	// Evaluate policy engine rules (if configured)
+	// Policy engine allows complex filtering rules with expressions
+	if h.PolicyEngine != nil && h.PolicyEngine.Count() > 0 {
+		// Get client IP for policy evaluation
+		clientIP := ""
+		if addr, ok := w.RemoteAddr().(*net.UDPAddr); ok {
+			clientIP = addr.IP.String()
+		} else if addr, ok := w.RemoteAddr().(*net.TCPAddr); ok {
+			clientIP = addr.IP.String()
+		}
+
+		// Create policy context
+		policyCtx := policy.NewContext(
+			strings.TrimSuffix(domain, "."),
+			clientIP,
+			dns.TypeToString[qtype],
+		)
+
+		// Evaluate rules
+		matched, rule := h.PolicyEngine.Evaluate(policyCtx)
+		if matched && rule != nil {
+			switch rule.Action {
+			case policy.ActionBlock:
+				// Block the request
+				blocked = true
+				responseCode = dns.RcodeNameError
+				msg.SetRcode(r, dns.RcodeNameError)
+				w.WriteMsg(msg)
+				return
+
+			case policy.ActionAllow:
+				// Allow the request - skip blocklist check and forward directly
+				if h.Forwarder != nil {
+					resp, err := h.Forwarder.Forward(ctx, r)
+					if err != nil {
+						responseCode = dns.RcodeServerFailure
+						msg.SetRcode(r, dns.RcodeServerFailure)
+						w.WriteMsg(msg)
+						return
+					}
+
+					// Track upstream server
+					upstreams := h.Forwarder.Upstreams()
+					if len(upstreams) > 0 {
+						upstream = upstreams[0]
+					}
+
+					// Cache the response
+					if h.Cache != nil {
+						h.Cache.Set(ctx, r, resp)
+					}
+
+					responseCode = resp.Rcode
+					w.WriteMsg(resp)
+					return
+				}
+				// No forwarder, return NXDOMAIN
+				responseCode = dns.RcodeNameError
+				msg.SetRcode(r, dns.RcodeNameError)
+				w.WriteMsg(msg)
+				return
+
+			case policy.ActionRedirect:
+				// TODO: Implement redirect action
+				// For now, treat as allow
 			}
 		}
 	}

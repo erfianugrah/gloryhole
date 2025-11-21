@@ -1,0 +1,137 @@
+# Glory-Hole DNS Configuration: Small Office/Business
+#
+# This configuration is optimized for a small office environment with:
+# - Work hours productivity enforcement
+# - Security-focused filtering
+# - Internal service resolution
+# - Detailed logging for compliance
+
+server:
+  listen_address: "0.0.0.0:53"
+  tcp_enabled: true
+  udp_enabled: true
+  web_ui_address: "0.0.0.0:8080"
+
+# Enterprise-grade DNS providers with security features
+upstream_dns_servers:
+  - "1.1.1.2:53"      # Cloudflare for Teams (malware blocking)
+  - "208.67.222.222:53"  # OpenDNS
+
+update_interval: "12h"
+auto_update_blocklists: true
+
+# Security-focused blocklists
+blocklists:
+  - "https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts"
+  - "https://urlhaus.abuse.ch/downloads/hostfile/"  # Malware domains
+  - "https://v.firebog.net/hosts/Prigent-Malware.txt"
+  - "https://phishing.army/download/phishing_army_blocklist.txt"
+
+# Whitelist for business-critical services
+whitelist:
+  - "login.microsoftonline.com"
+  - "accounts.google.com"
+  - "slack.com"
+  - "zoom.us"
+
+# Internal business services
+local_records:
+  enabled: true
+  records:
+    # Office infrastructure
+    - domain: "intranet.company.local"
+      type: "A"
+      ips: ["10.0.1.10"]
+
+    - domain: "fileserver.company.local"
+      type: "A"
+      ips: ["10.0.1.20"]
+
+    - domain: "printer-floor1.company.local"
+      type: "A"
+      ips: ["10.0.1.101"]
+
+    - domain: "printer-floor2.company.local"
+      type: "A"
+      ips: ["10.0.1.102"]
+
+    # CNAME for convenience
+    - domain: "files.company.local"
+      type: "CNAME"
+      target: "fileserver.company.local"
+
+# Business-hours productivity policies
+policy:
+  enabled: true
+  rules:
+    # Block social media during work hours (9 AM - 5 PM, weekdays)
+    - name: "Work hours social media block"
+      logic: 'Weekday && Hour >= 9 && Hour < 17 && (DomainMatches(Domain, "facebook") || DomainMatches(Domain, "twitter") || DomainMatches(Domain, "instagram") || DomainMatches(Domain, "tiktok") || DomainMatches(Domain, "reddit"))'
+      action: "block"
+      enabled: true
+
+    # Block streaming services during work hours
+    - name: "Work hours streaming block"
+      logic: 'Weekday && Hour >= 9 && Hour < 17 && (DomainMatches(Domain, "netflix") || DomainMatches(Domain, "youtube") || DomainMatches(Domain, "twitch") || DomainMatches(Domain, "spotify"))'
+      action: "block"
+      enabled: true
+
+    # Always block gambling
+    - name: "Block gambling sites"
+      logic: 'DomainMatches(Domain, "casino") || DomainMatches(Domain, "poker") || DomainMatches(Domain, "betting") || DomainMatches(Domain, "gambling")'
+      action: "block"
+      enabled: true
+
+    # Always block malware and phishing
+    - name: "Block known malware domains"
+      logic: 'DomainMatches(Domain, "malware") || DomainMatches(Domain, "phishing")'
+      action: "block"
+      enabled: true
+
+    # Allow admin network full access
+    - name: "Admin network bypass"
+      logic: 'IPInCIDR(ClientIP, "10.0.0.0/28")'  # Admin subnet
+      action: "allow"
+      enabled: true
+
+# Aggressive caching for performance
+cache:
+  enabled: true
+  max_entries: 20000
+  min_ttl: "120s"
+  max_ttl: "24h"
+  negative_ttl: "10m"
+
+# Comprehensive query logging for compliance
+database:
+  enabled: true
+  backend: "sqlite"
+  sqlite:
+    path: "/var/log/glory-hole/queries.db"
+    wal_mode: true
+  buffer_size: 2000
+  flush_interval: "5s"
+  retention_days: 30  # Keep logs for 30 days
+  statistics:
+    enabled: true
+    aggregation_interval: "1h"
+
+# Detailed logging
+logging:
+  level: "info"
+  format: "json"  # Structured logs for parsing
+  output: "file"
+  file_path: "/var/log/glory-hole/dns-server.log"
+  add_source: true
+  max_size: 100
+  max_backups: 10
+  max_age: 30
+
+# Full telemetry for monitoring
+telemetry:
+  enabled: true
+  service_name: "glory-hole-office"
+  prometheus_enabled: true
+  prometheus_port: 9090
+  tracing_enabled: true
+  tracing_endpoint: "http://jaeger:14268/api/traces"

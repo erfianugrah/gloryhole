@@ -37,6 +37,9 @@ type Config struct {
 	// Local DNS records
 	LocalRecords LocalRecordsConfig `yaml:"local_records"`
 
+	// Policy engine rules
+	Policy PolicyConfig `yaml:"policy"`
+
 	// Logging
 	Logging LoggingConfig `yaml:"logging"`
 
@@ -89,6 +92,21 @@ type LocalRecordEntry struct {
 	Target   string   `yaml:"target"`   // Target for CNAME records
 	TTL      uint32   `yaml:"ttl"`      // TTL in seconds (default: 300)
 	Wildcard bool     `yaml:"wildcard"` // True if this is a wildcard record (*.domain)
+}
+
+// PolicyConfig holds policy engine configuration
+type PolicyConfig struct {
+	Enabled bool              `yaml:"enabled"` // Enable/disable policy engine
+	Rules   []PolicyRuleEntry `yaml:"rules"`   // Policy rules
+}
+
+// PolicyRuleEntry represents a single policy rule in the config
+type PolicyRuleEntry struct {
+	Name       string `yaml:"name"`        // Human-readable name
+	Logic      string `yaml:"logic"`       // Expression to evaluate
+	Action     string `yaml:"action"`      // Action: BLOCK, ALLOW, REDIRECT
+	ActionData string `yaml:"action_data"` // Optional action data (e.g., redirect target)
+	Enabled    bool   `yaml:"enabled"`     // Whether the rule is active
 }
 
 // LoggingConfig holds logging settings

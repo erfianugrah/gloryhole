@@ -1,0 +1,58 @@
+# Glory-Hole DNS Configuration: Minimal/Lightweight
+#
+# This configuration is optimized for:
+# - Raspberry Pi or other constrained devices
+# - Minimal memory footprint
+# - Low CPU usage
+# - Basic ad blocking only
+
+server:
+  listen_address: ":53"
+  tcp_enabled: false  # Disable TCP to save resources
+  udp_enabled: true
+  web_ui_address: ""  # Disable web UI
+
+# Single fast upstream
+upstream_dns_servers:
+  - "1.1.1.1:53"
+
+update_interval: "168h"  # Weekly updates only
+auto_update_blocklists: false  # Manual updates
+
+# Single lightweight blocklist
+blocklists:
+  - "https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts"
+
+# No whitelist
+whitelist: []
+
+# No local records
+local_records:
+  enabled: false
+
+# No policy engine (saves CPU)
+policy:
+  enabled: false
+
+# Small cache
+cache:
+  enabled: true
+  max_entries: 1000  # Minimal memory usage
+  min_ttl: "60s"
+  max_ttl: "6h"      # Shorter max TTL
+  negative_ttl: "5m"
+
+# No database (saves disk I/O)
+database:
+  enabled: false
+
+# Minimal logging
+logging:
+  level: "error"  # Only errors
+  format: "text"
+  output: "stdout"
+  add_source: false  # Saves processing
+
+# No telemetry
+telemetry:
+  enabled: false

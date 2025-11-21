@@ -362,26 +362,37 @@ func TestForwardTCP_Success(t *testing.T) {
 		w.WriteMsg(resp)
 	})
 
+	// Use a fixed port to avoid race conditions with dynamic port allocation
+	// The race detector sees concurrent access to the Listener's address fields
+	testPort := "127.0.0.1:25353" // Non-standard test port
+
 	server := &dns.Server{
-		Addr:    "127.0.0.1:0",
+		Addr:    testPort,
 		Net:     "tcp",
 		Handler: handler,
 	}
 
+	// Channel to signal server started
+	started := make(chan error, 1)
+
 	// Start server in background
 	go func() {
-		server.ListenAndServe()
+		if err := server.ListenAndServe(); err != nil {
+			started <- err
+		}
 	}()
 	defer server.Shutdown()
 
-	// Wait a bit for server to start
-	time.Sleep(50 * time.Millisecond)
-
-	// Get actual listening address
-	addr := server.Listener.Addr().String()
+	// Wait for server to start (give it time to bind)
+	select {
+	case err := <-started:
+		t.Fatalf("Server failed to start: %v", err)
+	case <-time.After(100 * time.Millisecond):
+		// Server started successfully
+	}
 
 	cfg := &config.Config{
-		UpstreamDNSServers: []string{addr},
+		UpstreamDNSServers: []string{testPort},
 	}
 	logger := logging.NewDefault()
 	fwd := NewForwarder(cfg, logger)

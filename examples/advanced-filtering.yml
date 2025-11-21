@@ -1,0 +1,181 @@
+# Glory-Hole DNS Configuration: Advanced Policy-Based Filtering
+#
+# This configuration demonstrates advanced filtering capabilities:
+# - Complex time-based rules
+# - IP-based access control
+# - Multi-condition logic
+# - Granular domain matching
+
+server:
+  listen_address: ":53"
+  tcp_enabled: true
+  udp_enabled: true
+  web_ui_address: ":8080"
+
+upstream_dns_servers:
+  - "1.1.1.1:53"
+  - "8.8.8.8:53"
+
+update_interval: "24h"
+auto_update_blocklists: true
+
+# Minimal blocklists - rely on policy engine for filtering
+blocklists:
+  - "https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts"
+
+# Advanced Policy Engine Rules
+policy:
+  enabled: true
+  rules:
+    # ===== Time-Based Rules =====
+
+    # Weekend mode: Allow everything on weekends
+    - name: "Weekend freedom"
+      logic: '!Weekday'
+      action: "allow"
+      enabled: true
+
+    # Lunch break (12 PM - 1 PM): Allow social media
+    - name: "Lunch break social media"
+      logic: 'Weekday && Hour >= 12 && Hour < 13 && (DomainMatches(Domain, "facebook") || DomainMatches(Domain, "twitter"))'
+      action: "allow"
+      enabled: true
+
+    # After hours (6 PM - 9 AM): Block work-related sites
+    - name: "After hours work block"
+      logic: 'Weekday && (Hour >= 18 || Hour < 9) && (DomainMatches(Domain, "slack") || DomainMatches(Domain, "asana") || DomainMatches(Domain, "jira"))'
+      action: "block"
+      enabled: true
+
+    # ===== IP-Based Rules =====
+
+    # Guest network: Very restrictive
+    - name: "Guest network restrictions"
+      logic: 'IPInCIDR(ClientIP, "192.168.2.0/24") && (DomainMatches(Domain, "facebook") || DomainMatches(Domain, "netflix") || DomainMatches(Domain, "gaming"))'
+      action: "block"
+      enabled: true
+
+    # Admin network: Full access
+    - name: "Admin bypass all filters"
+      logic: 'IPInCIDR(ClientIP, "10.0.0.0/28")'
+      action: "allow"
+      enabled: true
+
+    # Kids network: Strict filtering
+    - name: "Kids network - block social"
+      logic: 'IPInCIDR(ClientIP, "192.168.3.0/24") && (DomainMatches(Domain, "social") || DomainMatches(Domain, "chat") || DomainMatches(Domain, "discord"))'
+      action: "block"
+      enabled: true
+
+    # ===== Complex Multi-Condition Rules =====
+
+    # Block video streaming during work hours, except for trusted IPs
+    - name: "Smart streaming block"
+      logic: 'Weekday && Hour >= 9 && Hour < 17 && !IPInCIDR(ClientIP, "10.0.0.0/24") && (DomainMatches(Domain, "youtube") || DomainMatches(Domain, "netflix") || DomainMatches(Domain, "twitch"))'
+      action: "block"
+      enabled: true
+
+    # Block downloads during peak hours (9 AM - 11 AM, 1 PM - 3 PM)
+    - name: "Peak hours download block"
+      logic: 'Weekday && ((Hour >= 9 && Hour < 11) || (Hour >= 13 && Hour < 15)) && (DomainMatches(Domain, "torrent") || DomainMatches(Domain, "download") || DomainEndsWith(Domain, ".exe"))'
+      action: "block"
+      enabled: true
+
+    # ===== Domain Pattern Rules =====
+
+    # Block specific TLDs that are commonly used for spam
+    - name: "Block suspicious TLDs"
+      logic: 'DomainEndsWith(Domain, ".xyz") || DomainEndsWith(Domain, ".top") || DomainEndsWith(Domain, ".click")'
+      action: "block"
+      enabled: false  # Be careful with this, some legitimate sites use these
+
+    # Block subdomains of blocked domains
+    - name: "Block all Facebook subdomains"
+      logic: 'DomainEndsWith(Domain, ".facebook.com") || DomainEndsWith(Domain, ".fbcdn.net") || DomainEndsWith(Domain, ".fb.me")'
+      action: "block"
+      enabled: false
+
+    # Allow specific subdomains
+    - name: "Allow work-related Google services"
+      logic: '(DomainMatches(Domain, "drive.google") || DomainMatches(Domain, "docs.google") || DomainMatches(Domain, "gmail")) && IPInCIDR(ClientIP, "10.0.1.0/24")'
+      action: "allow"
+      enabled: true
+
+    # ===== Query Type Rules =====
+
+    # You can also combine with query type (though not directly exposed yet)
+    # Example: Block all queries from specific network
+    - name: "IoT network - only allow DNS for monitoring"
+      logic: 'IPInCIDR(ClientIP, "192.168.4.0/24") && !DomainMatches(Domain, "monitoring") && !DomainMatches(Domain, "metrics")'
+      action: "block"
+      enabled: false
+
+    # ===== Catchall Rules =====
+
+    # Default allow (place last) - if no other rule matches
+    - name: "Default allow"
+      logic: 'true'
+      action: "allow"
+      enabled: false  # Only enable if you want explicit default
+
+# Local records for testing
+local_records:
+  enabled: true
+  records:
+    - domain: "test.local"
+      type: "A"
+      ips: ["127.0.0.1"]
+
+    - domain: "blocked.test.local"
+      type: "A"
+      ips: ["0.0.0.0"]
+
+# High-performance cache
+cache:
+  enabled: true
+  max_entries: 10000
+  min_ttl: "60s"
+  max_ttl: "24h"
+  negative_ttl: "5m"
+
+# Detailed logging for rule debugging
+database:
+  enabled: true
+  backend: "sqlite"
+  sqlite:
+    path: "./policy-logs.db"
+  buffer_size: 1000
+  flush_interval: "5s"
+  retention_days: 7
+
+logging:
+  level: "debug"  # See policy evaluation details
+  format: "json"
+  output: "stdout"
+  add_source: true
+
+telemetry:
+  enabled: true
+  prometheus_enabled: true
+  prometheus_port: 9090
+
+# Helper Functions Available in Policy Rules:
+#
+# DomainMatches(Domain, "substring") - Check if domain contains substring
+#   Example: DomainMatches(Domain, "google") matches "www.google.com"
+#
+# DomainEndsWith(Domain, "suffix") - Check if domain ends with suffix
+#   Example: DomainEndsWith(Domain, ".com") matches "example.com"
+#
+# DomainStartsWith(Domain, "prefix") - Check if domain starts with prefix
+#   Example: DomainStartsWith(Domain, "www.") matches "www.example.com"
+#
+# IPInCIDR(ClientIP, "cidr") - Check if IP is in CIDR range
+#   Example: IPInCIDR(ClientIP, "192.168.1.0/24")
+#
+# Variables Available:
+#   Domain     - The queried domain (e.g., "www.example.com")
+#   ClientIP   - The IP of the DNS client
+#   QueryType  - The DNS query type (e.g., "A", "AAAA", "CNAME")
+#   Hour       - Current hour (0-23)
+#   Weekday    - true if Monday-Friday, false if Saturday-Sunday

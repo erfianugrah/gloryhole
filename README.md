@@ -55,9 +55,19 @@ A high-performance DNS server written in Go, designed as a modern, extensible re
   - Blocklist reload endpoint
   - CORS support for web dashboards
 
+### ✅ Implemented (Phase 2)
+
+- **Policy Engine**: Advanced rule-based filtering with complex expressions ✅
+  - Expression-based rules using expr language
+  - Time-based filtering (hour, minute, day, month, weekday)
+  - Client IP matching and CIDR range support
+  - Domain pattern matching (contains, starts with, ends with)
+  - Actions: BLOCK, ALLOW, REDIRECT (redirect coming soon)
+  - Thread-safe concurrent evaluation
+  - First-match rule semantics
+
 ### 🚧 In Development (Phase 2)
 
-- **Policy Engine**: Advanced rule-based filtering with complex expressions
 - **Web UI**: Built-in web interface for monitoring and configuration
 
 ## Architecture
@@ -76,13 +86,13 @@ Glory-Hole is built following Domain-Driven Design principles with a clean separ
 │   ├── forwarder/           Upstream DNS forwarding with retry
 │   ├── localrecords/        Local DNS records (A/AAAA/CNAME, wildcards)
 │   ├── logging/             Structured logging with levels
-│   ├── policy/              Policy engine for rule evaluation (stub)
+│   ├── policy/              Policy engine for rule evaluation (COMPLETE!)
 │   ├── storage/             Multi-backend storage (SQLite, D1)
 │   └── telemetry/           OpenTelemetry + Prometheus metrics
 └── ui/                      Web interface assets (future)
 ```
 
-**Stats**: 9,158 lines of code (4,640 production + 4,518 tests), 164 tests passing ✅
+**Stats**: 10,005 lines of code (4,950 production + 5,055 tests), 190 tests passing ✅
 
 ## Installation
 
@@ -339,18 +349,112 @@ Glory-Hole processes DNS requests in the following order:
 
 ## Policy Engine
 
-Define complex filtering rules using expressions:
+The policy engine enables advanced filtering rules using expression-based logic. Rules are evaluated in order, and the first matching rule's action is executed.
+
+### Features
+
+- **Expression Language**: Powerful expression syntax using [expr-lang/expr](https://github.com/expr-lang/expr)
+- **Time-Based Rules**: Filter by hour, minute, day, month, or weekday
+- **Network Rules**: Match client IPs, CIDR ranges, or specific networks
+- **Domain Matching**: Pattern matching with contains, starts with, ends with
+- **Actions**: BLOCK (deny request), ALLOW (bypass blocklist), REDIRECT (future)
+- **Thread-Safe**: Concurrent evaluation with read-write locks
+- **Pre-Compiled**: Rules are compiled at startup for fast evaluation
+
+### Configuration
 
 ```yaml
-rules:
-  - name: "Block social media after 10 PM for kids"
-    logic: "Hour >= 22 && ClientIP in ['192.168.1.50', '192.168.1.51'] && Domain matches '.*(facebook|tiktok|instagram)\\.com'"
-    action: "BLOCK"
+policy:
+  enabled: true
+  rules:
+    # Block social media after hours for specific devices
+    - name: "Block Social Media After Hours"
+      logic: "(Hour >= 22 || Hour < 6) && ClientIP == '192.168.1.50'"
+      action: "BLOCK"
+      enabled: true
 
-  - name: "Allow work domains during business hours"
-    logic: "Hour >= 9 && Hour <= 17 && Domain endsWith '.company.com'"
-    action: "ALLOW"
+    # Allow work domains during business hours
+    - name: "Allow Work Domains"
+      logic: "Hour >= 9 && Hour <= 17 && (Domain == 'work.com' || Domain == 'company.com')"
+      action: "ALLOW"
+      enabled: true
+
+    # Block specific client on weekends
+    - name: "Block Gaming PC on Weekends"
+      logic: "(Weekday == 0 || Weekday == 6) && ClientIP == '192.168.1.100'"
+      action: "BLOCK"
+      enabled: true
+
+    # Allow specific subnet
+    - name: "Allow Admin Subnet"
+      logic: "ClientIP == '192.168.100.1' || ClientIP == '192.168.100.2'"
+      action: "ALLOW"
+      enabled: false
 ```
+
+### Available Context Fields
+
+Policy rules have access to the following context fields:
+
+- `Domain` (string): The queried domain (e.g., "example.com")
+- `ClientIP` (string): The client's IP address
+- `QueryType` (string): DNS query type (e.g., "A", "AAAA", "CNAME")
+- `Hour` (int): Current hour (0-23)
+- `Minute` (int): Current minute (0-59)
+- `Day` (int): Day of month (1-31)
+- `Month` (int): Month (1-12)
+- `Weekday` (int): Day of week (0-6, Sunday=0)
+- `Time` (time.Time): Full timestamp
+
+### Helper Functions
+
+The policy engine provides helper functions for common operations:
+
+- `DomainMatches(domain, pattern)`: Pattern matching (e.g., `DomainMatches(Domain, "facebook")`)
+- `DomainEndsWith(domain, suffix)`: Suffix check (e.g., `DomainEndsWith(Domain, ".com")`)
+- `DomainStartsWith(domain, prefix)`: Prefix check (e.g., `DomainStartsWith(Domain, "www")`)
+- `IPInCIDR(ip, cidr)`: CIDR range check (e.g., `IPInCIDR(ClientIP, "192.168.1.0/24")`)
+
+### Example Rules
+
+```yaml
+policy:
+  enabled: true
+  rules:
+    # Time-based blocking
+    - name: "Block After Bedtime"
+      logic: "Hour >= 22 || Hour < 7"
+      action: "BLOCK"
+      enabled: true
+
+    # Domain pattern matching
+    - name: "Block Social Media"
+      logic: "DomainMatches(Domain, 'facebook') || DomainMatches(Domain, 'instagram')"
+      action: "BLOCK"
+      enabled: true
+
+    # CIDR-based rules
+    - name: "Allow Guest Network"
+      logic: "IPInCIDR(ClientIP, '192.168.2.0/24')"
+      action: "ALLOW"
+      enabled: true
+
+    # Complex conditions
+    - name: "Block Gaming Sites During Weekdays"
+      logic: "(Weekday >= 1 && Weekday <= 5) && (Hour >= 8 && Hour <= 17) && DomainEndsWith(Domain, '.game.com')"
+      action: "BLOCK"
+      enabled: true
+```
+
+### Rule Actions
+
+- **BLOCK**: Return NXDOMAIN (blocked) response
+- **ALLOW**: Bypass blocklist and forward to upstream DNS
+- **REDIRECT**: (Coming soon) Redirect to a different domain
+
+### Processing Order
+
+Rules are evaluated in the order they appear in the configuration. The first rule that matches will have its action executed. If no rules match, normal processing continues (blocklist check, then forward).
 
 ## REST API
 

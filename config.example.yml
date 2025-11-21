@@ -124,6 +124,34 @@ logging:
   max_backups: 3
   max_age: 7             # days
 
+# Policy Engine (Advanced Rule-Based Filtering)
+policy:
+  enabled: true
+  rules:
+    # Block social media during work hours (9 AM - 5 PM)
+    - name: "Block social media during work hours"
+      logic: 'Hour >= 9 && Hour < 17 && (DomainMatches(Domain, "facebook") || DomainMatches(Domain, "twitter") || DomainMatches(Domain, "instagram"))'
+      action: "block"
+      enabled: true
+
+    # Allow specific internal network ranges
+    - name: "Allow internal network"
+      logic: 'IPInCIDR(ClientIP, "192.168.1.0/24") || IPInCIDR(ClientIP, "10.0.0.0/8")'
+      action: "allow"
+      enabled: true
+
+    # Block gambling sites
+    - name: "Block gambling"
+      logic: 'DomainMatches(Domain, "casino") || DomainMatches(Domain, "poker") || DomainMatches(Domain, "betting")'
+      action: "block"
+      enabled: true
+
+    # Block after hours (outside 6 AM - 11 PM)
+    - name: "Block after hours"
+      logic: 'Hour < 6 || Hour >= 23'
+      action: "block"
+      enabled: false  # disabled by default
+
 # Telemetry (OpenTelemetry)
 telemetry:
   enabled: true

@@ -1,0 +1,108 @@
+# Glory-Hole DNS Configuration: Home Network Setup
+#
+# This configuration is optimized for a typical home network with:
+# - Family-friendly content filtering
+# - Ad blocking
+# - Local device resolution (nas.home, printer.home, etc.)
+# - Parental controls with time-based restrictions
+
+server:
+  listen_address: "192.168.1.2:53"  # Your DNS server IP
+  tcp_enabled: true
+  udp_enabled: true
+  web_ui_address: ":8080"
+
+# Use fast, privacy-focused DNS providers
+upstream_dns_servers:
+  - "1.1.1.1:53"      # Cloudflare
+  - "9.9.9.9:53"      # Quad9 (malware blocking)
+
+# Update blocklists daily
+update_interval: "24h"
+auto_update_blocklists: true
+
+# Comprehensive ad and tracker blocking
+blocklists:
+  - "https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts"
+  - "https://adaway.org/hosts.txt"
+  - "https://v.firebog.net/hosts/AdguardDNS.txt"
+
+# Whitelist for services that might be accidentally blocked
+whitelist:
+  - "www.googleadservices.com"  # Some sites need this
+  - "s.youtube.com"              # YouTube stats
+
+# Local network devices
+local_records:
+  enabled: true
+  records:
+    # Network devices
+    - domain: "nas.home"
+      type: "A"
+      ips: ["192.168.1.100"]
+
+    - domain: "printer.home"
+      type: "A"
+      ips: ["192.168.1.10"]
+
+    - domain: "router.home"
+      type: "A"
+      ips: ["192.168.1.1"]
+
+    # Wildcard for all IoT devices
+    - domain: "*.iot.home"
+      type: "A"
+      wildcard: true
+      ips: ["192.168.1.150"]
+
+# Parental Controls with Policy Engine
+policy:
+  enabled: true
+  rules:
+    # Block adult content 24/7
+    - name: "Block adult content"
+      logic: 'DomainMatches(Domain, "porn") || DomainMatches(Domain, "xxx") || DomainMatches(Domain, "adult")'
+      action: "block"
+      enabled: true
+
+    # Block social media for kids (9 AM - 3 PM on weekdays)
+    - name: "Block social media during school hours"
+      logic: 'Weekday && Hour >= 9 && Hour < 15 && (DomainMatches(Domain, "tiktok") || DomainMatches(Domain, "snapchat") || DomainMatches(Domain, "instagram"))'
+      action: "block"
+      enabled: true
+
+    # Bedtime enforcement (11 PM - 7 AM)
+    - name: "Bedtime internet cutoff"
+      logic: 'Hour >= 23 || Hour < 7'
+      action: "block"
+      enabled: false  # Enable per your family's needs
+
+# Cache for faster responses
+cache:
+  enabled: true
+  max_entries: 5000
+  min_ttl: "60s"
+  max_ttl: "12h"
+  negative_ttl: "5m"
+
+# Query logging (optional, for monitoring)
+database:
+  enabled: true
+  backend: "sqlite"
+  sqlite:
+    path: "./dns-logs.db"
+  buffer_size: 500
+  flush_interval: "10s"
+  retention_days: 7
+
+# Minimal logging for home use
+logging:
+  level: "info"
+  format: "text"
+  output: "stdout"
+
+# Monitoring
+telemetry:
+  enabled: true
+  prometheus_enabled: true
+  prometheus_port: 9090

@@ -16,6 +16,7 @@ import (
 	"glory-hole/pkg/dns"
 	"glory-hole/pkg/localrecords"
 	"glory-hole/pkg/logging"
+	"glory-hole/pkg/policy"
 	"glory-hole/pkg/storage"
 	"glory-hole/pkg/telemetry"
 )
@@ -219,6 +220,41 @@ func main() {
 		handler.SetLocalRecords(localMgr)
 		logger.Info("Local DNS records initialized",
 			"total_records", localMgr.Count(),
+		)
+	}
+
+	// Initialize policy engine if configured
+	if cfg.Policy.Enabled && len(cfg.Policy.Rules) > 0 {
+		logger.Info("Initializing policy engine", "rules", len(cfg.Policy.Rules))
+		policyEngine := policy.NewEngine()
+
+		for _, entry := range cfg.Policy.Rules {
+			rule := &policy.Rule{
+				Name:       entry.Name,
+				Logic:      entry.Logic,
+				Action:     entry.Action,
+				ActionData: entry.ActionData,
+				Enabled:    entry.Enabled,
+			}
+
+			if err := policyEngine.AddRule(rule); err != nil {
+				logger.Error("Failed to add policy rule",
+					"name", entry.Name,
+					"error", err,
+				)
+				continue
+			}
+
+			logger.Debug("Added policy rule",
+				"name", entry.Name,
+				"action", entry.Action,
+				"enabled", entry.Enabled,
+			)
+		}
+
+		handler.SetPolicyEngine(policyEngine)
+		logger.Info("Policy engine initialized",
+			"total_rules", policyEngine.Count(),
 		)
 	}
 
