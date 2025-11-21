@@ -135,6 +135,50 @@ policy:
 
     # ===== Catchall Rules =====
 
+    # ===== Advanced Helper Functions Examples =====
+
+    # Use regex for complex domain patterns
+    - name: "Block CDN domains with numbers"
+      logic: 'DomainRegex(Domain, "^cdn\\d+\\.")'
+      action: "block"
+      enabled: false  # Example only
+
+    # Filter by subdomain depth
+    - name: "Block deep subdomains (>4 levels)"
+      logic: 'DomainLevelCount(Domain) > 4'
+      action: "block"
+      enabled: false  # Example: blocks "a.b.c.d.e.com" but not "www.example.com"
+
+    # Match specific IP addresses
+    - name: "Allow specific admin IP"
+      logic: 'IPEquals(ClientIP, "192.168.1.100")'
+      action: "allow"
+      enabled: false
+
+    # Filter by query type
+    - name: "Block all MX and TXT queries"
+      logic: 'QueryTypeIn(QueryType, "MX", "TXT", "SOA")'
+      action: "block"
+      enabled: false  # Example only
+
+    # Use IsWeekend for cleaner weekend checks
+    - name: "Relax filtering on weekends"
+      logic: 'IsWeekend(Weekday) && DomainMatches(Domain, "gaming")'
+      action: "allow"
+      enabled: false
+
+    # Precise time ranges with minutes
+    - name: "Block social media during study hours"
+      logic: 'InTimeRange(Hour, Minute, 19, 30, 22, 0) && DomainMatches(Domain, "social")'
+      action: "block"
+      enabled: false  # Example: blocks 7:30 PM - 10:00 PM
+
+    # Complex example combining multiple new helpers
+    - name: "Advanced combined rule"
+      logic: 'DomainLevelCount(Domain) >= 3 && QueryTypeIn(QueryType, "A", "AAAA") && !IsWeekend(Weekday) && InTimeRange(Hour, Minute, 9, 0, 17, 30)'
+      action: "block"
+      enabled: false  # Example: blocks subdomains during work hours on weekdays
+
     # Default allow (place last) - if no other rule matches
     - name: "Default allow"
       logic: 'true'
@@ -184,24 +228,51 @@ telemetry:
 
 # Helper Functions Available in Policy Rules:
 #
-# DomainMatches(Domain, "substring") - Check if domain contains substring
-#   Example: DomainMatches(Domain, "google") matches "www.google.com"
+# Domain Matching Functions:
+#   DomainMatches(Domain, "substring") - Check if domain contains substring
+#     Example: DomainMatches(Domain, "google") matches "www.google.com"
 #
-# DomainEndsWith(Domain, "suffix") - Check if domain ends with suffix
-#   Example: DomainEndsWith(Domain, ".com") matches "example.com"
+#   DomainEndsWith(Domain, "suffix") - Check if domain ends with suffix
+#     Example: DomainEndsWith(Domain, ".com") matches "example.com"
 #
-# DomainStartsWith(Domain, "prefix") - Check if domain starts with prefix
-#   Example: DomainStartsWith(Domain, "www.") matches "www.example.com"
+#   DomainStartsWith(Domain, "prefix") - Check if domain starts with prefix
+#     Example: DomainStartsWith(Domain, "www.") matches "www.example.com"
 #
-# IPInCIDR(ClientIP, "cidr") - Check if IP is in CIDR range
-#   Example: IPInCIDR(ClientIP, "192.168.1.0/24")
+#   DomainRegex(Domain, "pattern") - Match domain against regex pattern
+#     Example: DomainRegex(Domain, "^cdn\\d+\\.") matches "cdn123.example.com"
+#
+#   DomainLevelCount(Domain) - Count subdomain levels (returns integer)
+#     Example: DomainLevelCount("www.example.com") returns 3
+#
+# IP Matching Functions:
+#   IPInCIDR(ClientIP, "cidr") - Check if IP is in CIDR range
+#     Example: IPInCIDR(ClientIP, "192.168.1.0/24")
+#
+#   IPEquals(IP1, IP2) - Check if two IPs are equal (handles IPv4/IPv6)
+#     Example: IPEquals(ClientIP, "192.168.1.100")
+#
+# Query Type Functions:
+#   QueryTypeIn(QueryType, "type1", "type2", ...) - Check if query type matches any in list
+#     Example: QueryTypeIn(QueryType, "A", "AAAA") matches A or AAAA queries
+#
+# Time Functions:
+#   IsWeekend(Weekday) - Check if day is Saturday or Sunday
+#     Example: IsWeekend(Weekday) returns true on weekends
+#
+#   InTimeRange(Hour, Minute, StartH, StartM, EndH, EndM) - Check if time in range
+#     Example: InTimeRange(Hour, Minute, 9, 0, 17, 30) matches 9:00 AM - 5:30 PM
+#     Note: Handles overnight ranges (e.g., 23:00 - 02:00)
 #
 # Variables Available:
 #   Domain     - The queried domain (e.g., "www.example.com")
 #   ClientIP   - The IP of the DNS client
 #   QueryType  - The DNS query type (e.g., "A", "AAAA", "CNAME")
 #   Hour       - Current hour (0-23)
-#   Weekday    - true if Monday-Friday, false if Saturday-Sunday
+#   Minute     - Current minute (0-59)
+#   Day        - Day of month (1-31)
+#   Month      - Month (1-12)
+#   Weekday    - Day of week (0-6, Sunday=0)
+#   Time       - Full timestamp
 #
 # Actions Available:
 #   BLOCK      - Return NXDOMAIN (domain not found)

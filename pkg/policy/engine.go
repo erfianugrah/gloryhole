@@ -3,6 +3,7 @@ package policy
 import (
 	"fmt"
 	"net"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -63,6 +64,7 @@ func (e *Engine) AddRule(rule *Rule) error {
 	// Compile the expression with environment and helper functions
 	program, err := expr.Compile(rule.Logic,
 		expr.Env(Context{}),
+		// Domain matching functions
 		expr.Function("DomainMatches",
 			func(params ...any) (any, error) {
 				return DomainMatches(params[0].(string), params[1].(string)), nil
@@ -81,11 +83,62 @@ func (e *Engine) AddRule(rule *Rule) error {
 			},
 			new(func(string, string) bool),
 		),
+		expr.Function("DomainRegex",
+			func(params ...any) (any, error) {
+				result, err := DomainRegex(params[0].(string), params[1].(string))
+				if err != nil {
+					return false, err
+				}
+				return result, nil
+			},
+			new(func(string, string) bool),
+		),
+		expr.Function("DomainLevelCount",
+			func(params ...any) (any, error) {
+				return DomainLevelCount(params[0].(string)), nil
+			},
+			new(func(string) int),
+		),
+		// IP matching functions
 		expr.Function("IPInCIDR",
 			func(params ...any) (any, error) {
 				return IPInCIDR(params[0].(string), params[1].(string)), nil
 			},
 			new(func(string, string) bool),
+		),
+		expr.Function("IPEquals",
+			func(params ...any) (any, error) {
+				return IPEquals(params[0].(string), params[1].(string)), nil
+			},
+			new(func(string, string) bool),
+		),
+		// Query type functions
+		expr.Function("QueryTypeIn",
+			func(params ...any) (any, error) {
+				queryType := params[0].(string)
+				types := make([]string, len(params)-1)
+				for i := 1; i < len(params); i++ {
+					types[i-1] = params[i].(string)
+				}
+				return QueryTypeIn(queryType, types...), nil
+			},
+		),
+		// Time functions
+		expr.Function("IsWeekend",
+			func(params ...any) (any, error) {
+				return IsWeekend(params[0].(int)), nil
+			},
+			new(func(int) bool),
+		),
+		expr.Function("InTimeRange",
+			func(params ...any) (any, error) {
+				return InTimeRange(
+					params[0].(int), params[1].(int),
+					params[2].(int), params[3].(int),
+					params[4].(int), params[5].(int),
+				), nil
+			},
+			new(func(int, int, int, int, int, int) bool),
 		),
 	)
 	if err != nil {
@@ -201,6 +254,25 @@ func DomainStartsWith(domain, prefix string) bool {
 	return strings.HasPrefix(strings.ToLower(domain), strings.ToLower(prefix))
 }
 
+// DomainRegex checks if domain matches a regular expression pattern
+func DomainRegex(domain, pattern string) (bool, error) {
+	matched, err := regexp.MatchString(pattern, strings.ToLower(domain))
+	if err != nil {
+		return false, fmt.Errorf("invalid regex pattern: %w", err)
+	}
+	return matched, nil
+}
+
+// DomainLevelCount returns the number of levels in a domain (e.g., "www.example.com" = 3)
+func DomainLevelCount(domain string) int {
+	if domain == "" {
+		return 0
+	}
+	// Remove trailing dot if present
+	domain = strings.TrimSuffix(domain, ".")
+	return strings.Count(domain, ".") + 1
+}
+
 // IPInCIDR checks if an IP is in a CIDR range
 func IPInCIDR(ipStr, cidrStr string) bool {
 	ip := net.ParseIP(ipStr)
@@ -214,6 +286,50 @@ func IPInCIDR(ipStr, cidrStr string) bool {
 	}
 
 	return ipNet.Contains(ip)
+}
+
+// IPEquals checks if two IP addresses are equal (handles IPv4/IPv6 normalization)
+func IPEquals(ip1Str, ip2Str string) bool {
+	ip1 := net.ParseIP(ip1Str)
+	ip2 := net.ParseIP(ip2Str)
+
+	if ip1 == nil || ip2 == nil {
+		return false
+	}
+
+	return ip1.Equal(ip2)
+}
+
+// QueryTypeIn checks if query type is in a list of types
+func QueryTypeIn(queryType string, types ...string) bool {
+	queryType = strings.ToUpper(queryType)
+	for _, t := range types {
+		if strings.ToUpper(t) == queryType {
+			return true
+		}
+	}
+	return false
+}
+
+// IsWeekend checks if the given weekday is Saturday (6) or Sunday (0)
+func IsWeekend(weekday int) bool {
+	return weekday == 0 || weekday == 6
+}
+
+// InTimeRange checks if the current time (hour:minute) is within the specified range
+// Handles ranges that cross midnight (e.g., 23:00 - 02:00)
+func InTimeRange(hour, minute, startHour, startMinute, endHour, endMinute int) bool {
+	currentMinutes := hour*60 + minute
+	startMinutes := startHour*60 + startMinute
+	endMinutes := endHour*60 + endMinute
+
+	// Normal range (doesn't cross midnight)
+	if startMinutes <= endMinutes {
+		return currentMinutes >= startMinutes && currentMinutes <= endMinutes
+	}
+
+	// Range crosses midnight (e.g., 23:00 - 02:00)
+	return currentMinutes >= startMinutes || currentMinutes <= endMinutes
 }
 
 // NewContext creates a new evaluation context from a DNS query
