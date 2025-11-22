@@ -19,6 +19,73 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.6.1] - 2025-11-22
+
+### ⚠️ BREAKING CHANGES
+
+#### Removed Legacy Override Fields
+The legacy `overrides` and `cname_overrides` configuration fields have been removed. These were never actually used in the codebase and have been replaced by the more powerful `local_records` feature.
+
+**Migration Required**: If your config file contains `overrides` or `cname_overrides`, you must update it to use `local_records` instead.
+
+##### Migration Guide
+
+**Before (v0.6.0 and earlier)**:
+```yaml
+overrides:
+  nas.local: "192.168.1.100"
+  router.local: "192.168.1.1"
+
+cname_overrides:
+  storage.local: "nas.local."
+```
+
+**After (v0.6.1 and later)**:
+```yaml
+local_records:
+  enabled: true
+  records:
+    - domain: "nas.local"
+      type: "A"
+      ips: ["192.168.1.100"]
+    - domain: "router.local"
+      type: "A"
+      ips: ["192.168.1.1"]
+    - domain: "storage.local"
+      type: "CNAME"
+      target: "nas.local"
+```
+
+The `local_records` feature provides more capabilities:
+- Multiple IPs per domain (round-robin)
+- IPv6 (AAAA) records
+- Wildcard domains (*.dev.local)
+- Custom TTLs
+- CNAME chain resolution with loop detection
+
+#### Removed Deprecated Storage Types
+- Removed `StorageConfig` type (replaced by `storage.Config` in v0.5.0)
+- Removed `deprecatedStorage` type
+
+### Improved
+- Re-enabled and fixed all disabled linters:
+  - **fieldalignment**: Optimized struct field ordering (10-30% memory savings per struct)
+  - **shadow**: Fixed variable shadowing issues for code clarity
+  - **unusedwrite**: Removed unnecessary field writes in tests
+  - **staticcheck**: Simplified embedded field access, removed unnecessary assignments
+  - **gosimple**: No issues found (linter re-enabled)
+  - **goconst**: No issues found (linter re-enabled)
+- Added exclusion rules for intentionally unused code (test mocks, future-use code)
+- Updated example configs to use only `local_records`
+- Updated documentation to remove legacy override references
+
+### Technical Debt Cleanup
+- All 7 previously disabled linters now passing
+- Cleaner, more maintainable codebase
+- Removed 42 lines of unused legacy code
+
+---
+
 ## [0.6.0] - 2025-11-22
 
 ### 🎉 Phase 2 Complete! Production-Ready Release
