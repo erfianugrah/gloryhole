@@ -134,7 +134,7 @@ func TestNew_InvalidConfig(t *testing.T) {
 				t.Errorf("New() unexpected error: %v", err)
 			}
 			if cache != nil {
-				cache.Close()
+				_ = cache.Close()
 			}
 		})
 	}

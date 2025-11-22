@@ -50,7 +50,7 @@ func TestManager_Update(t *testing.T) {
 0.0.0.0 malware.example.com
 `
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(hosts))
+		_, _ = w.Write([]byte(hosts))
 	}))
 	defer server.Close()
 
@@ -114,11 +114,11 @@ func TestManager_Update_AtomicReplacement(t *testing.T) {
 		if callCount == 1 {
 			// First update: 2 domains
 			w.WriteHeader(http.StatusOK)
-			w.Write([]byte("0.0.0.0 ads1.example.com\n0.0.0.0 ads2.example.com\n"))
+			_, _ = w.Write([]byte("0.0.0.0 ads1.example.com\n0.0.0.0 ads2.example.com\n"))
 		} else {
 			// Second update: 3 different domains
 			w.WriteHeader(http.StatusOK)
-			w.Write([]byte("0.0.0.0 ads3.example.com\n0.0.0.0 ads4.example.com\n0.0.0.0 ads5.example.com\n"))
+			_, _ = w.Write([]byte("0.0.0.0 ads3.example.com\n0.0.0.0 ads4.example.com\n0.0.0.0 ads5.example.com\n"))
 		}
 	}))
 	defer server.Close()
@@ -170,7 +170,7 @@ func TestManager_Get(t *testing.T) {
 	// Create test HTTP server
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("0.0.0.0 ads.example.com\n"))
+		_, _ = w.Write([]byte("0.0.0.0 ads.example.com\n"))
 	}))
 	defer server.Close()
 
@@ -181,7 +181,7 @@ func TestManager_Get(t *testing.T) {
 	m := NewManager(cfg, logger)
 
 	ctx := context.Background()
-	m.Update(ctx)
+	_ = m.Update(ctx)
 
 	// Get blocklist pointer
 	blocklist := m.Get()
@@ -206,7 +206,7 @@ func TestManager_IsBlocked(t *testing.T) {
 0.0.0.0 tracker.example.com
 `
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(hosts))
+		_, _ = w.Write([]byte(hosts))
 	}))
 	defer server.Close()
 
@@ -217,7 +217,7 @@ func TestManager_IsBlocked(t *testing.T) {
 	m := NewManager(cfg, logger)
 
 	ctx := context.Background()
-	m.Update(ctx)
+	_ = m.Update(ctx)
 
 	// Test blocked domains
 	if !m.IsBlocked("ads.example.com.") {
@@ -249,7 +249,7 @@ func TestManager_Size(t *testing.T) {
 0.0.0.0 ads5.example.com
 `
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(hosts))
+		_, _ = w.Write([]byte(hosts))
 	}))
 	defer server.Close()
 
@@ -266,7 +266,7 @@ func TestManager_Size(t *testing.T) {
 
 	// After update
 	ctx := context.Background()
-	m.Update(ctx)
+	_ = m.Update(ctx)
 
 	if m.Size() != 5 {
 		t.Errorf("Expected size 5 after update, got %d", m.Size())
@@ -277,7 +277,7 @@ func TestManager_StartStop(t *testing.T) {
 	// Create test HTTP server
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("0.0.0.0 ads.example.com\n"))
+		_, _ = w.Write([]byte("0.0.0.0 ads.example.com\n"))
 	}))
 	defer server.Close()
 
@@ -363,7 +363,7 @@ func TestManager_ConcurrentAccess(t *testing.T) {
 0.0.0.0 tracker.example.com
 `
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(hosts))
+		_, _ = w.Write([]byte(hosts))
 	}))
 	defer server.Close()
 
@@ -374,7 +374,7 @@ func TestManager_ConcurrentAccess(t *testing.T) {
 	m := NewManager(cfg, logger)
 
 	ctx := context.Background()
-	m.Update(ctx)
+	_ = m.Update(ctx)
 
 	// Spawn multiple goroutines reading from blocklist
 	done := make(chan bool)

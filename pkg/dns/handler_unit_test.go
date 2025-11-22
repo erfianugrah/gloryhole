@@ -72,7 +72,7 @@ func TestHandler_SetStorage(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create storage: %v", err)
 	}
-	defer stor.Close()
+	defer func() { _ = stor.Close() }()
 
 	handler.SetStorage(stor)
 
@@ -192,7 +192,7 @@ func TestServeDNS_LocalRecordWildcard(t *testing.T) {
 	// Add wildcard record
 	record := localrecords.NewARecord("*.test.local.", net.ParseIP("192.168.1.100"))
 	record.Wildcard = true
-	mgr.AddRecord(record)
+	_ = mgr.AddRecord(record)
 
 	handler.SetLocalRecords(mgr)
 
@@ -230,7 +230,7 @@ func TestServeDNS_PolicyEngineAllow(t *testing.T) {
 		Action:  policy.ActionAllow,
 		Enabled: true,
 	}
-	policyEngine.AddRule(rule)
+	_ = policyEngine.AddRule(rule)
 	handler.SetPolicyEngine(policyEngine)
 
 	// Setup blocklist (should be bypassed by policy)
@@ -315,7 +315,7 @@ func TestServeDNS_WhitelistBypass(t *testing.T) {
 func TestServeDNS_LocalRecord_AAAA(t *testing.T) {
 	handler := NewHandler()
 	mgr := localrecords.NewManager()
-	mgr.AddRecord(localrecords.NewAAAARecord("ipv6.test.local.", net.ParseIP("fe80::2")))
+	_ = mgr.AddRecord(localrecords.NewAAAARecord("ipv6.test.local.", net.ParseIP("fe80::2")))
 	handler.SetLocalRecords(mgr)
 
 	req := new(dns.Msg)
@@ -353,7 +353,7 @@ func TestServeDNS_LocalRecord_AAAA(t *testing.T) {
 func TestServeDNS_LocalRecord_CNAME_Query(t *testing.T) {
 	handler := NewHandler()
 	mgr := localrecords.NewManager()
-	mgr.AddRecord(localrecords.NewCNAMERecord("alias.local.", "target.local."))
+	_ = mgr.AddRecord(localrecords.NewCNAMERecord("alias.local.", "target.local."))
 	handler.SetLocalRecords(mgr)
 
 	req := new(dns.Msg)
@@ -462,12 +462,12 @@ func TestServeDNS_WithStorage(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create storage: %v", err)
 	}
-	defer stor.Close()
+	defer func() { _ = stor.Close() }()
 	handler.SetStorage(stor)
 
 	// Setup local record
 	localMgr := localrecords.NewManager()
-	localMgr.AddRecord(localrecords.NewARecord("storage.test.", net.ParseIP("192.168.1.200")))
+	_ = localMgr.AddRecord(localrecords.NewARecord("storage.test.", net.ParseIP("192.168.1.200")))
 	handler.SetLocalRecords(localMgr)
 
 	req := new(dns.Msg)
@@ -502,7 +502,7 @@ func TestServeDNS_PolicyEngineRedirect_IPv4(t *testing.T) {
 		ActionData: "192.168.1.250", // Redirect IP
 		Enabled:    true,
 	}
-	policyEngine.AddRule(rule)
+	_ = policyEngine.AddRule(rule)
 	handler.SetPolicyEngine(policyEngine)
 
 	req := new(dns.Msg)
@@ -550,7 +550,7 @@ func TestServeDNS_PolicyEngineRedirect_IPv6(t *testing.T) {
 		ActionData: "fe80::1", // IPv6 redirect
 		Enabled:    true,
 	}
-	policyEngine.AddRule(rule)
+	_ = policyEngine.AddRule(rule)
 	handler.SetPolicyEngine(policyEngine)
 
 	req := new(dns.Msg)
@@ -598,7 +598,7 @@ func TestServeDNS_PolicyEngineRedirect_InvalidIP(t *testing.T) {
 		ActionData: "not-an-ip", // Invalid IP
 		Enabled:    true,
 	}
-	policyEngine.AddRule(rule)
+	_ = policyEngine.AddRule(rule)
 	handler.SetPolicyEngine(policyEngine)
 
 	req := new(dns.Msg)
@@ -634,7 +634,7 @@ func TestServeDNS_PolicyEngineRedirect_TypeMismatch(t *testing.T) {
 		ActionData: "192.168.1.250", // IPv4
 		Enabled:    true,
 	}
-	policyEngine.AddRule(rule)
+	_ = policyEngine.AddRule(rule)
 	handler.SetPolicyEngine(policyEngine)
 
 	// Query for AAAA but redirect is IPv4
@@ -674,7 +674,7 @@ func TestServeDNS_PolicyEngineBlock(t *testing.T) {
 		Action:  policy.ActionBlock,
 		Enabled: true,
 	}
-	policyEngine.AddRule(rule)
+	_ = policyEngine.AddRule(rule)
 	handler.SetPolicyEngine(policyEngine)
 
 	req := new(dns.Msg)

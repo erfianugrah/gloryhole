@@ -37,7 +37,7 @@ func TestHandleGetPolicies_Empty(t *testing.T) {
 	server.handleGetPolicies(w, req)
 
 	resp := w.Result()
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		t.Errorf("Expected status 200, got %d", resp.StatusCode)
@@ -74,7 +74,7 @@ func TestHandleAddPolicy_Success(t *testing.T) {
 	server.handleAddPolicy(w, req)
 
 	resp := w.Result()
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusCreated {
 		bodyBytes, _ := io.ReadAll(resp.Body)
@@ -126,7 +126,7 @@ func TestHandleAddPolicy_WithRedirect(t *testing.T) {
 	server.handleAddPolicy(w, req)
 
 	resp := w.Result()
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusCreated {
 		bodyBytes, _ := io.ReadAll(resp.Body)
@@ -162,7 +162,7 @@ func TestHandleAddPolicy_RedirectWithoutActionData(t *testing.T) {
 	server.handleAddPolicy(w, req)
 
 	resp := w.Result()
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Errorf("Expected status 400, got %d", resp.StatusCode)
@@ -195,7 +195,7 @@ func TestHandleAddPolicy_InvalidAction(t *testing.T) {
 	server.handleAddPolicy(w, req)
 
 	resp := w.Result()
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Errorf("Expected status 400, got %d", resp.StatusCode)
@@ -218,7 +218,7 @@ func TestHandleAddPolicy_MissingName(t *testing.T) {
 	server.handleAddPolicy(w, req)
 
 	resp := w.Result()
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Errorf("Expected status 400, got %d", resp.StatusCode)
@@ -235,7 +235,7 @@ func TestHandleGetPolicy_Success(t *testing.T) {
 		Action:  policy.ActionBlock,
 		Enabled: true,
 	}
-	server.policyEngine.AddRule(rule)
+	_ = server.policyEngine.AddRule(rule)
 
 	// Get the policy
 	req := httptest.NewRequest("GET", "/api/policies/0", nil)
@@ -245,7 +245,7 @@ func TestHandleGetPolicy_Success(t *testing.T) {
 	server.handleGetPolicy(w, req)
 
 	resp := w.Result()
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		t.Errorf("Expected status 200, got %d", resp.StatusCode)
@@ -275,7 +275,7 @@ func TestHandleGetPolicy_NotFound(t *testing.T) {
 	server.handleGetPolicy(w, req)
 
 	resp := w.Result()
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusNotFound {
 		t.Errorf("Expected status 404, got %d", resp.StatusCode)
@@ -292,7 +292,7 @@ func TestHandleGetPolicy_InvalidID(t *testing.T) {
 	server.handleGetPolicy(w, req)
 
 	resp := w.Result()
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Errorf("Expected status 400, got %d", resp.StatusCode)
@@ -309,7 +309,7 @@ func TestHandleUpdatePolicy_Success(t *testing.T) {
 		Action:  policy.ActionBlock,
 		Enabled: true,
 	}
-	server.policyEngine.AddRule(rule)
+	_ = server.policyEngine.AddRule(rule)
 
 	// Update the policy
 	updateReq := PolicyRequest{
@@ -327,7 +327,7 @@ func TestHandleUpdatePolicy_Success(t *testing.T) {
 	server.handleUpdatePolicy(w, req)
 
 	resp := w.Result()
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		bodyBytes, _ := io.ReadAll(resp.Body)
@@ -375,7 +375,7 @@ func TestHandleUpdatePolicy_NotFound(t *testing.T) {
 	server.handleUpdatePolicy(w, req)
 
 	resp := w.Result()
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusNotFound {
 		t.Errorf("Expected status 404, got %d", resp.StatusCode)
@@ -392,7 +392,7 @@ func TestHandleDeletePolicy_Success(t *testing.T) {
 		Action:  policy.ActionBlock,
 		Enabled: true,
 	}
-	server.policyEngine.AddRule(rule)
+	_ = server.policyEngine.AddRule(rule)
 
 	// Verify it exists
 	if server.policyEngine.Count() != 1 {
@@ -407,7 +407,7 @@ func TestHandleDeletePolicy_Success(t *testing.T) {
 	server.handleDeletePolicy(w, req)
 
 	resp := w.Result()
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		bodyBytes, _ := io.ReadAll(resp.Body)
@@ -430,7 +430,7 @@ func TestHandleDeletePolicy_NotFound(t *testing.T) {
 	server.handleDeletePolicy(w, req)
 
 	resp := w.Result()
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusNotFound {
 		t.Errorf("Expected status 404, got %d", resp.StatusCode)
@@ -464,7 +464,7 @@ func TestHandleGetPolicies_MultiplePolicies(t *testing.T) {
 	}
 
 	for _, rule := range rules {
-		server.policyEngine.AddRule(rule)
+		_ = server.policyEngine.AddRule(rule)
 	}
 
 	// Get all policies
@@ -474,7 +474,7 @@ func TestHandleGetPolicies_MultiplePolicies(t *testing.T) {
 	server.handleGetPolicies(w, req)
 
 	resp := w.Result()
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		t.Errorf("Expected status 200, got %d", resp.StatusCode)
@@ -587,7 +587,7 @@ func TestPolicyAPI_NoPolicyEngine(t *testing.T) {
 			tt.handler(w, req)
 
 			resp := w.Result()
-			defer resp.Body.Close()
+			defer func() { _ = resp.Body.Close() }()
 
 			if resp.StatusCode != tt.expectCode {
 				t.Errorf("Expected status %d, got %d", tt.expectCode, resp.StatusCode)

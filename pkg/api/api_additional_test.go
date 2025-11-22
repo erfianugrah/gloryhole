@@ -31,7 +31,7 @@ func TestHandleBlocklistReload_NoManager(t *testing.T) {
 	server.handleBlocklistReload(w, req)
 
 	resp := w.Result()
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusServiceUnavailable {
 		t.Errorf("Expected status 503, got %d", resp.StatusCode)
@@ -50,7 +50,7 @@ func TestLoggingMiddleware(t *testing.T) {
 	// Create a test handler
 	testHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("test"))
+		_, _ = w.Write([]byte("test"))
 	})
 
 	// Wrap with logging middleware
@@ -232,7 +232,7 @@ func TestHandleQueries_WithDomainFilter(t *testing.T) {
 	server.handleQueries(w, req)
 
 	resp := w.Result()
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		t.Errorf("Expected status 200, got %d", resp.StatusCode)
@@ -264,7 +264,7 @@ func TestHandleTopDomains_Blocked(t *testing.T) {
 	server.handleTopDomains(w, req)
 
 	resp := w.Result()
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		t.Errorf("Expected status 200, got %d", resp.StatusCode)
@@ -306,7 +306,7 @@ func TestHandleStats_WithSince(t *testing.T) {
 	server.handleStats(w, req)
 
 	resp := w.Result()
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		t.Errorf("Expected status 200, got %d", resp.StatusCode)
@@ -394,7 +394,7 @@ func TestHandleUpdatePolicy_NameChange(t *testing.T) {
 		Action:  policy.ActionBlock,
 		Enabled: true,
 	}
-	policyEngine.AddRule(rule)
+	_ = policyEngine.AddRule(rule)
 
 	server := New(&Config{
 		ListenAddress: ":8080",
@@ -419,7 +419,7 @@ func TestHandleUpdatePolicy_NameChange(t *testing.T) {
 	server.handleUpdatePolicy(w, req)
 
 	resp := w.Result()
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		t.Errorf("Expected status 200, got %d", resp.StatusCode)

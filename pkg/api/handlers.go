@@ -231,10 +231,7 @@ func (s *Server) handleTopDomains(w http.ResponseWriter, r *http.Request) {
 	}
 
 	blockedParam := r.URL.Query().Get("blocked")
-	blocked := false
-	if blockedParam == "true" {
-		blocked = true
-	}
+	blocked := blockedParam == "true"
 
 	// Get top domains from storage
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)

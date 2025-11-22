@@ -199,13 +199,12 @@ func (s *Server) handleTopDomainsPartial(w http.ResponseWriter, r *http.Request)
 	}
 
 	domains := []DomainData{}
-	var maxQueries int64 = 1
 
 	// Get domains from storage
 	if s.storage != nil {
 		dbDomains, err := s.storage.GetTopDomains(r.Context(), limit, blocked)
 		if err == nil && len(dbDomains) > 0 {
-			maxQueries = dbDomains[0].QueryCount
+			maxQueries := dbDomains[0].QueryCount
 			for _, d := range dbDomains {
 				percentage := float64(d.QueryCount) / float64(maxQueries) * 100
 				domains = append(domains, DomainData{

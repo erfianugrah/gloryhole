@@ -21,7 +21,7 @@ func BenchmarkHandler_LocalRecord(b *testing.B) {
 
 	// Setup local records
 	localMgr := localrecords.NewManager()
-	localMgr.AddRecord(localrecords.NewARecord("test.local.", net.ParseIP("192.168.1.100")))
+	_ = localMgr.AddRecord(localrecords.NewARecord("test.local.", net.ParseIP("192.168.1.100")))
 	handler.SetLocalRecords(localMgr)
 
 	msg := new(dns.Msg)
@@ -48,7 +48,7 @@ func BenchmarkHandler_PolicyBlock(b *testing.B) {
 		Action:  policy.ActionBlock,
 		Enabled: true,
 	}
-	policyEngine.AddRule(rule)
+	_ = policyEngine.AddRule(rule)
 	handler.SetPolicyEngine(policyEngine)
 
 	msg := new(dns.Msg)
@@ -173,7 +173,7 @@ func BenchmarkHandler_FullStack(b *testing.B) {
 
 	// Local records
 	localMgr := localrecords.NewManager()
-	localMgr.AddRecord(localrecords.NewARecord("local.test.", net.ParseIP("192.168.1.100")))
+	_ = localMgr.AddRecord(localrecords.NewARecord("local.test.", net.ParseIP("192.168.1.100")))
 	handler.SetLocalRecords(localMgr)
 
 	// Policy engine
@@ -184,7 +184,7 @@ func BenchmarkHandler_FullStack(b *testing.B) {
 		Action:  policy.ActionBlock,
 		Enabled: true,
 	}
-	policyEngine.AddRule(rule)
+	_ = policyEngine.AddRule(rule)
 	handler.SetPolicyEngine(policyEngine)
 
 	// Blocklist
@@ -215,7 +215,7 @@ func BenchmarkHandler_ConcurrentRequests(b *testing.B) {
 
 	// Setup local records for fast response
 	localMgr := localrecords.NewManager()
-	localMgr.AddRecord(localrecords.NewARecord("test.local.", net.ParseIP("192.168.1.100")))
+	_ = localMgr.AddRecord(localrecords.NewARecord("test.local.", net.ParseIP("192.168.1.100")))
 	handler.SetLocalRecords(localMgr)
 
 	msg := new(dns.Msg)

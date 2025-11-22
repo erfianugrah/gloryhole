@@ -64,12 +64,12 @@ func mockDNSServer(t *testing.T, responses map[string]*dns.Msg) (string, func())
 			if err != nil {
 				continue
 			}
-			pc.WriteTo(packed, clientAddr)
+			_, _ = pc.WriteTo(packed, clientAddr)
 		}
 	}()
 
 	cleanup := func() {
-		pc.Close()
+		_ = pc.Close()
 		<-done
 	}
 
@@ -359,7 +359,7 @@ func TestForwardTCP_Success(t *testing.T) {
 			resp.SetReply(r)
 			resp.SetRcode(r, dns.RcodeFormatError)
 		}
-		w.WriteMsg(resp)
+		_ = w.WriteMsg(resp)
 	})
 
 	// Use a fixed port to avoid race conditions with dynamic port allocation
@@ -381,7 +381,7 @@ func TestForwardTCP_Success(t *testing.T) {
 			started <- err
 		}
 	}()
-	defer server.Shutdown()
+	defer func() { _ = server.Shutdown() }()
 
 	// Wait for server to start (give it time to bind)
 	select {

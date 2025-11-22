@@ -61,7 +61,7 @@ func TestE2E_FullDNSServer(t *testing.T) {
 
 	// Setup local records
 	localMgr := localrecords.NewManager()
-	localMgr.AddRecord(localrecords.NewARecord("test.local.", net.ParseIP("192.168.1.100")))
+	_ = localMgr.AddRecord(localrecords.NewARecord("test.local.", net.ParseIP("192.168.1.100")))
 	handler.SetLocalRecords(localMgr)
 
 	// Setup policy engine
@@ -263,7 +263,7 @@ func TestE2E_ConcurrentQueries(t *testing.T) {
 	defer serverCancel()
 
 	go func() {
-		server.Start(serverCtx)
+		_ = server.Start(serverCtx)
 	}()
 
 	time.Sleep(100 * time.Millisecond)
@@ -326,6 +326,6 @@ func TestE2E_ConcurrentQueries(t *testing.T) {
 	// Shutdown
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer shutdownCancel()
-	server.Shutdown(shutdownCtx)
-	telem.Shutdown(ctx)
+	_ = server.Shutdown(shutdownCtx)
+	_ = telem.Shutdown(ctx)
 }

@@ -42,7 +42,7 @@ func TestDownload_HostsFormat(t *testing.T) {
 0.0.0.0 malware.example.com
 `
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(hosts))
+		_, _ = w.Write([]byte(hosts))
 	}))
 	defer server.Close()
 
@@ -85,7 +85,7 @@ func TestDownload_AdblockFormat(t *testing.T) {
 ||malicious.example.com^
 `
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(adblock))
+		_, _ = w.Write([]byte(adblock))
 	}))
 	defer server.Close()
 
@@ -123,7 +123,7 @@ tracker.example.com
 malware.example.com
 `
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(plain))
+		_, _ = w.Write([]byte(plain))
 	}))
 	defer server.Close()
 
@@ -152,7 +152,7 @@ ads3.example.com
 127.0.0.1 ads4.example.com
 `
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(mixed))
+		_, _ = w.Write([]byte(mixed))
 	}))
 	defer server.Close()
 
@@ -239,14 +239,14 @@ func TestDownloadAll_MultipleSources(t *testing.T) {
 	// Create first blocklist server
 	server1 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("0.0.0.0 ads1.example.com\n0.0.0.0 ads2.example.com\n"))
+		_, _ = w.Write([]byte("0.0.0.0 ads1.example.com\n0.0.0.0 ads2.example.com\n"))
 	}))
 	defer server1.Close()
 
 	// Create second blocklist server
 	server2 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("||ads3.example.com^\n||ads4.example.com^\n"))
+		_, _ = w.Write([]byte("||ads3.example.com^\n||ads4.example.com^\n"))
 	}))
 	defer server2.Close()
 
@@ -278,13 +278,13 @@ func TestDownloadAll_DuplicateDomains(t *testing.T) {
 	// Create servers with overlapping domains
 	server1 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("0.0.0.0 duplicate.example.com\n0.0.0.0 unique1.example.com\n"))
+		_, _ = w.Write([]byte("0.0.0.0 duplicate.example.com\n0.0.0.0 unique1.example.com\n"))
 	}))
 	defer server1.Close()
 
 	server2 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("||duplicate.example.com^\n||unique2.example.com^\n"))
+		_, _ = w.Write([]byte("||duplicate.example.com^\n||unique2.example.com^\n"))
 	}))
 	defer server2.Close()
 
@@ -322,7 +322,7 @@ func TestDownloadAll_OneSourceFails(t *testing.T) {
 	// Create working server
 	server1 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("0.0.0.0 ads1.example.com\n"))
+		_, _ = w.Write([]byte("0.0.0.0 ads1.example.com\n"))
 	}))
 	defer server1.Close()
 
