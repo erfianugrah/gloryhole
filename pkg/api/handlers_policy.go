@@ -117,6 +117,9 @@ func (s *Server) handleAddPolicy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Limit request body size to 10MB
+	r.Body = http.MaxBytesReader(w, r.Body, 10*1024*1024)
+
 	// Parse request body
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -212,6 +215,9 @@ func (s *Server) handleUpdatePolicy(w http.ResponseWriter, r *http.Request) {
 	}
 
 	existingRule := rules[id]
+
+	// Limit request body size to 10MB
+	r.Body = http.MaxBytesReader(w, r.Body, 10*1024*1024)
 
 	// Parse request body
 	body, err := io.ReadAll(r.Body)

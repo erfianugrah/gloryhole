@@ -1,9 +1,9 @@
 # Glory-Hole
 
-[![CI](https://github.com/yourusername/glory-hole/actions/workflows/ci.yml/badge.svg)](https://github.com/yourusername/glory-hole/actions/workflows/ci.yml)
-[![Go Report Card](https://goreportcard.com/badge/github.com/yourusername/glory-hole)](https://goreportcard.com/report/github.com/yourusername/glory-hole)
+[![CI](https://github.com/erfianugrah/gloryhole/actions/workflows/ci.yml/badge.svg)](https://github.com/erfianugrah/gloryhole/actions/workflows/ci.yml)
+[![Go Report Card](https://goreportcard.com/badge/github.com/erfianugrah/gloryhole)](https://goreportcard.com/report/github.com/erfianugrah/gloryhole)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Coverage](https://img.shields.io/badge/coverage-71.6%25-brightgreen.svg)](https://github.com/yourusername/glory-hole)
+[![Coverage](https://img.shields.io/badge/coverage-71.6%25-brightgreen.svg)](https://github.com/erfianugrah/gloryhole)
 
 A high-performance DNS server written in Go, designed as a modern, extensible replacement for Pi-hole and similar solutions. Glory-Hole provides advanced DNS filtering, caching, policy engine, web UI, and analytics capabilities in a single, self-contained binary.
 
@@ -211,21 +211,21 @@ Glory-Hole is built following Domain-Driven Design principles with a clean separ
 
 ### From Binary (Recommended)
 
-Download the latest release from [GitHub Releases](https://github.com/yourusername/glory-hole/releases):
+Download the latest release from [GitHub Releases](https://github.com/erfianugrah/gloryhole/releases):
 
 ```bash
 # Linux (amd64)
-wget https://github.com/yourusername/glory-hole/releases/latest/download/glory-hole-linux-amd64
+wget https://github.com/erfianugrah/gloryhole/releases/latest/download/glory-hole-linux-amd64
 chmod +x glory-hole-linux-amd64
 sudo mv glory-hole-linux-amd64 /usr/local/bin/glory-hole
 
 # Linux (arm64)
-wget https://github.com/yourusername/glory-hole/releases/latest/download/glory-hole-linux-arm64
+wget https://github.com/erfianugrah/gloryhole/releases/latest/download/glory-hole-linux-arm64
 chmod +x glory-hole-linux-arm64
 sudo mv glory-hole-linux-arm64 /usr/local/bin/glory-hole
 
 # macOS (amd64)
-wget https://github.com/yourusername/glory-hole/releases/latest/download/glory-hole-darwin-amd64
+wget https://github.com/erfianugrah/gloryhole/releases/latest/download/glory-hole-darwin-amd64
 chmod +x glory-hole-darwin-amd64
 sudo mv glory-hole-darwin-amd64 /usr/local/bin/glory-hole
 ```
@@ -234,14 +234,14 @@ sudo mv glory-hole-darwin-amd64 /usr/local/bin/glory-hole
 
 ```bash
 # Pull and run
-docker pull yourusername/glory-hole:latest
+docker pull erfianugrah/gloryhole:latest
 docker run -d \
   -p 53:53/udp \
   -p 53:53/tcp \
   -p 8080:8080 \
   -v ./config.yml:/config/config.yml \
   --name glory-hole \
-  yourusername/glory-hole:latest
+  erfianugrah/gloryhole:latest
 
 # Or use Docker Compose
 docker-compose up -d
@@ -264,7 +264,7 @@ See [Kubernetes Deployment Guide](deploy/kubernetes/README.md) for detailed inst
 
 ```bash
 # Clone repository
-git clone https://github.com/yourusername/glory-hole.git
+git clone https://github.com/erfianugrah/gloryhole.git
 cd glory-hole
 
 # Build
@@ -972,7 +972,7 @@ See [Performance Documentation](docs/architecture/performance.md) for detailed b
 
 ```bash
 # Clone repository
-git clone https://github.com/yourusername/glory-hole.git
+git clone https://github.com/erfianugrah/gloryhole.git
 cd glory-hole
 
 # Install dependencies

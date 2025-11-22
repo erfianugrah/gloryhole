@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	_ "embed"
 	"fmt"
+	"log/slog"
 	"sync"
 	"time"
 
@@ -162,8 +163,10 @@ func (s *SQLiteStorage) flushWorker() {
 
 		if err := s.flushBatch(batch); err != nil {
 			// Log error but continue (we don't want to crash the server)
-			// TODO: Add proper logging
-			fmt.Printf("Error flushing batch: %v\n", err)
+			slog.Default().Error("Failed to flush query batch",
+				"error", err,
+				"batch_size", len(batch),
+			)
 		}
 
 		// Clear batch
@@ -248,7 +251,10 @@ func (s *SQLiteStorage) updateDomainStats(queries []*QueryLog) {
 
 		if err != nil {
 			// Log but don't fail
-			fmt.Printf("Error updating domain stats: %v\n", err)
+			slog.Default().Error("Failed to update domain statistics",
+				"error", err,
+				"domain", query.Domain,
+			)
 		}
 	}
 }
@@ -480,7 +486,10 @@ func (s *SQLiteStorage) Cleanup(ctx context.Context, olderThan time.Time) error 
 	if rows > 10000 {
 		if _, err := s.db.ExecContext(ctx, "VACUUM"); err != nil {
 			// Log but don't fail
-			fmt.Printf("VACUUM failed: %v\n", err)
+			slog.Default().Error("VACUUM operation failed",
+				"error", err,
+				"deleted_rows", rows,
+			)
 		}
 	}
 
