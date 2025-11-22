@@ -33,6 +33,7 @@ const (
 	ActionBlock    = "BLOCK"
 	ActionAllow    = "ALLOW"
 	ActionRedirect = "REDIRECT"
+	ActionForward  = "FORWARD"
 )
 
 // Context represents the evaluation context for a DNS query
@@ -59,6 +60,11 @@ func NewEngine() *Engine {
 func (e *Engine) AddRule(rule *Rule) error {
 	if rule == nil {
 		return fmt.Errorf("rule cannot be nil")
+	}
+
+	// Validate action and action_data
+	if err := validateAction(rule); err != nil {
+		return fmt.Errorf("invalid rule '%s': %w", rule.Name, err)
 	}
 
 	// Compile the expression with environment and helper functions
@@ -347,4 +353,98 @@ func NewContext(domain, clientIP, queryType string) Context {
 		Weekday:   int(now.Weekday()),
 		Time:      now,
 	}
+}
+
+// validateAction validates the action and action_data fields of a rule
+func validateAction(rule *Rule) error {
+	action := strings.ToUpper(rule.Action)
+	rule.Action = action // Normalize to uppercase
+
+	switch action {
+	case ActionBlock, ActionAllow:
+		// No action_data needed
+		return nil
+
+	case ActionRedirect:
+		// Validate IP address in action_data
+		if rule.ActionData == "" {
+			return fmt.Errorf("REDIRECT action requires action_data (IP address)")
+		}
+		if net.ParseIP(rule.ActionData) == nil {
+			return fmt.Errorf("invalid IP address in action_data: %s", rule.ActionData)
+		}
+		return nil
+
+	case ActionForward:
+		// Validate upstream list in action_data
+		if rule.ActionData == "" {
+			return fmt.Errorf("FORWARD action requires action_data (upstream DNS servers)")
+		}
+		upstreams, err := ParseUpstreams(rule.ActionData)
+		if err != nil {
+			return fmt.Errorf("invalid upstreams in action_data: %w", err)
+		}
+		if len(upstreams) == 0 {
+			return fmt.Errorf("FORWARD action requires at least one upstream server")
+		}
+		return nil
+
+	default:
+		return fmt.Errorf("unknown action: %s (valid: BLOCK, ALLOW, REDIRECT, FORWARD)", action)
+	}
+}
+
+// ParseUpstreams parses a comma-separated list of upstream DNS servers
+// Format: "host:port,host:port" or just "host:port"
+// Adds default port :53 if not specified
+func ParseUpstreams(actionData string) ([]string, error) {
+	if actionData == "" {
+		return nil, fmt.Errorf("empty upstream list")
+	}
+
+	parts := strings.Split(actionData, ",")
+	upstreams := make([]string, 0, len(parts))
+
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+
+		// Validate format: must be host:port or just host
+		if strings.Contains(part, ":") {
+			// Already has port, validate it
+			host, port, err := net.SplitHostPort(part)
+			if err != nil {
+				return nil, fmt.Errorf("invalid upstream format '%s': %w", part, err)
+			}
+			if host == "" {
+				return nil, fmt.Errorf("invalid upstream '%s': empty host", part)
+			}
+			if port == "" {
+				return nil, fmt.Errorf("invalid upstream '%s': empty port", part)
+			}
+			upstreams = append(upstreams, part)
+		} else {
+			// No port specified, add default :53
+			upstreams = append(upstreams, part+":53")
+		}
+	}
+
+	return upstreams, nil
+}
+
+// GetUpstreams returns the parsed upstream list from a FORWARD rule's action_data
+// Returns nil if the rule is not a FORWARD action or parsing fails
+func (r *Rule) GetUpstreams() []string {
+	if r.Action != ActionForward {
+		return nil
+	}
+
+	upstreams, err := ParseUpstreams(r.ActionData)
+	if err != nil {
+		return nil
+	}
+
+	return upstreams
 }

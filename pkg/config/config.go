@@ -12,18 +12,19 @@ import (
 
 // Config holds the application configuration
 type Config struct {
-	Telemetry            TelemetryConfig    `yaml:"telemetry"`
-	Server               ServerConfig       `yaml:"server"`
-	Policy               PolicyConfig       `yaml:"policy"`
-	LocalRecords         LocalRecordsConfig `yaml:"local_records"`
-	UpstreamDNSServers   []string           `yaml:"upstream_dns_servers"`
-	Blocklists           []string           `yaml:"blocklists"`
-	Whitelist            []string           `yaml:"whitelist"`
-	Logging              LoggingConfig      `yaml:"logging"`
-	Database             storage.Config     `yaml:"database"`
-	Cache                CacheConfig        `yaml:"cache"`
-	UpdateInterval       time.Duration      `yaml:"update_interval"`
-	AutoUpdateBlocklists bool               `yaml:"auto_update_blocklists"`
+	Telemetry            TelemetryConfig             `yaml:"telemetry"`
+	Server               ServerConfig                `yaml:"server"`
+	Policy               PolicyConfig                `yaml:"policy"`
+	LocalRecords         LocalRecordsConfig          `yaml:"local_records"`
+	ConditionalForwarding ConditionalForwardingConfig `yaml:"conditional_forwarding"`
+	UpstreamDNSServers   []string                    `yaml:"upstream_dns_servers"`
+	Blocklists           []string                    `yaml:"blocklists"`
+	Whitelist            []string                    `yaml:"whitelist"`
+	Logging              LoggingConfig               `yaml:"logging"`
+	Database             storage.Config              `yaml:"database"`
+	Cache                CacheConfig                 `yaml:"cache"`
+	UpdateInterval       time.Duration               `yaml:"update_interval"`
+	AutoUpdateBlocklists bool                        `yaml:"auto_update_blocklists"`
 }
 
 // ServerConfig holds server-specific settings
@@ -276,6 +277,11 @@ func (c *Config) Validate() error {
 	}
 	if c.Logging.Output == "file" && c.Logging.FilePath == "" {
 		return fmt.Errorf("logging.file_path must be set when output is 'file'")
+	}
+
+	// Validate conditional forwarding
+	if err := c.ConditionalForwarding.Validate(); err != nil {
+		return fmt.Errorf("conditional_forwarding validation failed: %w", err)
 	}
 
 	return nil
