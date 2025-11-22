@@ -250,3 +250,90 @@ func TestDisabledTelemetry(t *testing.T) {
 		t.Error("InitMetrics() returned nil metrics")
 	}
 }
+
+func TestTracingEnabled(t *testing.T) {
+	logger := logging.NewDefault()
+	cfg := &config.TelemetryConfig{
+		Enabled:         true,
+		ServiceName:     "test-service",
+		ServiceVersion:  "1.0.0",
+		TracingEnabled:  true,
+		TracingEndpoint: "localhost:4317",
+	}
+
+	ctx := context.Background()
+	tel, err := New(ctx, cfg, logger)
+	if err != nil {
+		t.Fatalf("Failed to create telemetry with tracing: %v", err)
+	}
+	defer func() {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = tel.Shutdown(shutdownCtx)
+	}()
+
+	// Verify tracer provider was set up
+	provider := tel.TracerProvider()
+	if provider == nil {
+		t.Error("TracerProvider() returned nil with tracing enabled")
+	}
+
+	// Verify we can create and use a tracer
+	tracer := provider.Tracer("test-tracer")
+	if tracer == nil {
+		t.Error("Tracer() returned nil")
+	}
+
+	// Start a span to verify tracing works
+	_, span := tracer.Start(ctx, "test-span")
+	if span == nil {
+		t.Error("Start() returned nil span")
+	}
+	span.End()
+}
+
+func TestBothPrometheusAndTracing(t *testing.T) {
+	logger := logging.NewDefault()
+	cfg := &config.TelemetryConfig{
+		Enabled:           true,
+		ServiceName:       "test-service",
+		ServiceVersion:    "1.0.0",
+		PrometheusEnabled: true,
+		PrometheusPort:    9093, // Use different port
+		TracingEnabled:    true,
+		TracingEndpoint:   "localhost:4317",
+	}
+
+	ctx := context.Background()
+	tel, err := New(ctx, cfg, logger)
+	if err != nil {
+		t.Fatalf("Failed to create telemetry: %v", err)
+	}
+	defer func() {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = tel.Shutdown(shutdownCtx)
+	}()
+
+	// Verify both providers are available
+	if tel.MeterProvider() == nil {
+		t.Error("MeterProvider() returned nil")
+	}
+	if tel.TracerProvider() == nil {
+		t.Error("TracerProvider() returned nil")
+	}
+
+	// Verify metrics work
+	metrics, err := tel.InitMetrics()
+	if err != nil {
+		t.Errorf("InitMetrics() failed: %v", err)
+	}
+	if metrics == nil {
+		t.Error("InitMetrics() returned nil")
+	}
+
+	// Verify tracing works
+	tracer := tel.TracerProvider().Tracer("test")
+	_, span := tracer.Start(ctx, "test")
+	span.End()
+}
