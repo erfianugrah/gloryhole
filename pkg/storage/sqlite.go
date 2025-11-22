@@ -259,8 +259,8 @@ func (s *SQLiteStorage) updateDomainStats(queries []*QueryLog) {
 	}
 }
 
-// GetRecentQueries returns the most recent queries
-func (s *SQLiteStorage) GetRecentQueries(ctx context.Context, limit int) ([]*QueryLog, error) {
+// GetRecentQueries returns the most recent queries with pagination support
+func (s *SQLiteStorage) GetRecentQueries(ctx context.Context, limit, offset int) ([]*QueryLog, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -273,8 +273,8 @@ func (s *SQLiteStorage) GetRecentQueries(ctx context.Context, limit int) ([]*Que
 		       blocked, cached, response_time_ms, upstream
 		FROM queries
 		ORDER BY timestamp DESC
-		LIMIT ?
-	`, limit)
+		LIMIT ? OFFSET ?
+	`, limit, offset)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrQueryFailed, err)
 	}

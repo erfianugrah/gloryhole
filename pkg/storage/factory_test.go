@@ -110,7 +110,7 @@ func TestNewNoOpStorage(t *testing.T) {
 		t.Errorf("LogQuery() error = %v", err)
 	}
 
-	if _, err := storage.GetRecentQueries(ctx, 10); err != nil {
+	if _, err := storage.GetRecentQueries(ctx, 10, 0); err != nil {
 		t.Errorf("GetRecentQueries() error = %v", err)
 	}
 

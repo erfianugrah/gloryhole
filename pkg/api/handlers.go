@@ -185,7 +185,7 @@ func (s *Server) handleQueries(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
 
-	queries, err := s.storage.GetRecentQueries(ctx, limit)
+	queries, err := s.storage.GetRecentQueries(ctx, limit, offset)
 	if err != nil {
 		s.logger.Error("Failed to get queries", "error", err)
 		s.writeError(w, http.StatusInternalServerError, "Failed to retrieve queries")

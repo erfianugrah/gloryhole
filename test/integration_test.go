@@ -246,7 +246,7 @@ func TestIntegration_DNSWithStorage(t *testing.T) {
 	}
 
 	// Check recent queries
-	queries, err := stor.GetRecentQueries(ctx, 10)
+	queries, err := stor.GetRecentQueries(ctx, 10, 0)
 	if err != nil {
 		t.Fatalf("Failed to get recent queries: %v", err)
 	}

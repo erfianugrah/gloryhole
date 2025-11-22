@@ -99,7 +99,7 @@ func TestSQLiteStorage_GetRecentQueries(t *testing.T) {
 	}
 
 	// Get recent queries
-	queries, err := storage.GetRecentQueries(ctx, 3)
+	queries, err := storage.GetRecentQueries(ctx, 3, 0)
 	if err != nil {
 		t.Fatalf("GetRecentQueries() error = %v", err)
 	}
@@ -494,7 +494,7 @@ func TestSQLiteStorage_Persistence(t *testing.T) {
 	defer func() { _ = storage2.Close() }()
 
 	ctx := context.Background()
-	queries, err := storage2.GetRecentQueries(ctx, 10)
+	queries, err := storage2.GetRecentQueries(ctx, 10, 0)
 	if err != nil {
 		t.Fatalf("GetRecentQueries() error = %v", err)
 	}

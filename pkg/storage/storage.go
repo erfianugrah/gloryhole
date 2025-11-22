@@ -10,7 +10,7 @@ import (
 type Storage interface {
 	// Query Logging
 	LogQuery(ctx context.Context, query *QueryLog) error
-	GetRecentQueries(ctx context.Context, limit int) ([]*QueryLog, error)
+	GetRecentQueries(ctx context.Context, limit, offset int) ([]*QueryLog, error)
 	GetQueriesByDomain(ctx context.Context, domain string, limit int) ([]*QueryLog, error)
 	GetQueriesByClientIP(ctx context.Context, clientIP string, limit int) ([]*QueryLog, error)
 

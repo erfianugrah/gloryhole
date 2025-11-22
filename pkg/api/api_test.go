@@ -22,7 +22,7 @@ func (m *mockStorage) LogQuery(ctx context.Context, query *storage.QueryLog) err
 	return nil
 }
 
-func (m *mockStorage) GetRecentQueries(ctx context.Context, limit int) ([]*storage.QueryLog, error) {
+func (m *mockStorage) GetRecentQueries(ctx context.Context, limit, offset int) ([]*storage.QueryLog, error) {
 	if len(m.queries) > limit {
 		return m.queries[:limit], nil
 	}

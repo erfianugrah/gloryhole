@@ -18,24 +18,35 @@
     </div>
 
     <div id="queries-container"
-         hx-get="/api/ui/queries?limit=100"
+         hx-get="/api/ui/queries?limit=100&offset=0"
          hx-trigger="load, every 2s"
          hx-swap="innerHTML">
         <div class="loading">Loading queries...</div>
     </div>
 
     <div class="pagination">
-        <button class="btn btn-secondary" onclick="loadPage(-50)">Previous</button>
-        <button class="btn btn-secondary" onclick="loadPage(50)">Next</button>
+        <button id="prev-btn" class="btn btn-secondary" onclick="loadPage(-100)">Previous</button>
+        <span id="page-info" style="margin: 0 1rem;">Page <span id="current-page">1</span></span>
+        <button class="btn btn-secondary" onclick="loadPage(100)">Next</button>
     </div>
 </div>
 
 <script>
     let currentOffset = 0;
+    const limit = 100;
 
     function loadPage(offsetDelta) {
         currentOffset = Math.max(0, currentOffset + offsetDelta);
-        htmx.trigger('#queries-container', 'load');
+        const container = document.getElementById('queries-container');
+        container.setAttribute('hx-get', '/api/ui/queries?limit=' + limit + '&offset=' + currentOffset);
+        htmx.trigger(container, 'load');
+
+        // Update page number display
+        const currentPage = Math.floor(currentOffset / limit) + 1;
+        document.getElementById('current-page').textContent = currentPage;
+
+        // Disable previous button on first page
+        document.getElementById('prev-btn').disabled = currentOffset === 0;
     }
 </script>
 {{end}}

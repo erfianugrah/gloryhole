@@ -245,6 +245,15 @@ func (s *Server) handleQueriesPartial(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Parse offset parameter
+	offsetParam := r.URL.Query().Get("offset")
+	offset := 0 // Default offset
+	if offsetParam != "" {
+		if o, err := strconv.Atoi(offsetParam); err == nil && o >= 0 {
+			offset = o
+		}
+	}
+
 	// Template-friendly query data
 	type QueryData struct {
 		Timestamp      time.Time
@@ -260,7 +269,7 @@ func (s *Server) handleQueriesPartial(w http.ResponseWriter, r *http.Request) {
 
 	// Get queries from storage
 	if s.storage != nil {
-		dbQueries, err := s.storage.GetRecentQueries(r.Context(), limit)
+		dbQueries, err := s.storage.GetRecentQueries(r.Context(), limit, offset)
 		if err == nil {
 			for _, q := range dbQueries {
 				queries = append(queries, QueryData{

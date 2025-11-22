@@ -50,7 +50,7 @@ func (n *NoOpStorage) LogQuery(ctx context.Context, query *QueryLog) error {
 }
 
 // GetRecentQueries returns an empty slice
-func (n *NoOpStorage) GetRecentQueries(ctx context.Context, limit int) ([]*QueryLog, error) {
+func (n *NoOpStorage) GetRecentQueries(ctx context.Context, limit, offset int) ([]*QueryLog, error) {
 	return []*QueryLog{}, nil
 }
 
