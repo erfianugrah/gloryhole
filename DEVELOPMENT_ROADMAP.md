@@ -420,9 +420,65 @@ body, err := io.ReadAll(r.Body)
 - **Effort**: 3 hours
 - **Status**: ⬜ Not Started
 
+#### Task 9: Kill-Switch Feature
+- **ID**: NEW - Emergency Feature Controls
+- **Priority**: 🟡 Medium (User-requested)
+- **Description**: Runtime toggles for ad-blocking and policy enforcement without restart
+- **Design Document**: `/docs/kill-switch-design.md`
+- **Use Cases**:
+  - Emergency disable during false positives
+  - Troubleshooting and diagnostics
+  - Scheduled maintenance windows
+  - Performance testing
+
+**Implementation**:
+- **Config Changes**:
+  - Add `enable_blocklist: bool` to `ServerConfig`
+  - Add `enable_policies: bool` to `ServerConfig`
+  - Add `config.Save()` function for persistence
+- **DNS Handler** (`pkg/dns/server.go`):
+  - Check `cfg.Server.EnableBlocklist` before blocklist lookup
+  - Check `cfg.Server.EnablePolicies` before policy evaluation
+- **API Endpoints** (new `pkg/api/handlers_features.go`):
+  - `GET /api/features` - Get current kill-switch states
+  - `PUT /api/features` - Toggle kill-switches with JSON body
+- **Web UI** (`pkg/api/ui/templates/settings.html`):
+  - Add toggle switches for each feature
+  - HTMX integration for instant updates
+  - Visual feedback for current state
+- **Thread Safety**:
+  - Use config watcher's existing RWMutex
+  - Atomic config updates
+  - No race conditions
+- **Metrics**:
+  - Prometheus gauges for kill-switch states
+  - Audit logging for all toggles
+
+**Files Modified**:
+- `pkg/config/config.go` - Add fields and Save function
+- `pkg/dns/server.go` - Add kill-switch checks
+- `pkg/api/handlers_features.go` - NEW file
+- `pkg/api/api.go` - Add routes
+- `pkg/api/ui/templates/settings.html` - Add UI controls
+- `pkg/telemetry/metrics.go` - Add gauges
+
+**Testing**:
+- Unit tests for kill-switch logic
+- API endpoint tests
+- Integration tests for hot-reload
+- Thread safety tests
+
+- **Effort**: 11 hours
+  - Phase 1: Core implementation (4h)
+  - Phase 2: API endpoints (2h)
+  - Phase 3: Web UI (2h)
+  - Phase 4: Testing (2h)
+  - Phase 5: Documentation (1h)
+- **Status**: ⬜ Not Started
+
 ### Low Priority Tasks
 
-#### Task 9: Test Coverage Improvements
+#### Task 10: Test Coverage Improvements
 - **Target**: 75%+ overall coverage
 - **Focus Areas**:
   - `pkg/dns` (67.6% → 75%)
@@ -431,7 +487,7 @@ body, err := io.ReadAll(r.Body)
 - **Effort**: 8 hours
 - **Status**: ⬜ Not Started
 
-#### Task 10: Code Cleanup
+#### Task 11: Code Cleanup
 - **Actions**:
   - Remove commented-out code
   - Clean up unused imports
