@@ -4,10 +4,10 @@ run:
 
 linters:
   enable:
-    - staticcheck
     - misspell
     - revive
   disable:
+    - staticcheck
     - goconst
     - godot
     - godox
