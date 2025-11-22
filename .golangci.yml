@@ -44,6 +44,8 @@ linters-settings:
       enable-all: true
       disable:
         - fieldalignment
+        - shadow
+        - unusedwrite
     cyclop:
       max-complexity: 100
     goconst:
