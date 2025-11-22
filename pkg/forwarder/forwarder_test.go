@@ -428,3 +428,101 @@ func TestForward_NoUpstreams(t *testing.T) {
 		t.Fatal("Expected default upstreams, got none")
 	}
 }
+
+func TestForwardWithUpstreams_Success(t *testing.T) {
+	// Create mock DNS server
+	responses := map[string]*dns.Msg{
+		"conditional.test.": createTestResponse("conditional.test.", "10.0.0.1"),
+	}
+	addr, cleanup := mockDNSServer(t, responses)
+	defer cleanup()
+
+	cfg := &config.Config{
+		UpstreamDNSServers: []string{"1.1.1.1:53"}, // Default upstreams (not used)
+	}
+	logger := logging.NewDefault()
+	fwd := NewForwarder(cfg, logger)
+
+	// Create DNS query
+	req := new(dns.Msg)
+	req.SetQuestion("conditional.test.", dns.TypeA)
+
+	// Forward query with specific upstreams
+	ctx := context.Background()
+	resp, err := fwd.ForwardWithUpstreams(ctx, req, []string{addr})
+
+	if err != nil {
+		t.Fatalf("ForwardWithUpstreams failed: %v", err)
+	}
+
+	if resp == nil {
+		t.Fatal("ForwardWithUpstreams returned nil response")
+	}
+
+	if len(resp.Answer) != 1 {
+		t.Fatalf("Expected 1 answer, got %d", len(resp.Answer))
+	}
+
+	aRecord := resp.Answer[0].(*dns.A)
+	if !aRecord.A.Equal(net.ParseIP("10.0.0.1")) {
+		t.Errorf("Expected IP 10.0.0.1, got %s", aRecord.A)
+	}
+}
+
+func TestForwardWithUpstreams_NoUpstreams(t *testing.T) {
+	cfg := &config.Config{
+		UpstreamDNSServers: []string{"1.1.1.1:53"},
+	}
+	logger := logging.NewDefault()
+	fwd := NewForwarder(cfg, logger)
+
+	req := new(dns.Msg)
+	req.SetQuestion("test.com.", dns.TypeA)
+
+	ctx := context.Background()
+	_, err := fwd.ForwardWithUpstreams(ctx, req, []string{})
+
+	if err == nil {
+		t.Fatal("Expected error for empty upstreams, got nil")
+	}
+
+	if err.Error() != "no upstream DNS servers provided" {
+		t.Errorf("Expected 'no upstream DNS servers provided' error, got %v", err)
+	}
+}
+
+func TestForwardWithUpstreams_Retry(t *testing.T) {
+	// Create a working mock DNS server
+	responses := map[string]*dns.Msg{
+		"retry.test.": createTestResponse("retry.test.", "10.0.0.2"),
+	}
+	addr, cleanup := mockDNSServer(t, responses)
+	defer cleanup()
+
+	cfg := &config.Config{
+		UpstreamDNSServers: []string{"1.1.1.1:53"},
+	}
+	logger := logging.NewDefault()
+	fwd := NewForwarder(cfg, logger)
+	fwd.SetTimeout(100 * time.Millisecond)
+	fwd.SetRetries(2)
+
+	req := new(dns.Msg)
+	req.SetQuestion("retry.test.", dns.TypeA)
+
+	ctx := context.Background()
+	// First upstream fails (non-routable), second succeeds
+	resp, err := fwd.ForwardWithUpstreams(ctx, req, []string{"192.0.2.1:53", addr})
+
+	if err != nil {
+		t.Fatalf("ForwardWithUpstreams with retry failed: %v", err)
+	}
+
+	if resp == nil {
+		t.Fatal("ForwardWithUpstreams returned nil response")
+	}
+
+	if len(resp.Answer) != 1 {
+		t.Fatalf("Expected 1 answer, got %d", len(resp.Answer))
+	}
+}

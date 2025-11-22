@@ -257,6 +257,18 @@ func TestCIDRMatcher_IsEmpty(t *testing.T) {
 	}
 }
 
+func TestCIDRMatcher_Count(t *testing.T) {
+	cidrs := []string{"10.0.0.0/8", "192.168.1.0/24", "172.16.0.0/12"}
+	matcher, err := NewCIDRMatcher(cidrs)
+	if err != nil {
+		t.Fatalf("Failed to create CIDR matcher: %v", err)
+	}
+
+	if got := matcher.Count(); got != 3 {
+		t.Errorf("Count() = %d, want 3", got)
+	}
+}
+
 func TestQueryTypeMatcher(t *testing.T) {
 	types := []string{"A", "AAAA", "PTR"}
 	matcher := NewQueryTypeMatcher(types)
@@ -292,6 +304,15 @@ func TestQueryTypeMatcher_IsEmpty(t *testing.T) {
 	matcher = NewQueryTypeMatcher([]string{"A"})
 	if matcher.IsEmpty() {
 		t.Error("Non-empty matcher should return false for IsEmpty()")
+	}
+}
+
+func TestQueryTypeMatcher_Count(t *testing.T) {
+	types := []string{"A", "AAAA", "PTR", "MX"}
+	matcher := NewQueryTypeMatcher(types)
+
+	if got := matcher.Count(); got != 4 {
+		t.Errorf("Count() = %d, want 4", got)
 	}
 }
 

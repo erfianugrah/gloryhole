@@ -205,3 +205,96 @@ func TestFileOutput(t *testing.T) {
 		t.Errorf("Log file doesn't contain message. Got: %s", string(content))
 	}
 }
+
+func TestAllLogLevels(t *testing.T) {
+	var buf bytes.Buffer
+	handler := slog.NewTextHandler(&buf, &slog.HandlerOptions{
+		Level: slog.LevelDebug, // Capture all levels
+	})
+
+	logger := &Logger{
+		Logger: slog.New(handler),
+	}
+
+	// Test all log level methods
+	logger.Debug("debug message", "key", "value")
+	logger.Info("info message", "key", "value")
+	logger.Warn("warn message", "key", "value")
+	logger.Error("error message", "key", "value")
+
+	output := buf.String()
+
+	// Check that all messages were logged
+	if !strings.Contains(output, "debug message") {
+		t.Error("Debug message not found in output")
+	}
+	if !strings.Contains(output, "info message") {
+		t.Error("Info message not found in output")
+	}
+	if !strings.Contains(output, "warn message") {
+		t.Error("Warn message not found in output")
+	}
+	if !strings.Contains(output, "error message") {
+		t.Error("Error message not found in output")
+	}
+}
+
+func TestAllContextLogLevels(t *testing.T) {
+	var buf bytes.Buffer
+	handler := slog.NewTextHandler(&buf, &slog.HandlerOptions{
+		Level: slog.LevelDebug, // Capture all levels
+	})
+
+	logger := &Logger{
+		Logger: slog.New(handler),
+	}
+
+	ctx := context.Background()
+
+	// Test all context log level methods
+	logger.DebugContext(ctx, "debug context message")
+	logger.InfoContext(ctx, "info context message")
+	logger.WarnContext(ctx, "warn context message")
+	logger.ErrorContext(ctx, "error context message")
+
+	output := buf.String()
+
+	// Check that all messages were logged
+	if !strings.Contains(output, "debug context message") {
+		t.Error("Debug context message not found in output")
+	}
+	if !strings.Contains(output, "info context message") {
+		t.Error("Info context message not found in output")
+	}
+	if !strings.Contains(output, "warn context message") {
+		t.Error("Warn context message not found in output")
+	}
+	if !strings.Contains(output, "error context message") {
+		t.Error("Error context message not found in output")
+	}
+}
+
+func TestWithContext(t *testing.T) {
+	logger := NewDefault()
+	ctx := context.Background()
+
+	newLogger := logger.WithContext(ctx)
+
+	if newLogger == nil {
+		t.Fatal("WithContext() returned nil")
+	}
+
+	// Test that the new logger works
+	var buf bytes.Buffer
+	handler := slog.NewTextHandler(&buf, &slog.HandlerOptions{
+		Level: slog.LevelInfo,
+	})
+	newLogger.Logger = slog.New(handler)
+
+	newLogger.Info("test message from context logger")
+
+	output := buf.String()
+	if !strings.Contains(output, "test message from context logger") {
+		t.Errorf("Context logger output doesn't contain message. Got: %s", output)
+	}
+}

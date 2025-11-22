@@ -599,3 +599,238 @@ func TestHelperFunctions_InExpressions(t *testing.T) {
 		})
 	}
 }
+
+func TestParseUpstreams(t *testing.T) {
+	tests := []struct {
+		name       string
+		actionData string
+		want       []string
+		wantErr    bool
+	}{
+		{
+			name:       "single upstream with port",
+			actionData: "1.1.1.1:53",
+			want:       []string{"1.1.1.1:53"},
+			wantErr:    false,
+		},
+		{
+			name:       "single upstream without port",
+			actionData: "8.8.8.8",
+			want:       []string{"8.8.8.8:53"},
+			wantErr:    false,
+		},
+		{
+			name:       "multiple upstreams",
+			actionData: "1.1.1.1:53, 8.8.8.8:53, 9.9.9.9",
+			want:       []string{"1.1.1.1:53", "8.8.8.8:53", "9.9.9.9:53"},
+			wantErr:    false,
+		},
+		{
+			name:       "empty string",
+			actionData: "",
+			want:       nil,
+			wantErr:    true,
+		},
+		{
+			name:       "whitespace only entries filtered",
+			actionData: "1.1.1.1, , 8.8.8.8",
+			want:       []string{"1.1.1.1:53", "8.8.8.8:53"},
+			wantErr:    false,
+		},
+		{
+			name:       "invalid format - empty host",
+			actionData: ":53",
+			want:       nil,
+			wantErr:    true,
+		},
+		{
+			name:       "invalid format - empty port",
+			actionData: "1.1.1.1:",
+			want:       nil,
+			wantErr:    true,
+		},
+		{
+			name:       "hostname with port",
+			actionData: "dns.google:853",
+			want:       []string{"dns.google:853"},
+			wantErr:    false,
+		},
+		{
+			name:       "hostname without port",
+			actionData: "dns.google",
+			want:       []string{"dns.google:53"},
+			wantErr:    false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := ParseUpstreams(tt.actionData)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("ParseUpstreams() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !tt.wantErr {
+				if len(got) != len(tt.want) {
+					t.Errorf("ParseUpstreams() got %d upstreams, want %d", len(got), len(tt.want))
+					return
+				}
+				for i, upstream := range got {
+					if upstream != tt.want[i] {
+						t.Errorf("ParseUpstreams()[%d] = %v, want %v", i, upstream, tt.want[i])
+					}
+				}
+			}
+		})
+	}
+}
+
+func TestGetUpstreams(t *testing.T) {
+	tests := []struct {
+		name       string
+		rule       *Rule
+		want       []string
+		wantNil    bool
+	}{
+		{
+			name: "FORWARD action with valid upstreams",
+			rule: &Rule{
+				Action:     ActionForward,
+				ActionData: "1.1.1.1:53, 8.8.8.8",
+			},
+			want:    []string{"1.1.1.1:53", "8.8.8.8:53"},
+			wantNil: false,
+		},
+		{
+			name: "BLOCK action returns nil",
+			rule: &Rule{
+				Action:     ActionBlock,
+				ActionData: "1.1.1.1:53",
+			},
+			want:    nil,
+			wantNil: true,
+		},
+		{
+			name: "ALLOW action returns nil",
+			rule: &Rule{
+				Action:     ActionAllow,
+				ActionData: "1.1.1.1:53",
+			},
+			want:    nil,
+			wantNil: true,
+		},
+		{
+			name: "FORWARD with invalid upstreams returns nil",
+			rule: &Rule{
+				Action:     ActionForward,
+				ActionData: "",
+			},
+			want:    nil,
+			wantNil: true,
+		},
+		{
+			name: "FORWARD with malformed upstreams returns nil",
+			rule: &Rule{
+				Action:     ActionForward,
+				ActionData: ":53",
+			},
+			want:    nil,
+			wantNil: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := tt.rule.GetUpstreams()
+			if tt.wantNil {
+				if got != nil {
+					t.Errorf("GetUpstreams() = %v, want nil", got)
+				}
+			} else {
+				if got == nil {
+					t.Error("GetUpstreams() = nil, want non-nil")
+					return
+				}
+				if len(got) != len(tt.want) {
+					t.Errorf("GetUpstreams() got %d upstreams, want %d", len(got), len(tt.want))
+					return
+				}
+				for i, upstream := range got {
+					if upstream != tt.want[i] {
+						t.Errorf("GetUpstreams()[%d] = %v, want %v", i, upstream, tt.want[i])
+					}
+				}
+			}
+		})
+	}
+}
+
+func TestValidateActionViaAddRule(t *testing.T) {
+	// validateAction is unexported, so test it indirectly through AddRule
+	tests := []struct {
+		name       string
+		action     string
+		actionData string
+		wantErr    bool
+	}{
+		{
+			name:       "BLOCK action with empty data",
+			action:     ActionBlock,
+			actionData: "",
+			wantErr:    false,
+		},
+		{
+			name:       "ALLOW action with empty data",
+			action:     ActionAllow,
+			actionData: "",
+			wantErr:    false,
+		},
+		{
+			name:       "REDIRECT action with target",
+			action:     ActionRedirect,
+			actionData: "127.0.0.1",
+			wantErr:    false,
+		},
+		{
+			name:       "REDIRECT action without target",
+			action:     ActionRedirect,
+			actionData: "",
+			wantErr:    true,
+		},
+		{
+			name:       "FORWARD action with upstreams",
+			action:     ActionForward,
+			actionData: "1.1.1.1:53, 8.8.8.8",
+			wantErr:    false,
+		},
+		{
+			name:       "FORWARD action without upstreams",
+			action:     ActionForward,
+			actionData: "",
+			wantErr:    true,
+		},
+		{
+			name:       "FORWARD action with invalid upstreams",
+			action:     ActionForward,
+			actionData: ":53",
+			wantErr:    true,
+		},
+	}
+
+	engine := NewEngine()
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rule := &Rule{
+				Name:       tt.name,
+				Logic:      "true", // Simple logic that always matches
+				Action:     tt.action,
+				ActionData: tt.actionData,
+				Enabled:    true,
+			}
+			err := engine.AddRule(rule)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("AddRule() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
