@@ -145,7 +145,7 @@ func Save(path string, cfg *Config) error {
 	// Write atomically: write to temp file, then rename
 	// This prevents corruption if write is interrupted
 	tmpPath := path + ".tmp"
-	if err := os.WriteFile(tmpPath, data, 0644); err != nil {
+	if err := os.WriteFile(tmpPath, data, 0600); err != nil {
 		return fmt.Errorf("failed to write temp config: %w", err)
 	}
 
