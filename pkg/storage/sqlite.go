@@ -102,31 +102,23 @@ func NewSQLiteStorage(cfg *Config) (Storage, error) {
 	return storage, nil
 }
 
-// applyMigrations applies database schema migrations in a versioned manner.
-// It checks if the schema_version table exists, and if not, applies the initial
-// schema from the embedded SQL file. This function is idempotent and safe to call
-// multiple times. Future schema changes should be added here with version checks
-// to enable zero-downtime migrations.
+// applyMigrations applies database schema migrations using the versioned migration system.
+// This function delegates to runMigrations() which handles:
+// - Detecting current database version
+// - Applying only pending migrations in order
+// - Recording each migration in schema_version table
+// - Transactional safety (rollback on failure)
 //
-// Migration strategy:
-// - Version 1: Initial schema with queries, domain_stats, and schema_version tables
-// - Future versions: Will check current version and apply incremental migrations
+// New migrations should be added to migrations.go in the migrations registry.
+// Each migration must have a unique version number and will be applied automatically
+// when the database is opened.
+//
+// Migration files:
+// - migrations.go: Migration registry and runner
+// - migrations/001_initial.sql: Initial schema (embedded)
+// - Future: Add new migration files and register in migrations.go
 func applyMigrations(db *sql.DB) error {
-	// Check if schema_version table exists
-	var tableExists bool
-	err := db.QueryRow("SELECT 1 FROM sqlite_master WHERE type='table' AND name='schema_version'").Scan(&tableExists)
-	if err == sql.ErrNoRows {
-		// Schema doesn't exist, apply initial migration
-		if _, execErr := db.Exec(initialSchema); execErr != nil {
-			return fmt.Errorf("failed to apply initial schema: %w", execErr)
-		}
-		return nil
-	} else if err != nil {
-		return fmt.Errorf("failed to check schema version: %w", err)
-	}
-
-	// TODO: Add more migrations here as schema evolves
-	return nil
+	return runMigrations(db)
 }
 
 // LogQuery logs a DNS query (async, buffered)

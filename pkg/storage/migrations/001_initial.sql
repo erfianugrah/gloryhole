@@ -51,9 +51,8 @@ CREATE INDEX IF NOT EXISTS idx_domain_stats_count ON domain_stats(query_count DE
 CREATE INDEX IF NOT EXISTS idx_domain_stats_blocked ON domain_stats(blocked);
 
 -- Schema version table
+-- Note: The migration system will insert the version record
 CREATE TABLE IF NOT EXISTS schema_version (
     version INTEGER PRIMARY KEY,
     applied_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
-
-INSERT INTO schema_version (version) VALUES (1);
