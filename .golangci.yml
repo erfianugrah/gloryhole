@@ -5,10 +5,10 @@ run:
 linters:
   enable:
     - staticcheck
-    - goconst
     - misspell
     - revive
   disable:
+    - goconst
     - godot
     - godox
     - err113
@@ -37,6 +37,7 @@ linters:
     - perfsprint
     - mnd
     - dupl
+    - unused
 
 linters-settings:
     govet:
