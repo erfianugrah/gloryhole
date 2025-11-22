@@ -1,3 +1,5 @@
+version: "2"
+
 run:
   timeout: 5m
   go: '1.24'
@@ -7,9 +9,7 @@ linters:
     - misspell
     - revive
   disable:
-    - staticcheck
-    - gosimple
-    - goconst
+    - unused
     - godot
     - godox
     - err113
@@ -38,13 +38,10 @@ linters:
     - perfsprint
     - mnd
     - dupl
-    - unused
 
 linters-settings:
     govet:
       enable-all: true
-      disable:
-        - unusedwrite
     cyclop:
       max-complexity: 100
     goconst:
@@ -86,6 +83,21 @@ issues:
     # Ignore unused types in config (for deprecation)
     - path: config\.go
       text: "is unused"
+      linters:
+        - unused
+    # Ignore unused test mocks and helpers
+    - path: _test\.go
+      text: "(type|func).*(is unused)"
+      linters:
+        - unused
+    # Ignore unused msgPool (future optimization)
+    - path: dns/server\.go
+      text: "var msgPool is unused"
+      linters:
+        - unused
+    # Ignore unused prepared statement fields (future use)
+    - path: storage/sqlite\.go
+      text: "field (stmtGetRecentQueries|stmtGetStatistics) is unused"
       linters:
         - unused
     # Ignore blank identifier assignments in tests

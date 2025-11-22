@@ -224,7 +224,7 @@ func benchmarkBlocklistLookup(b *testing.B, size int) {
 	b.ReportAllocs()
 
 	for i := 0; i < b.N; i++ {
-		_, _ = handler.Blocklist[testDomain]
+		_ = handler.Blocklist[testDomain]
 	}
 
 	b.StopTimer()

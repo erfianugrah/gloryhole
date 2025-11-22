@@ -85,7 +85,7 @@ func NewDefault() *Logger {
 // WithContext adds context to the logger
 func (l *Logger) WithContext(ctx context.Context) *Logger {
 	return &Logger{
-		Logger: l.Logger.With(),
+		Logger: l.With(),
 		cfg:    l.cfg,
 	}
 }
@@ -97,7 +97,7 @@ func (l *Logger) WithFields(fields map[string]any) *Logger {
 		args = append(args, k, v)
 	}
 	return &Logger{
-		Logger: l.Logger.With(args...),
+		Logger: l.With(args...),
 		cfg:    l.cfg,
 	}
 }
@@ -105,7 +105,7 @@ func (l *Logger) WithFields(fields map[string]any) *Logger {
 // WithField creates a new logger with an additional field
 func (l *Logger) WithField(key string, value any) *Logger {
 	return &Logger{
-		Logger: l.Logger.With(key, value),
+		Logger: l.With(key, value),
 		cfg:    l.cfg,
 	}
 }

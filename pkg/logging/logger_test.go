@@ -138,11 +138,6 @@ func TestLoggingOutput(t *testing.T) {
 
 	logger := &Logger{
 		Logger: slog.New(handler),
-		cfg: &config.LoggingConfig{
-			Level:  "info",
-			Format: "text",
-			Output: "stdout",
-		},
 	}
 
 	// Log a message
@@ -166,11 +161,6 @@ func TestContextLogging(t *testing.T) {
 
 	logger := &Logger{
 		Logger: slog.New(handler),
-		cfg: &config.LoggingConfig{
-			Level:  "info",
-			Format: "text",
-			Output: "stdout",
-		},
 	}
 
 	ctx := context.Background()
