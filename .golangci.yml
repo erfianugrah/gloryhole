@@ -1,11 +1,8 @@
-version: "2"
-
 run:
   timeout: 5m
   go: '1.24'
 
 linters:
-  default: standard
   enable:
     - staticcheck
     - goconst
@@ -41,7 +38,7 @@ linters:
     - mnd
     - dupl
 
-  settings:
+linters-settings:
     govet:
       enable-all: true
     cyclop:
