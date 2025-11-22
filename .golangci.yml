@@ -42,6 +42,8 @@ linters:
 linters-settings:
     govet:
       enable-all: true
+      disable:
+        - fieldalignment
     cyclop:
       max-complexity: 100
     goconst:
@@ -85,3 +87,8 @@ issues:
       text: "is unused"
       linters:
         - unused
+    # Ignore blank identifier assignments in tests
+    - path: _test\.go
+      text: "S1005:"
+      linters:
+        - staticcheck
