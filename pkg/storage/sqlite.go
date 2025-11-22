@@ -45,9 +45,9 @@ func NewSQLiteStorage(cfg *Config) (Storage, error) {
 	db.SetConnMaxLifetime(0)
 
 	// Test connection
-	if err := db.Ping(); err != nil {
+	if pingErr := db.Ping(); pingErr != nil {
 		_ = db.Close()
-		return nil, fmt.Errorf("%w: %v", ErrConnectionFailed, err)
+		return nil, fmt.Errorf("%w: %v", ErrConnectionFailed, pingErr)
 	}
 
 	// Apply SQLite pragmas for performance
@@ -64,16 +64,16 @@ func NewSQLiteStorage(cfg *Config) (Storage, error) {
 	}
 
 	for _, pragma := range pragmas {
-		if _, err := db.Exec(pragma); err != nil {
+		if _, pragmaErr := db.Exec(pragma); pragmaErr != nil {
 			_ = db.Close()
-			return nil, fmt.Errorf("failed to set pragma: %w", err)
+			return nil, fmt.Errorf("failed to set pragma: %w", pragmaErr)
 		}
 	}
 
 	// Apply migrations
-	if err := applyMigrations(db); err != nil {
+	if migrationErr := applyMigrations(db); migrationErr != nil {
 		_ = db.Close()
-		return nil, fmt.Errorf("failed to apply migrations: %w", err)
+		return nil, fmt.Errorf("failed to apply migrations: %w", migrationErr)
 	}
 
 	// Prepare statements
@@ -108,8 +108,8 @@ func applyMigrations(db *sql.DB) error {
 	err := db.QueryRow("SELECT 1 FROM sqlite_master WHERE type='table' AND name='schema_version'").Scan(&tableExists)
 	if err == sql.ErrNoRows {
 		// Schema doesn't exist, apply initial migration
-		if _, err := db.Exec(initialSchema); err != nil {
-			return fmt.Errorf("failed to apply initial schema: %w", err)
+		if _, execErr := db.Exec(initialSchema); execErr != nil {
+			return fmt.Errorf("failed to apply initial schema: %w", execErr)
 		}
 		return nil
 	} else if err != nil {

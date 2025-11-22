@@ -56,8 +56,8 @@ upstream_dns_servers:
 logging:
   level: "info"
 `
-	if _, err := tmpfile.Write([]byte(initialConfig)); err != nil {
-		t.Fatal(err)
+	if _, writeErr := tmpfile.Write([]byte(initialConfig)); writeErr != nil {
+		t.Fatal(writeErr)
 	}
 	_ = tmpfile.Close()
 

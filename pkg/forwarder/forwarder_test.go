@@ -36,7 +36,7 @@ func mockDNSServer(t *testing.T, responses map[string]*dns.Msg) (string, func())
 
 			// Parse request
 			req := new(dns.Msg)
-			if err := req.Unpack(buf[:n]); err != nil {
+			if unpackErr := req.Unpack(buf[:n]); unpackErr != nil {
 				continue
 			}
 

@@ -85,9 +85,9 @@ func TestInitMetrics(t *testing.T) {
 		t.Fatalf("Failed to create telemetry: %v", err)
 	}
 	defer func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		_ = tel.Shutdown(ctx)
+		_ = tel.Shutdown(shutdownCtx)
 	}()
 
 	metrics, err := tel.InitMetrics()
@@ -123,9 +123,9 @@ func TestMetricsRecording(t *testing.T) {
 		t.Fatalf("Failed to create telemetry: %v", err)
 	}
 	defer func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		_ = tel.Shutdown(ctx)
+		_ = tel.Shutdown(shutdownCtx)
 	}()
 
 	metrics, err := tel.InitMetrics()
@@ -155,9 +155,9 @@ func TestMeterProvider(t *testing.T) {
 		t.Fatalf("Failed to create telemetry: %v", err)
 	}
 	defer func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		_ = tel.Shutdown(ctx)
+		_ = tel.Shutdown(shutdownCtx)
 	}()
 
 	provider := tel.MeterProvider()
@@ -179,9 +179,9 @@ func TestTracerProvider(t *testing.T) {
 		t.Fatalf("Failed to create telemetry: %v", err)
 	}
 	defer func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		_ = tel.Shutdown(ctx)
+		_ = tel.Shutdown(shutdownCtx)
 	}()
 
 	provider := tel.TracerProvider()
