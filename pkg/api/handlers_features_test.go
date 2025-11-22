@@ -139,7 +139,8 @@ func TestHandleUpdateFeatures_EnableBlocklist(t *testing.T) {
 	}
 
 	var response FeaturesResponse
-	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+	err = json.NewDecoder(w.Body).Decode(&response)
+	if err != nil {
 		t.Fatalf("failed to decode response: %v", err)
 	}
 
@@ -199,7 +200,8 @@ func TestHandleUpdateFeatures_DisablePolicies(t *testing.T) {
 	}
 
 	var response FeaturesResponse
-	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+	err = json.NewDecoder(w.Body).Decode(&response)
+	if err != nil {
 		t.Fatalf("failed to decode response: %v", err)
 	}
 
@@ -263,7 +265,8 @@ func TestHandleUpdateFeatures_UpdateBoth(t *testing.T) {
 	}
 
 	var response FeaturesResponse
-	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+	err = json.NewDecoder(w.Body).Decode(&response)
+	if err != nil {
 		t.Fatalf("failed to decode response: %v", err)
 	}
 
