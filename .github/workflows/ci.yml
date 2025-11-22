@@ -24,9 +24,9 @@ jobs:
       run: go get ./...
 
     - name: Lint
-      uses: golangci/golangci-lint-action@v6
+      uses: golangci/golangci-lint-action@v9
       with:
-        version: latest
+        version: v2.6.2
         args: --verbose --print-issued-lines=false
 
     - name: Run gosec security scanner

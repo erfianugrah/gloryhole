@@ -39,7 +39,7 @@ linters:
     - mnd
     - dupl
 
-linters-settings:
+  settings:
     govet:
       enable-all: true
     cyclop:
@@ -68,35 +68,37 @@ linters-settings:
       check-blank: false
       check-type-assertions: false
 
+  exclusions:
+    rules:
+      # Disable errcheck for test files
+      - path: _test\.go
+        linters:
+          - errcheck
+      # Disable errcheck for write operations
+      - text: "Error return value of.*Write.* is not checked"
+        linters:
+          - errcheck
+      # Ignore unused test mocks and helpers
+      - path: _test\.go
+        text: "(type|func).*(is unused)"
+        linters:
+          - unused
+      # Ignore unused msgPool (future optimization)
+      - path: dns/server\.go
+        text: "var msgPool is unused"
+        linters:
+          - unused
+      # Ignore unused prepared statement fields (future use)
+      - path: storage/sqlite\.go
+        text: "field (stmtGetRecentQueries|stmtGetStatistics) is unused"
+        linters:
+          - unused
+      # Ignore blank identifier assignments in tests
+      - path: _test\.go
+        text: "S1005:"
+        linters:
+          - staticcheck
+
 issues:
   max-issues-per-linter: 0
   max-same-issues: 0
-  exclude-rules:
-    # Disable errcheck for test files
-    - path: _test\.go
-      linters:
-        - errcheck
-    # Disable errcheck for write operations
-    - text: "Error return value of.*Write.* is not checked"
-      linters:
-        - errcheck
-    # Ignore unused test mocks and helpers
-    - path: _test\.go
-      text: "(type|func).*(is unused)"
-      linters:
-        - unused
-    # Ignore unused msgPool (future optimization)
-    - path: dns/server\.go
-      text: "var msgPool is unused"
-      linters:
-        - unused
-    # Ignore unused prepared statement fields (future use)
-    - path: storage/sqlite\.go
-      text: "field (stmtGetRecentQueries|stmtGetStatistics) is unused"
-      linters:
-        - unused
-    # Ignore blank identifier assignments in tests
-    - path: _test\.go
-      text: "S1005:"
-      linters:
-        - staticcheck
