@@ -536,9 +536,7 @@ func BenchmarkMemoryAllocation_ResponseWriter(b *testing.B) {
 	b.ReportAllocs()
 
 	for i := 0; i < b.N; i++ {
-		writer := &mockResponseWriter{
-			remoteAddr: &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 12345},
-		}
+		writer := &mockResponseWriter{}
 		_ = writer
 	}
 }

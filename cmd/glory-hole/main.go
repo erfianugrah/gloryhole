@@ -95,7 +95,8 @@ func main() {
 		blocklistMgr = blocklist.NewManager(cfg, logger)
 
 		// Start blocklist manager (downloads lists and starts auto-update)
-		if err := blocklistMgr.Start(ctx); err != nil {
+		err = blocklistMgr.Start(ctx)
+		if err != nil {
 			logger.Error("Failed to start blocklist manager", "error", err)
 			// Continue anyway - server can run without blocklists
 		} else {

@@ -360,9 +360,9 @@ func TestHelperFunctionsInExpressions(t *testing.T) {
 	engine := NewEngine()
 
 	tests := []struct {
-		context  Context
 		rule     *Rule
 		name     string
+		context  Context
 		expected bool
 	}{
 		{

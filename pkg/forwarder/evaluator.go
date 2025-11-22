@@ -9,13 +9,13 @@ import (
 
 // ConditionalRule represents a compiled conditional forwarding rule
 type ConditionalRule struct {
-	Name           string
-	Priority       int
-	DomainMatcher  *DomainMatcher
-	CIDRMatcher    *CIDRMatcher
+	DomainMatcher    *DomainMatcher
+	CIDRMatcher      *CIDRMatcher
 	QueryTypeMatcher *QueryTypeMatcher
-	Upstreams      []string
-	Enabled        bool
+	Name             string
+	Upstreams        []string
+	Priority         int
+	Enabled          bool
 }
 
 // RuleEvaluator evaluates conditional forwarding rules

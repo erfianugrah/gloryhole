@@ -163,8 +163,6 @@ func TestWatcherClose(t *testing.T) {
 		t.Errorf("Close() failed: %v", err)
 	}
 
-	// Multiple closes should not panic
-	if err := watcher.Close(); err != nil {
-		// This is OK - second close might return error
-	}
+	// Multiple closes should not panic (error is expected but ignored)
+	_ = watcher.Close()
 }

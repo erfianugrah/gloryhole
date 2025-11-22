@@ -135,10 +135,9 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 					Upstream:       upstream,
 				}
 
-				if err := h.Storage.LogQuery(logCtx, queryLog); err != nil {
-					// Silently fail - don't let logging errors affect DNS service
-					// In production, this would go to a separate error log
-				}
+				// Silently fail - don't let logging errors affect DNS service
+				// In production, this would go to a separate error log
+				_ = h.Storage.LogQuery(logCtx, queryLog)
 			}()
 		}
 	}()
@@ -622,7 +621,7 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 			dns.TypeToString[qtype],
 		)
 
-		if upstreams != nil && len(upstreams) > 0 {
+		if len(upstreams) > 0 {
 			// Rule matched - forward to conditional upstreams
 			resp, err := h.Forwarder.ForwardWithUpstreams(ctx, r, upstreams)
 			if err != nil {

@@ -4,22 +4,22 @@ import "time"
 
 // ConditionalForwardingConfig holds conditional forwarding configuration
 type ConditionalForwardingConfig struct {
-	Enabled bool             `yaml:"enabled"`
 	Rules   []ForwardingRule `yaml:"rules"`
+	Enabled bool             `yaml:"enabled"`
 }
 
 // ForwardingRule defines a conditional forwarding rule
 type ForwardingRule struct {
 	Name        string        `yaml:"name"`
-	Priority    int           `yaml:"priority"`     // Higher priority = evaluated first (default: 50)
-	Domains     []string      `yaml:"domains"`      // Domain patterns to match (*.local, nas.local, etc.)
-	ClientCIDRs []string      `yaml:"client_cidrs"` // Client IP ranges to match (10.0.0.0/8, etc.)
-	QueryTypes  []string      `yaml:"query_types"`  // Query types to match (A, AAAA, PTR, etc.)
-	Upstreams   []string      `yaml:"upstreams"`    // Upstream DNS servers to forward to
-	Failover    bool          `yaml:"failover"`     // Try next upstream on failure
-	Timeout     time.Duration `yaml:"timeout"`      // Per-rule timeout (default: use forwarder timeout)
-	MaxRetries  int           `yaml:"max_retries"`  // Max retries per upstream (default: use forwarder retries)
-	Enabled     bool          `yaml:"enabled"`      // Enable/disable this rule
+	Domains     []string      `yaml:"domains"`
+	ClientCIDRs []string      `yaml:"client_cidrs"`
+	QueryTypes  []string      `yaml:"query_types"`
+	Upstreams   []string      `yaml:"upstreams"`
+	Priority    int           `yaml:"priority"`
+	Timeout     time.Duration `yaml:"timeout"`
+	MaxRetries  int           `yaml:"max_retries"`
+	Failover    bool          `yaml:"failover"`
+	Enabled     bool          `yaml:"enabled"`
 }
 
 // DefaultConditionalForwardingConfig returns default configuration
@@ -84,11 +84,11 @@ func (r *ForwardingRule) Validate() error {
 
 // Errors for validation
 var (
-	ErrInvalidName            = &ConfigError{Field: "name", Message: "rule name cannot be empty"}
-	ErrNoUpstreams            = &ConfigError{Field: "upstreams", Message: "at least one upstream is required"}
-	ErrInvalidUpstream        = &ConfigError{Field: "upstreams", Message: "upstream cannot be empty"}
-	ErrInvalidPriority        = &ConfigError{Field: "priority", Message: "priority must be between 1 and 100"}
-	ErrNoMatchingConditions   = &ConfigError{Field: "rules", Message: "at least one matching condition required (domains, client_cidrs, or query_types)"}
+	ErrInvalidName          = &ConfigError{Field: "name", Message: "rule name cannot be empty"}
+	ErrNoUpstreams          = &ConfigError{Field: "upstreams", Message: "at least one upstream is required"}
+	ErrInvalidUpstream      = &ConfigError{Field: "upstreams", Message: "upstream cannot be empty"}
+	ErrInvalidPriority      = &ConfigError{Field: "priority", Message: "priority must be between 1 and 100"}
+	ErrNoMatchingConditions = &ConfigError{Field: "rules", Message: "at least one matching condition required (domains, client_cidrs, or query_types)"}
 )
 
 // ConfigError represents a configuration validation error
