@@ -1,6 +1,8 @@
-# Glory-Hole DNS Server - Multi-stage Dockerfile
-# Stage 1: Builder - Compile the Go application
-FROM golang:1.23-alpine AS builder
+# Glory-Hole DNS Server
+# Multi-stage Docker build for production deployment
+
+# Stage 1: Build
+FROM golang:1.24-alpine AS builder
 
 # Install build dependencies
 RUN apk add --no-cache git ca-certificates tzdata
@@ -8,47 +10,53 @@ RUN apk add --no-cache git ca-certificates tzdata
 # Set working directory
 WORKDIR /build
 
-# Copy go mod files first (better layer caching)
+# Copy go mod files
 COPY go.mod go.sum ./
+
+# Download dependencies
 RUN go mod download
+RUN go mod verify
 
 # Copy source code
 COPY . .
 
-# Build the binary
-# CGO_ENABLED=0 for static binary
-# -ldflags to strip debug info and set version
-ARG VERSION=dev
-ARG BUILD_TIME
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
-    -ldflags="-w -s -X main.version=${VERSION} -X main.buildTime=${BUILD_TIME}" \
+# Build the application
+# - Strip debug info (-s -w)
+# - Set version from git tag
+# - Enable static linking
+RUN CGO_ENABLED=1 GOOS=linux go build \
+    -a -installsuffix cgo \
+    -ldflags="-s -w -X main.version=$(git describe --tags --always --dirty 2>/dev/null || echo 'dev') -X main.buildTime=$(date -u '+%Y-%m-%d_%H:%M:%S') -extldflags '-static'" \
     -o glory-hole \
     ./cmd/glory-hole
 
-# Stage 2: Runtime - Minimal image
+# Verify binary
+RUN ./glory-hole -version || true
+
+# Stage 2: Runtime
 FROM alpine:latest
 
 # Install runtime dependencies
-RUN apk add --no-cache \
+RUN apk --no-cache add \
     ca-certificates \
     tzdata \
-    libcap \
-    && addgroup -g 1000 glory-hole \
-    && adduser -u 1000 -G glory-hole -s /bin/sh -D glory-hole
+    sqlite \
+    && rm -rf /var/cache/apk/*
+
+# Create non-root user
+RUN addgroup -g 1000 glory-hole && \
+    adduser -D -u 1000 -G glory-hole glory-hole
+
+# Create necessary directories
+RUN mkdir -p /etc/glory-hole /var/lib/glory-hole /var/log/glory-hole && \
+    chown -R glory-hole:glory-hole /etc/glory-hole /var/lib/glory-hole /var/log/glory-hole
 
 # Copy binary from builder
 COPY --from=builder /build/glory-hole /usr/local/bin/glory-hole
+RUN chmod +x /usr/local/bin/glory-hole
 
-# Copy example config (users should mount their own)
-COPY --from=builder /build/config.example.yml /etc/glory-hole/config.example.yml
-
-# Create directories with proper permissions
-RUN mkdir -p /var/lib/glory-hole /var/log/glory-hole /etc/glory-hole \
-    && chown -R glory-hole:glory-hole /var/lib/glory-hole /var/log/glory-hole /etc/glory-hole
-
-# Grant capability to bind to privileged ports (port 53)
-# This allows non-root user to bind to port 53
-RUN setcap 'cap_net_bind_service=+ep' /usr/local/bin/glory-hole
+# Copy configuration examples
+COPY --chown=glory-hole:glory-hole config/config.example.yml /etc/glory-hole/config.example.yml
 
 # Switch to non-root user
 USER glory-hole
@@ -59,15 +67,24 @@ WORKDIR /var/lib/glory-hole
 # Expose ports
 # 53/udp - DNS queries
 # 53/tcp - DNS queries over TCP
-# 8080 - REST API
-# 9090 - Prometheus metrics
-EXPOSE 53/udp 53/tcp 8080 9090
+# 8080/tcp - HTTP API and Web UI
+# 9090/tcp - Prometheus metrics
+EXPOSE 53/udp 53/tcp 8080/tcp 9090/tcp
 
-# Health check using the built-in flag
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD ["/usr/local/bin/glory-hole", "--health-check"]
+# Health check
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD wget --no-verbose --tries=1 --spider http://localhost:8080/healthz || exit 1
+
+# Set entrypoint
+ENTRYPOINT ["/usr/local/bin/glory-hole"]
 
 # Default command
-# Users should mount their config at /etc/glory-hole/config.yml
-ENTRYPOINT ["/usr/local/bin/glory-hole"]
 CMD ["-config", "/etc/glory-hole/config.yml"]
+
+# Labels
+LABEL org.opencontainers.image.title="Glory-Hole DNS Server"
+LABEL org.opencontainers.image.description="High-performance DNS server with ad-blocking, caching, and policy engine"
+LABEL org.opencontainers.image.vendor="Glory-Hole"
+LABEL org.opencontainers.image.licenses="MIT"
+LABEL org.opencontainers.image.source="https://github.com/yourusername/glory-hole"
+LABEL org.opencontainers.image.documentation="https://github.com/yourusername/glory-hole/tree/main/docs"

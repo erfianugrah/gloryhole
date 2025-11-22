@@ -1,25 +1,36 @@
 # Git
-.git
+.git/
 .gitignore
-.github
+.github/
+
+# Documentation
+*.md
+docs/
+examples/
 
 # Build artifacts
-glory-hole
-glory-hole-*
-*.exe
-*.dll
+*.o
 *.so
 *.dylib
-
-# Test binary, built with `go test -c`
 *.test
-
-# Output of the go coverage tool
 *.out
 coverage.out
+coverage_final.out
+*.prof
 
-# Dependency directories
-vendor/
+# Binaries
+glory-hole
+glory-hole-*
+
+# Config files (use volume mounts)
+config.yml
+*.db
+*.sqlite
+*.sqlite3
+
+# Logs
+*.log
+logs/
 
 # IDE
 .vscode/
@@ -27,26 +38,18 @@ vendor/
 *.swp
 *.swo
 *~
+
+# OS
 .DS_Store
+Thumbs.db
 
-# Documentation (not needed in image)
-*.md
-!README.md
-docs/
-cf-docs/
+# Test data
+test_output.txt
+test_final.txt
+testdata/
 
-# Config files (will be mounted)
-config.yml
-config.test.yml
-config.blocklist-test.yml
-*.db
-*.db-shm
-*.db-wal
-
-# Scripts
-test-dns.sh
-
-# Temporary files
-tmp/
-temp/
-*.tmp
+# Deployment
+deploy/
+docker-compose*.yml
+Dockerfile
+.dockerignore

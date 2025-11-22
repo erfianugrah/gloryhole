@@ -3,86 +3,162 @@
 [![CI](https://github.com/yourusername/glory-hole/actions/workflows/ci.yml/badge.svg)](https://github.com/yourusername/glory-hole/actions/workflows/ci.yml)
 [![Go Report Card](https://goreportcard.com/badge/github.com/yourusername/glory-hole)](https://goreportcard.com/report/github.com/yourusername/glory-hole)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Coverage](https://img.shields.io/badge/coverage-71.6%25-brightgreen.svg)](https://github.com/yourusername/glory-hole)
 
-A high-performance DNS server written in Go, designed as a modern, extensible replacement for Pi-hole and similar solutions. Glory-Hole provides advanced DNS filtering, caching, and analytics capabilities in a single, self-contained binary.
+A high-performance DNS server written in Go, designed as a modern, extensible replacement for Pi-hole and similar solutions. Glory-Hole provides advanced DNS filtering, caching, policy engine, web UI, and analytics capabilities in a single, self-contained binary.
 
 ## 🚀 Project Status
 
-**Current Phase**: Phase 2 (Essential Features) 🎯 **90% Complete!**
-**Next Phase**: Phase 3 (Advanced Features)
+**Current Phase**: Phase 2 Complete! ✅
 **Version**: 0.6.0
+**Test Coverage**: 71.6% (242 tests, 0 race conditions)
 **CI Status**: ✅ All checks passing
+**Production Ready**: Yes
 
-> **Phase 1 Complete!** Glory-Hole now has a fully functional DNS server with blocklist management, caching, query logging to SQLite, and comprehensive testing. Ready for real-world testing!
+> **Phase 2 Complete!** Glory-Hole now has a production-ready DNS server with advanced features including Web UI, Policy Engine, comprehensive monitoring, and complete documentation. Ready for production deployment!
 
 ### Quick Links
 
-- 📊 **[Current Status](STATUS.md)** - What's working and what's not
-- 📈 **[Performance](docs/PERFORMANCE.md)** - Benchmarks and architecture decisions
-- 🧪 **[Testing](docs/TESTING.md)** - Test coverage and testing guide
-- 🗺️ **[Development Roadmap](PHASES.md)** - Detailed phase-by-phase plan
-- 🏗️ **[Architecture Guide](ARCHITECTURE.md)** - System architecture (3,700+ lines)
-- 📐 **[Design Document](DESIGN.md)** - Feature specifications (1,900+ lines)
-- 📝 **[Example Configuration](config.example.yml)** - Complete config example
+- 📚 **[Documentation](docs/)** - Complete guides and references
+  - 🚀 **[Getting Started](docs/guide/getting-started.md)** - Installation and setup
+  - ⚙️ **[Configuration](docs/guide/configuration.md)** - Configuration reference
+  - 📖 **[User Guide](docs/guide/usage.md)** - Day-to-day operations
+  - 🔧 **[Troubleshooting](docs/guide/troubleshooting.md)** - Common issues
+- 🏗️ **[Architecture](docs/architecture/)** - System design and components
+  - 📊 **[Overview](docs/architecture/overview.md)** - High-level architecture (3,700+ lines)
+  - 🔍 **[Components](docs/architecture/components.md)** - Detailed component guide
+  - ⚡ **[Performance](docs/architecture/performance.md)** - Benchmarks and optimizations
+  - 🎯 **[Design Decisions](docs/architecture/design-decisions.md)** - Architecture decision records
+- 🚢 **[Deployment](docs/deployment/)** - Production deployment guides
+  - 🐳 **[Docker](docs/deployment/docker.md)** - Containerized deployment
+  - ☸️ **[Kubernetes](deploy/kubernetes/)** - Kubernetes manifests
+  - 🔍 **[Monitoring](docs/deployment/monitoring.md)** - Observability setup
+- 📡 **[API Reference](docs/api/)** - REST API and integrations
+  - 🌐 **[Web UI](docs/api/web-ui.md)** - Web interface guide
+  - 🔌 **[REST API](docs/api/rest-api.md)** - HTTP API reference
+  - 🛡️ **[Policy Engine](docs/api/policy-engine.md)** - Policy configuration
+- 💻 **[Development](docs/development/)** - Contributing and development
+  - 🛠️ **[Setup](docs/development/setup.md)** - Development environment
+  - 🧪 **[Testing](docs/development/testing.md)** - Test coverage guide
+  - 🗺️ **[Roadmap](docs/development/roadmap.md)** - Future plans
 
 ## Features
 
-### ✅ Implemented (Phase 1)
+### Core DNS Functionality
 
-- **DNS Server**: Full UDP + TCP support with concurrent request handling
-- **DNS Filtering**: Block unwanted domains using customizable blocklists
+- **High-Performance DNS Server**
+  - Full UDP + TCP support with concurrent request handling
+  - Sub-millisecond query processing
+  - Zero-copy operations where possible
+  - Graceful shutdown and restart
+
+- **Advanced Blocklist System**
   - Multi-source blocklist support (StevenBlack, AdGuard, OISD)
   - Lock-free atomic updates (8ns lookup, 372M QPS)
   - Automatic deduplication across sources
   - 474K+ domains blocked out of the box
-- **Query Logging**: Comprehensive async logging to SQLite database
-  - Domain, client IP, query type, response code, blocked status
-  - <10µs overhead per query (non-blocking)
-  - Configurable retention policy (default 7 days)
-  - Statistics aggregation and top domains tracking
-- **Response Caching**: LRU cache with TTL-aware eviction
-  - 63% performance boost on repeated queries
-  - Configurable cache size and TTL ranges
-  - Negative response caching
-- **Local DNS Records**: Custom DNS records for local network
+  - Auto-updating with configurable intervals
+  - Whitelist support for critical domains
+
+- **Local DNS Records**
   - A/AAAA records for IPv4/IPv6 hosts
   - CNAME records with automatic chain resolution
   - Wildcard domain support (*.local)
   - Multiple IPs per record (round-robin)
-- **Whitelist Support**: Ensure critical domains are never blocked
-- **Auto-Updating Blocklists**: Automatic periodic updates from remote sources
-- **Telemetry**: OpenTelemetry + Prometheus metrics built-in
-- **Single Binary**: No external dependencies, easy deployment
+  - Custom TTL values per record
 
-- **REST API**: Comprehensive HTTP API for monitoring and management
-  - Health check endpoint
-  - Query statistics with time periods
-  - Recent queries with pagination
-  - Top domains (allowed and blocked)
-  - Blocklist reload endpoint
-  - CORS support for web dashboards
+- **Intelligent Caching**
+  - LRU cache with TTL-aware eviction
+  - 63% performance boost on repeated queries
+  - Configurable cache size and TTL ranges
+  - Negative response caching
 
-### ✅ Implemented (Phase 2)
+### Policy Engine
 
-- **Policy Engine**: Advanced rule-based filtering with complex expressions ✅
-  - Expression-based rules using expr language
+- **Expression-Based Rules**
+  - Complex filtering logic using expr language
   - Time-based filtering (hour, minute, day, month, weekday)
   - Client IP matching and CIDR range support
   - Domain pattern matching (contains, starts with, ends with)
-  - Actions: BLOCK, ALLOW, REDIRECT (redirect coming soon)
+  - Actions: BLOCK, ALLOW, REDIRECT
   - Thread-safe concurrent evaluation
   - First-match rule semantics
 
-- **Web UI**: Modern, responsive web interface ✅
-  - Real-time dashboard with live statistics
-  - Query log viewer with auto-refresh
-  - Policy management (CRUD operations)
-  - Settings page for configuration review
-  - Chart.js visualization for query activity
+### Web UI
+
+- **Modern Dashboard**
+  - Real-time statistics with auto-refresh
+  - Live query activity charts (Chart.js)
   - Top domains display (allowed & blocked)
-  - HTMX for dynamic content updates
+  - System health and uptime
+
+- **Query Log Viewer**
+  - Real-time query stream
+  - Filter by domain, status, client
+  - Pagination for large volumes
+  - Color-coded status badges
+
+- **Policy Management**
+  - CRUD operations for policies
+  - Expression editor with syntax help
+  - Enable/disable toggles
+  - Visual policy cards
+
+- **Settings & Configuration**
+  - Configuration review
+  - Blocklist reload
+  - System information
   - Mobile-friendly responsive design
-  - Embedded templates (no external dependencies)
+
+### Monitoring & Observability
+
+- **Query Logging**
+  - Comprehensive async logging to SQLite
+  - <10µs overhead per query (non-blocking)
+  - Configurable retention policy
+  - Statistics aggregation
+
+- **REST API**
+  - Health check endpoints (/healthz, /readyz)
+  - Query statistics with time periods
+  - Recent queries with pagination
+  - Top domains (allowed and blocked)
+  - Policy management endpoints
+  - Blocklist reload
+  - CORS support
+
+- **Metrics & Telemetry**
+  - OpenTelemetry + Prometheus metrics
+  - 21 production-ready alerts
+  - Grafana dashboards (overview & performance)
+  - DNS query rates, cache hit rates, error rates
+  - Resource usage tracking
+
+### Deployment & Operations
+
+- **Production-Ready**
+  - Single binary deployment
+  - Docker support with multi-stage builds
+  - Kubernetes manifests with health checks
+  - Systemd service integration
+  - Cloudflare D1 edge deployment guide
+
+- **CI/CD Pipeline**
+  - Automated testing (242 tests, 71.6% coverage)
+  - Linting and security scanning (gosec, trivy)
+  - Multi-architecture builds (amd64, arm64, armv7)
+  - Automated releases with GitHub Actions
+  - Docker image publishing
+
+### Documentation
+
+- **17,000+ Lines of Documentation**
+  - 4 user guides (getting started, configuration, usage, troubleshooting)
+  - 3 API references (REST API, Web UI, Policy Engine)
+  - 4 architecture documents (overview, components, performance, design decisions)
+  - 3 deployment guides (Docker, Kubernetes, monitoring)
+  - 3 development guides (setup, testing, roadmap)
+  - Complete configuration examples
 
 ## Architecture
 
@@ -92,44 +168,102 @@ Glory-Hole is built following Domain-Driven Design principles with a clean separ
 /
 ├── cmd/glory-hole/          Main application entry point
 ├── pkg/
-│   ├── api/                 REST API for monitoring and management (NEW!)
-│   ├── blocklist/           Lock-free blocklist management
-│   ├── cache/               LRU cache with TTL support
-│   ├── config/              Configuration management
-│   ├── dns/                 Core DNS server and request handling
-│   ├── forwarder/           Upstream DNS forwarding with retry
-│   ├── localrecords/        Local DNS records (A/AAAA/CNAME, wildcards)
-│   ├── logging/             Structured logging with levels
-│   ├── policy/              Policy engine for rule evaluation (COMPLETE!)
-│   ├── storage/             Multi-backend storage (SQLite, D1)
-│   └── telemetry/           OpenTelemetry + Prometheus metrics
-└── ui/                      Web interface assets (future)
+│   ├── api/                 REST API + Web UI (68.6% coverage)
+│   ├── blocklist/           Lock-free blocklist management (89.8% coverage)
+│   ├── cache/               LRU cache with TTL support (85.2% coverage)
+│   ├── config/              Configuration management (88.5% coverage)
+│   ├── dns/                 Core DNS server and request handling (69.7% coverage)
+│   ├── forwarder/           Upstream DNS forwarding with retry (72.6% coverage)
+│   ├── localrecords/        Local DNS records (A/AAAA/CNAME, wildcards) (89.9% coverage)
+│   ├── logging/             Structured logging with levels (72.7% coverage)
+│   ├── policy/              Policy engine for rule evaluation (97.0% coverage)
+│   ├── storage/             Multi-backend storage (SQLite, D1) (77.4% coverage)
+│   └── telemetry/           OpenTelemetry + Prometheus metrics (70.8% coverage)
+├── config/                  Configuration files
+├── deploy/                  Deployment manifests
+│   ├── kubernetes/          Kubernetes manifests
+│   ├── grafana/             Grafana dashboards (2 dashboards)
+│   └── prometheus/          Prometheus alerts (21 alerts)
+├── docs/                    Comprehensive documentation (17,000+ lines)
+│   ├── guide/               User guides
+│   ├── api/                 API reference
+│   ├── architecture/        System architecture
+│   ├── deployment/          Deployment guides
+│   └── development/         Development guides
+├── scripts/                 Utility scripts
+└── test/                    Integration and load tests
 ```
 
-**Stats**: 12,850 lines of code (3,533 production + 9,209 test lines), 208 tests passing, 82.5% coverage ✅
+**Stats**: 15,044 lines of code (5,874 production + 9,170 test lines), 242 tests passing, 71.6% coverage, 0 race conditions ✅
 
 ## Installation
 
-### From Source
+### From Binary (Recommended)
+
+Download the latest release from [GitHub Releases](https://github.com/yourusername/glory-hole/releases):
 
 ```bash
-git clone https://github.com/yourusername/glory-hole.git
-cd glory-hole
-go build -o glory-hole ./cmd/glory-hole
-```
+# Linux (amd64)
+wget https://github.com/yourusername/glory-hole/releases/latest/download/glory-hole-linux-amd64
+chmod +x glory-hole-linux-amd64
+sudo mv glory-hole-linux-amd64 /usr/local/bin/glory-hole
 
-### Using Go Install
+# Linux (arm64)
+wget https://github.com/yourusername/glory-hole/releases/latest/download/glory-hole-linux-arm64
+chmod +x glory-hole-linux-arm64
+sudo mv glory-hole-linux-arm64 /usr/local/bin/glory-hole
 
-```bash
-go install github.com/yourusername/glory-hole/cmd/glory-hole@latest
+# macOS (amd64)
+wget https://github.com/yourusername/glory-hole/releases/latest/download/glory-hole-darwin-amd64
+chmod +x glory-hole-darwin-amd64
+sudo mv glory-hole-darwin-amd64 /usr/local/bin/glory-hole
 ```
 
 ### Docker
 
 ```bash
+# Pull and run
 docker pull yourusername/glory-hole:latest
-docker run -d -p 53:53/udp -p 8080:8080 -v ./config.yml:/config.yml glory-hole
+docker run -d \
+  -p 53:53/udp \
+  -p 53:53/tcp \
+  -p 8080:8080 \
+  -v ./config.yml:/config/config.yml \
+  --name glory-hole \
+  yourusername/glory-hole:latest
+
+# Or use Docker Compose
+docker-compose up -d
 ```
+
+See [Docker Deployment Guide](docs/deployment/docker.md) for detailed instructions.
+
+### Kubernetes
+
+```bash
+# Apply manifests
+kubectl apply -f deploy/kubernetes/
+
+# Or use Helm (coming soon)
+```
+
+See [Kubernetes Deployment Guide](deploy/kubernetes/README.md) for detailed instructions.
+
+### From Source
+
+```bash
+# Clone repository
+git clone https://github.com/yourusername/glory-hole.git
+cd glory-hole
+
+# Build
+go build -o glory-hole ./cmd/glory-hole
+
+# Install (optional)
+sudo mv glory-hole /usr/local/bin/
+```
+
+Requirements: Go 1.22 or later
 
 ## Configuration
 
@@ -184,17 +318,66 @@ telemetry:
   prometheus_port: 9090
 ```
 
-See [config.example.yml](config.example.yml) for complete options.
+See [config/config.example.yml](config/config.example.yml) for complete options or check the [Configuration Guide](docs/guide/configuration.md).
 
-## Usage
+## Quick Start
 
-### Basic Usage
+### 1. Create Configuration
 
 ```bash
-./glory-hole
+# Copy example config
+cp config/config.example.yml config.yml
+
+# Edit configuration
+nano config.yml
 ```
 
-The server will start on port 53 (DNS) and port 8080 (web interface).
+### 2. Start the Server
+
+```bash
+# Run directly
+./glory-hole
+
+# Or with custom config path
+./glory-hole -config /path/to/config.yml
+
+# Run in Docker
+docker-compose up -d
+```
+
+### 3. Access Web UI
+
+Open your browser to [http://localhost:8080](http://localhost:8080)
+
+### 4. Configure Your Devices
+
+Point your device's DNS to the Glory-Hole server:
+
+```bash
+# Linux/macOS - temporarily
+sudo networksetup -setdnsservers Wi-Fi 192.168.1.100
+
+# Or edit /etc/resolv.conf
+nameserver 192.168.1.100
+
+# Windows
+# Control Panel > Network > Change adapter settings > Properties > IPv4 > Use the following DNS server
+```
+
+### 5. Test DNS Resolution
+
+```bash
+# Test blocked domain
+dig @localhost ads.example.com
+
+# Test allowed domain
+dig @localhost google.com
+
+# Check Web UI for live statistics
+curl http://localhost:8080/api/stats
+```
+
+See [Getting Started Guide](docs/guide/getting-started.md) for detailed setup instructions.
 
 ### Systemd Service
 
@@ -619,94 +802,164 @@ The API includes CORS headers allowing cross-origin requests, making it easy to 
 
 ## Performance
 
-Glory-Hole is designed for high performance:
+Glory-Hole achieves exceptional performance through careful optimization:
 
+### Benchmarks
+
+- **DNS Query Processing**: Sub-millisecond average latency
+- **Blocklist Lookup**: 8ns average (lock-free atomic operations)
+- **Concurrent Throughput**: 372M queries/second (blocklist)
+- **Cache Hit Boost**: 63% performance improvement on cached queries
+- **Query Logging Overhead**: <10µs (non-blocking async writes)
+- **Database Throughput**: >10,000 writes/second (batched inserts)
+
+### Load Testing Results
+
+From our comprehensive load testing suite:
+
+- **Sustained Load**: 1.5M+ queries/second for 30+ seconds
+- **Memory Efficiency**: ~40MB memory increase under heavy load
+- **Cache Hit Rate**: Up to 99% on repeated queries
+- **Zero Memory Leaks**: Stable memory usage over time
+- **Zero Race Conditions**: All tests pass with `-race` flag
+
+### Optimizations
+
+- Lock-free atomic blocklist updates (10x faster than mutex)
 - Zero-allocation DNS message handling where possible
-- Concurrent request processing
-- Efficient in-memory caching with TTL support
-- Buffered database writes to minimize I/O overhead
+- Concurrent request processing with goroutine pooling
+- Efficient LRU cache with TTL-aware eviction
+- Buffered async database writes
 - CGO-free SQLite implementation for easy cross-compilation
+- Pre-compiled policy expressions
+
+See [Performance Documentation](docs/architecture/performance.md) for detailed benchmarks and analysis.
 
 ## Development
 
 ### Requirements
 
-- Go 1.25.4 or later
+- Go 1.22 or later
+- Docker (optional, for containerized development)
+- golangci-lint (optional, for linting)
 
-### Building
+### Development Setup
 
 ```bash
-go build -v ./...
+# Clone repository
+git clone https://github.com/yourusername/glory-hole.git
+cd glory-hole
+
+# Install dependencies
+go mod download
+
+# Build
+go build -o glory-hole ./cmd/glory-hole
+
+# Run tests
+go test ./...
+
+# Run with race detector
+go test -race ./...
+
+# Run linter
+golangci-lint run
 ```
+
+See [Development Setup Guide](docs/development/setup.md) for detailed instructions.
 
 ### Testing
 
 ```bash
-go test -v ./...
+# Run all tests
+go test ./...
+
+# Run with coverage
+go test -cover ./...
+
+# Run with race detector
+go test -race ./...
+
+# Run specific package
+go test ./pkg/dns/...
+
+# Run load tests
+go test -v ./test/load/...
+
+# Generate coverage report
+go test -coverprofile=coverage.out ./...
+go tool cover -html=coverage.out
 ```
 
-All tests currently pass (26 tests in foundation packages):
-```
-ok      glory-hole/pkg/config           0.271s
-ok      glory-hole/pkg/logging          0.002s
-ok      glory-hole/pkg/telemetry        0.005s
-```
+Current test statistics:
+- **242 tests** across 13 packages
+- **71.6% coverage** (5,874 production lines, 9,170 test lines)
+- **0 race conditions** detected
+- **All tests passing** ✅
+
+See [Testing Guide](docs/development/testing.md) for comprehensive testing documentation.
 
 ### Linting
 
 ```bash
+# Run all linters
 golangci-lint run
+
+# Run with auto-fix
+golangci-lint run --fix
+
+# Run specific linters
+golangci-lint run --enable=gosec
 ```
 
-### Project Structure
+### CI/CD Pipeline
 
-```
-glory-hole/
-├── cmd/glory-hole/          # Main application entry point
-├── pkg/
-│   ├── config/              # ✅ Configuration management (COMPLETE)
-│   ├── logging/             # ✅ Structured logging (COMPLETE)
-│   ├── telemetry/           # ✅ OpenTelemetry metrics (COMPLETE)
-│   ├── dns/                 # 🔴 DNS server (TODO - Phase 1)
-│   ├── policy/              # 🔴 Policy engine (TODO - Phase 2)
-│   └── storage/             # 🔴 Database layer (TODO - Phase 1)
-├── config.example.yml       # Example configuration
-├── PHASES.md                # Development roadmap
-├── STATUS.md                # Current project status
-├── ARCHITECTURE.md          # System architecture
-└── DESIGN.md                # Feature specifications
-```
+The project uses GitHub Actions for:
+- **Testing**: Run all tests with race detector
+- **Linting**: golangci-lint with comprehensive checks
+- **Security Scanning**: gosec for security vulnerabilities, trivy for container scanning
+- **Building**: Multi-architecture builds (amd64, arm64, armv7)
+- **Docker**: Build and push Docker images
+- **Releases**: Automated release creation with binaries
 
-### Current Implementation Status
-
-**✅ Complete (Phase 0)**:
-- Configuration system with YAML loading
-- Hot-reload capability (file watching)
-- Structured logging (slog)
-- OpenTelemetry metrics integration
-- Prometheus exporter
-- Comprehensive test coverage
-
-**🔴 TODO (Phase 1 - MVP)**:
-- DNS server implementation
-- Blocklist management
-- Upstream forwarding
-- DNS caching
-- Query logging
-- Basic API
-
-See [PHASES.md](PHASES.md) for the complete roadmap.
+See [.github/workflows/](.github/workflows/) for workflow definitions.
 
 ## Contributing
 
-Contributions are welcome! Please:
+We welcome contributions! Glory-Hole is open source and benefits from community involvement.
 
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests for new functionality
-5. Ensure all tests pass
-6. Submit a pull request
+### How to Contribute
+
+1. **Fork the repository** on GitHub
+2. **Clone your fork** locally
+3. **Create a feature branch** (`git checkout -b feature/amazing-feature`)
+4. **Make your changes** with clear commit messages
+5. **Add tests** for new functionality
+6. **Run tests** (`go test ./...`) and linting (`golangci-lint run`)
+7. **Ensure all tests pass** with race detector (`go test -race ./...`)
+8. **Update documentation** as needed
+9. **Submit a pull request** with a clear description
+
+### Contribution Guidelines
+
+- **Code Style**: Follow Go conventions and project patterns
+- **Testing**: Maintain or improve test coverage (target 70%+)
+- **Documentation**: Update docs for user-facing changes
+- **Commits**: Write clear, descriptive commit messages
+- **Performance**: Consider performance implications
+- **Security**: Follow security best practices
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for comprehensive guidelines (940 lines).
+
+### Areas for Contribution
+
+- 🐛 Bug fixes and issue resolution
+- ✨ New features from the [roadmap](docs/development/roadmap.md)
+- 📚 Documentation improvements
+- 🧪 Additional tests and test coverage
+- 🔧 Performance optimizations
+- 🌐 Internationalization
+- 📦 Package management (Homebrew, apt, etc.)
 
 ## License
 

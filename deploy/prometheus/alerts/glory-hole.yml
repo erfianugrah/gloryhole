@@ -1,0 +1,279 @@
+# Prometheus Alert Rules for Glory-Hole DNS Server
+# These rules define conditions that trigger alerts for monitoring the DNS server
+
+groups:
+  - name: glory_hole_dns_alerts
+    interval: 30s
+    rules:
+      # Critical Alerts - Immediate attention required
+
+      - alert: DNSServerDown
+        expr: up{job="glory-hole"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          component: dns-server
+        annotations:
+          summary: "DNS Server is down"
+          description: "Glory-Hole DNS server instance {{ $labels.instance }} has been down for more than 1 minute."
+
+      - alert: HighDNSErrorRate
+        expr: |
+          (
+            sum(rate(dns_queries_total{job="glory-hole"}[5m]))
+            - sum(rate(dns_queries_blocked{job="glory-hole"}[5m]))
+            - sum(rate(dns_queries_forwarded{job="glory-hole"}[5m]))
+          )
+          / sum(rate(dns_queries_total{job="glory-hole"}[5m])) > 0.05
+        for: 5m
+        labels:
+          severity: critical
+          component: dns-server
+        annotations:
+          summary: "High DNS error rate detected"
+          description: "DNS error rate is {{ $value | humanizePercentage }} on instance {{ $labels.instance }} (threshold: 5%)"
+
+      - alert: HighDNSLatency
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(dns_query_duration_bucket{job="glory-hole"}[5m])) by (le, instance)
+          ) > 100
+        for: 5m
+        labels:
+          severity: critical
+          component: dns-server
+        annotations:
+          summary: "High DNS query latency"
+          description: "P95 DNS query latency is {{ $value }}ms on instance {{ $labels.instance }} (threshold: 100ms)"
+
+      - alert: MemoryUsageCritical
+        expr: |
+          (go_memstats_alloc_bytes{job="glory-hole"}
+          / go_memstats_sys_bytes{job="glory-hole"}) > 0.90
+        for: 5m
+        labels:
+          severity: critical
+          component: system
+        annotations:
+          summary: "Critical memory usage"
+          description: "Memory usage is {{ $value | humanizePercentage }} on instance {{ $labels.instance }} (threshold: 90%)"
+
+      - alert: GoroutineLeak
+        expr: |
+          go_goroutines{job="glory-hole"} > 10000
+        for: 10m
+        labels:
+          severity: critical
+          component: system
+        annotations:
+          summary: "Potential goroutine leak detected"
+          description: "Goroutine count is {{ $value }} on instance {{ $labels.instance }}, indicating a potential leak (threshold: 10000)"
+
+      # Warning Alerts - Attention needed soon
+
+      - alert: DNSLatencyWarning
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(dns_query_duration_bucket{job="glory-hole"}[5m])) by (le, instance)
+          ) > 50
+        for: 10m
+        labels:
+          severity: warning
+          component: dns-server
+        annotations:
+          summary: "Elevated DNS query latency"
+          description: "P95 DNS query latency is {{ $value }}ms on instance {{ $labels.instance }} (threshold: 50ms)"
+
+      - alert: LowCacheHitRate
+        expr: |
+          (
+            rate(dns_cache_hits{job="glory-hole"}[10m])
+            / (rate(dns_cache_hits{job="glory-hole"}[10m]) + rate(dns_cache_misses{job="glory-hole"}[10m]))
+          ) < 0.50
+        for: 15m
+        labels:
+          severity: warning
+          component: cache
+        annotations:
+          summary: "Low cache hit rate"
+          description: "Cache hit rate is {{ $value | humanizePercentage }} on instance {{ $labels.instance }} (threshold: 50%)"
+
+      - alert: HighBlockRate
+        expr: |
+          (
+            rate(dns_queries_blocked{job="glory-hole"}[10m])
+            / rate(dns_queries_total{job="glory-hole"}[10m])
+          ) > 0.30
+        for: 15m
+        labels:
+          severity: warning
+          component: blocklist
+        annotations:
+          summary: "High block rate detected"
+          description: "Block rate is {{ $value | humanizePercentage }} on instance {{ $labels.instance }}, which may indicate aggressive blocking or unusual traffic (threshold: 30%)"
+
+      - alert: BlocklistEmpty
+        expr: |
+          blocklist_size{job="glory-hole"} == 0
+        for: 5m
+        labels:
+          severity: warning
+          component: blocklist
+        annotations:
+          summary: "Blocklist is empty"
+          description: "Blocklist size is 0 on instance {{ $labels.instance }}, blocklist may have failed to load"
+
+      - alert: HighRateLimitViolations
+        expr: |
+          rate(rate_limit_violations{job="glory-hole"}[5m]) > 10
+        for: 10m
+        labels:
+          severity: warning
+          component: rate-limiter
+        annotations:
+          summary: "High rate of rate limit violations"
+          description: "Rate limit violations are {{ $value }} per second on instance {{ $labels.instance }}, possible attack or misconfiguration (threshold: 10/s)"
+
+      - alert: MemoryUsageHigh
+        expr: |
+          (go_memstats_alloc_bytes{job="glory-hole"}
+          / go_memstats_sys_bytes{job="glory-hole"}) > 0.80
+        for: 10m
+        labels:
+          severity: warning
+          component: system
+        annotations:
+          summary: "High memory usage"
+          description: "Memory usage is {{ $value | humanizePercentage }} on instance {{ $labels.instance }} (threshold: 80%)"
+
+      - alert: HighGCFrequency
+        expr: |
+          rate(go_gc_duration_seconds_count{job="glory-hole"}[5m]) > 5
+        for: 10m
+        labels:
+          severity: warning
+          component: system
+        annotations:
+          summary: "High garbage collection frequency"
+          description: "GC is running {{ $value }} times per second on instance {{ $labels.instance }}, indicating high memory pressure (threshold: 5/s)"
+
+      - alert: CacheSizeNearLimit
+        expr: |
+          cache_size{job="glory-hole"} > 9000
+        for: 10m
+        labels:
+          severity: warning
+          component: cache
+        annotations:
+          summary: "Cache size near configured limit"
+          description: "Cache has {{ $value }} entries on instance {{ $labels.instance }}, approaching typical limit of 10000"
+
+      # Info Alerts - Informational notices
+
+      - alert: DNSQueryRateChange
+        expr: |
+          abs(
+            (rate(dns_queries_total{job="glory-hole"}[5m])
+            - rate(dns_queries_total{job="glory-hole"}[5m] offset 1h))
+            / rate(dns_queries_total{job="glory-hole"}[5m] offset 1h)
+          ) > 0.50
+        for: 10m
+        labels:
+          severity: info
+          component: dns-server
+        annotations:
+          summary: "Significant change in DNS query rate"
+          description: "DNS query rate has changed by {{ $value | humanizePercentage }} compared to 1 hour ago on instance {{ $labels.instance }}"
+
+      - alert: BlocklistUpdateNeeded
+        expr: |
+          (time() - blocklist_last_update_timestamp{job="glory-hole"}) > (7 * 24 * 3600)
+        for: 1h
+        labels:
+          severity: info
+          component: blocklist
+        annotations:
+          summary: "Blocklist not updated recently"
+          description: "Blocklist on instance {{ $labels.instance }} has not been updated in {{ $value | humanizeDuration }}, consider updating (threshold: 7 days)"
+
+      - alert: LowQueryRate
+        expr: |
+          rate(dns_queries_total{job="glory-hole"}[5m]) < 0.1
+        for: 15m
+        labels:
+          severity: info
+          component: dns-server
+        annotations:
+          summary: "Low DNS query rate"
+          description: "DNS query rate is {{ $value }} per second on instance {{ $labels.instance }}, which is unusually low (threshold: 0.1/s)"
+
+      - alert: HighForwardedQueryRate
+        expr: |
+          (
+            rate(dns_queries_forwarded{job="glory-hole"}[10m])
+            / rate(dns_queries_total{job="glory-hole"}[10m])
+          ) > 0.90
+        for: 15m
+        labels:
+          severity: info
+          component: dns-server
+        annotations:
+          summary: "High forwarded query rate"
+          description: "{{ $value | humanizePercentage }} of queries are being forwarded to upstream servers on instance {{ $labels.instance }}, cache may not be effective (threshold: 90%)"
+
+  - name: glory_hole_storage_alerts
+    interval: 60s
+    rules:
+      - alert: StorageWriteErrors
+        expr: |
+          rate(storage_write_errors_total{job="glory-hole"}[5m]) > 0.01
+        for: 5m
+        labels:
+          severity: warning
+          component: storage
+        annotations:
+          summary: "Storage write errors detected"
+          description: "Storage is experiencing {{ $value }} write errors per second on instance {{ $labels.instance }}"
+
+      - alert: StorageSlowWrites
+        expr: |
+          histogram_quantile(0.95,
+            rate(storage_write_duration_bucket{job="glory-hole"}[5m])
+          ) > 1000
+        for: 10m
+        labels:
+          severity: warning
+          component: storage
+        annotations:
+          summary: "Slow storage writes"
+          description: "P95 storage write latency is {{ $value }}ms on instance {{ $labels.instance }}, indicating storage performance issues (threshold: 1000ms)"
+
+  - name: glory_hole_api_alerts
+    interval: 30s
+    rules:
+      - alert: APIHighErrorRate
+        expr: |
+          (
+            sum(rate(http_requests_total{job="glory-hole",code=~"5.."}[5m])) by (instance)
+            / sum(rate(http_requests_total{job="glory-hole"}[5m])) by (instance)
+          ) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+          component: api
+        annotations:
+          summary: "High API error rate"
+          description: "API error rate is {{ $value | humanizePercentage }} on instance {{ $labels.instance }} (threshold: 5%)"
+
+      - alert: APISlowResponses
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(http_request_duration_seconds_bucket{job="glory-hole"}[5m])) by (le, instance)
+          ) > 2
+        for: 10m
+        labels:
+          severity: warning
+          component: api
+        annotations:
+          summary: "Slow API responses"
+          description: "P95 API response time is {{ $value }}s on instance {{ $labels.instance }} (threshold: 2s)"
