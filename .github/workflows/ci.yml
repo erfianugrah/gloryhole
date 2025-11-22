@@ -27,7 +27,7 @@ jobs:
       uses: golangci/golangci-lint-action@v9
       with:
         version: v2.6.2
-        args: --verbose --print-issued-lines=false
+        args: --verbose --output.text.print-issued-lines=false
 
     - name: Run gosec security scanner
       uses: securego/gosec@master
