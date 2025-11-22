@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"glory-hole/pkg/blocklist"
+	"glory-hole/pkg/config"
 	"glory-hole/pkg/policy"
 	"glory-hole/pkg/storage"
 )
@@ -23,6 +24,8 @@ type Server struct {
 	blocklistManager *blocklist.Manager
 	policyEngine     *policy.Engine
 	version          string
+	configWatcher    *config.Watcher // For kill-switch feature
+	configPath       string          // Path to config file for persistence
 }
 
 // Config holds API server configuration
@@ -33,6 +36,8 @@ type Config struct {
 	PolicyEngine     *policy.Engine
 	Logger           *slog.Logger
 	Version          string
+	ConfigWatcher    *config.Watcher // For kill-switch feature
+	ConfigPath       string          // Path to config file
 }
 
 // New creates a new API server
@@ -52,6 +57,8 @@ func New(cfg *Config) *Server {
 		policyEngine:     cfg.PolicyEngine,
 		logger:           cfg.Logger,
 		version:          cfg.Version,
+		configWatcher:    cfg.ConfigWatcher,
+		configPath:       cfg.ConfigPath,
 		startTime:        time.Now(),
 	}
 
@@ -81,6 +88,10 @@ func New(cfg *Config) *Server {
 	mux.HandleFunc("GET /api/policies/{id}", s.handleGetPolicy)
 	mux.HandleFunc("PUT /api/policies/{id}", s.handleUpdatePolicy)
 	mux.HandleFunc("DELETE /api/policies/{id}", s.handleDeletePolicy)
+
+	// Feature kill-switches
+	mux.HandleFunc("GET /api/features", s.handleGetFeatures)
+	mux.HandleFunc("PUT /api/features", s.handleUpdateFeatures)
 
 	// UI routes (add after API routes to avoid conflicts)
 	mux.HandleFunc("GET /api/ui/stats", s.handleStatsPartial)

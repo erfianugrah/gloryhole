@@ -29,10 +29,12 @@ type Config struct {
 
 // ServerConfig holds server-specific settings
 type ServerConfig struct {
-	ListenAddress string `yaml:"listen_address"`
-	WebUIAddress  string `yaml:"web_ui_address"`
-	TCPEnabled    bool   `yaml:"tcp_enabled"`
-	UDPEnabled    bool   `yaml:"udp_enabled"`
+	ListenAddress   string `yaml:"listen_address"`
+	WebUIAddress    string `yaml:"web_ui_address"`
+	TCPEnabled      bool   `yaml:"tcp_enabled"`
+	UDPEnabled      bool   `yaml:"udp_enabled"`
+	EnableBlocklist bool   `yaml:"enable_blocklist"` // Kill-switch for ad-blocking
+	EnablePolicies  bool   `yaml:"enable_policies"`  // Kill-switch for policy engine
 }
 
 // CacheConfig holds cache settings
@@ -131,6 +133,30 @@ func LoadWithDefaults() *Config {
 	return cfg
 }
 
+// Save writes the configuration back to a YAML file
+// This is used by the kill-switch feature to persist runtime changes
+func Save(path string, cfg *Config) error {
+	// Marshal config to YAML
+	data, err := yaml.Marshal(cfg)
+	if err != nil {
+		return fmt.Errorf("failed to marshal config: %w", err)
+	}
+
+	// Write atomically: write to temp file, then rename
+	// This prevents corruption if write is interrupted
+	tmpPath := path + ".tmp"
+	if err := os.WriteFile(tmpPath, data, 0644); err != nil {
+		return fmt.Errorf("failed to write temp config: %w", err)
+	}
+
+	if err := os.Rename(tmpPath, path); err != nil {
+		_ = os.Remove(tmpPath) // Clean up temp file on failure
+		return fmt.Errorf("failed to rename config: %w", err)
+	}
+
+	return nil
+}
+
 // applyDefaults sets default values for unset configuration fields
 func (c *Config) applyDefaults() {
 	// Server defaults
@@ -143,6 +169,14 @@ func (c *Config) applyDefaults() {
 	}
 	if c.Server.WebUIAddress == "" {
 		c.Server.WebUIAddress = ":8080"
+	}
+
+	// Kill-switch defaults: Enable both if neither is explicitly configured
+	// This provides backward compatibility (both enabled by default)
+	// To disable, explicitly set to false in config.yml
+	if !c.Server.EnableBlocklist && !c.Server.EnablePolicies {
+		c.Server.EnableBlocklist = true
+		c.Server.EnablePolicies = true
 	}
 
 	// Upstream DNS defaults

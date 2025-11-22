@@ -112,6 +112,9 @@ func main() {
 	// Create DNS handler
 	handler := dns.NewHandler()
 
+	// Set config watcher for kill-switch feature (hot-reload access)
+	handler.ConfigWatcher = cfgWatcher
+
 	// Initialize blocklist manager if configured (lock-free, high performance)
 	var blocklistMgr *blocklist.Manager
 	if len(cfg.Blocklists) > 0 {
@@ -330,6 +333,8 @@ func main() {
 		PolicyEngine:     policyEngine,
 		Logger:           logger.Logger, // Get underlying slog.Logger
 		Version:          version,
+		ConfigWatcher:    cfgWatcher, // For kill-switch feature
+		ConfigPath:       *configPath, // For persisting kill-switch changes
 	})
 
 	// Setup config change callback now that all components are created

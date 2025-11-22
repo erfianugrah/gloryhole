@@ -9,6 +9,7 @@ import (
 
 	"glory-hole/pkg/blocklist"
 	"glory-hole/pkg/cache"
+	"glory-hole/pkg/config"
 	"glory-hole/pkg/forwarder"
 	"glory-hole/pkg/localrecords"
 	"glory-hole/pkg/policy"
@@ -37,6 +38,7 @@ type Handler struct {
 	RuleEvaluator    *forwarder.RuleEvaluator
 	Forwarder        *forwarder.Forwarder
 	Cache            *cache.Cache
+	ConfigWatcher    *config.Watcher // For kill-switch feature (hot-reload config access)
 	lookupMu         sync.RWMutex
 }
 
@@ -301,9 +303,19 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 		clientIP = addr.IP.String()
 	}
 
-	// Evaluate policy engine rules (if configured)
+	// Evaluate policy engine rules (if configured and enabled via kill-switch)
 	// Policy engine allows complex filtering rules with expressions
-	if h.PolicyEngine != nil && h.PolicyEngine.Count() > 0 {
+	// Kill-switch check: Only evaluate if enable_policies is true in config
+	// If ConfigWatcher is nil (in tests), assume policies are enabled
+	enablePolicies := true
+	enableBlocklist := true
+	if h.ConfigWatcher != nil {
+		cfg := h.ConfigWatcher.Config()
+		enablePolicies = cfg.Server.EnablePolicies
+		enableBlocklist = cfg.Server.EnableBlocklist
+	}
+
+	if enablePolicies && h.PolicyEngine != nil && h.PolicyEngine.Count() > 0 {
 
 		// Create policy context
 		policyCtx := policy.NewContext(
@@ -446,9 +458,10 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 
 	// FAST PATH: Use lock-free blocklist manager if available
 	// This path is ~10x faster than the locked path below (~10ns vs ~110ns)
+	// Kill-switch check: Only check blocklist if enable_blocklist is true in config
 	var whitelisted bool
 
-	if h.BlocklistManager != nil {
+	if enableBlocklist && h.BlocklistManager != nil {
 		// Lock-free atomic pointer read - blazing fast!
 		blocked = h.BlocklistManager.IsBlocked(domain)
 
@@ -528,8 +541,9 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 			h.writeMsg(w, msg)
 			return
 		}
-	} else {
+	} else if enableBlocklist {
 		// SLOW PATH: Use legacy locked map lookups (backward compatibility)
+		// Only used if BlocklistManager is nil but kill-switch is enabled
 		// Single lock for all map lookups (performance optimization)
 		h.lookupMu.RLock()
 
