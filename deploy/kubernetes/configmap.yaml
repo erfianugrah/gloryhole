@@ -1,0 +1,50 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: glory-hole-config
+data:
+  config.yml: |
+    upstream_dns_servers:
+      - "1.1.1.1:53"
+      - "8.8.8.8:53"
+
+    update_interval: "24h"
+
+    blocklists:
+      - "https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts"
+
+    whitelist: []
+
+    local_records:
+      records: []
+
+    policy:
+      rules: []
+
+    dns:
+      address: ":53"
+      protocol: "both"
+
+    api:
+      enabled: true
+      address: ":8080"
+
+    cache:
+      enabled: true
+      max_entries: 10000
+      min_ttl: "1m"
+      max_ttl: "24h"
+      negative_ttl: "5m"
+
+    storage:
+      enabled: true
+      backend: "sqlite"
+      connection_string: "/data/glory-hole.db"
+      buffer_size: 1000
+      retention_days: 7
+
+    telemetry:
+      enabled: true
+      prometheus:
+        enabled: true
+        port: 9090

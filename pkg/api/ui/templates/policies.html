@@ -1,0 +1,184 @@
+{{template "base.html" .}}
+
+{{define "title"}}Policies - Glory-Hole DNS{{end}}
+
+{{define "content"}}
+<div class="policies-page">
+    <div class="page-header">
+        <h2>DNS Policies</h2>
+        <button class="btn btn-primary" onclick="showAddPolicyModal()">
+            ➕ Add Policy
+        </button>
+    </div>
+
+    <div class="policies-info">
+        <p>Policies allow you to define advanced filtering rules based on time, client IP, and domain patterns.</p>
+    </div>
+
+    <!-- Policies List -->
+    <div id="policies-container"
+         hx-get="/api/policies"
+         hx-trigger="load, policy-updated from:body"
+         hx-swap="innerHTML">
+        <div class="loading">Loading policies...</div>
+    </div>
+</div>
+
+<!-- Add/Edit Policy Modal -->
+<div id="policy-modal" class="modal" style="display: none;">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3 id="modal-title">Add Policy</h3>
+            <button class="modal-close" onclick="closePolicyModal()">&times;</button>
+        </div>
+        <form id="policy-form" onsubmit="submitPolicy(event)">
+            <input type="hidden" id="policy-id" name="id">
+
+            <div class="form-group">
+                <label for="policy-name">Policy Name *</label>
+                <input type="text" id="policy-name" name="name" required
+                       placeholder="e.g., Block Social Media After Hours">
+            </div>
+
+            <div class="form-group">
+                <label for="policy-logic">Rule Logic *</label>
+                <textarea id="policy-logic" name="logic" required rows="4"
+                          placeholder="e.g., Hour >= 22 && DomainMatches(Domain, 'facebook')"></textarea>
+                <small class="form-help">
+                    Available: Hour, Minute, Day, Month, Weekday, Domain, ClientIP, QueryType<br>
+                    Functions: DomainMatches(), DomainEndsWith(), DomainStartsWith(), IPInCIDR()
+                </small>
+            </div>
+
+            <div class="form-group">
+                <label for="policy-action">Action *</label>
+                <select id="policy-action" name="action" required>
+                    <option value="BLOCK">BLOCK - Return NXDOMAIN</option>
+                    <option value="ALLOW">ALLOW - Bypass blocklist</option>
+                    <option value="REDIRECT">REDIRECT - Forward to specific DNS</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label class="checkbox-label">
+                    <input type="checkbox" id="policy-enabled" name="enabled" checked>
+                    <span>Enable this policy</span>
+                </label>
+            </div>
+
+            <div class="form-actions">
+                <button type="button" class="btn btn-secondary" onclick="closePolicyModal()">Cancel</button>
+                <button type="submit" class="btn btn-primary">Save Policy</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+let editingPolicyId = null;
+
+function showAddPolicyModal() {
+    editingPolicyId = null;
+    document.getElementById('modal-title').textContent = 'Add Policy';
+    document.getElementById('policy-form').reset();
+    document.getElementById('policy-id').value = '';
+    document.getElementById('policy-modal').style.display = 'flex';
+}
+
+function showEditPolicyModal(policy) {
+    editingPolicyId = policy.id;
+    document.getElementById('modal-title').textContent = 'Edit Policy';
+    document.getElementById('policy-id').value = policy.id;
+    document.getElementById('policy-name').value = policy.name;
+    document.getElementById('policy-logic').value = policy.logic;
+    document.getElementById('policy-action').value = policy.action;
+    document.getElementById('policy-enabled').checked = policy.enabled;
+    document.getElementById('policy-modal').style.display = 'flex';
+}
+
+function closePolicyModal() {
+    document.getElementById('policy-modal').style.display = 'none';
+    editingPolicyId = null;
+}
+
+async function submitPolicy(event) {
+    event.preventDefault();
+
+    const formData = new FormData(event.target);
+    const policy = {
+        name: formData.get('name'),
+        logic: formData.get('logic'),
+        action: formData.get('action'),
+        enabled: formData.get('enabled') === 'on'
+    };
+
+    const policyId = formData.get('id');
+    const url = policyId ? `/api/policies/${policyId}` : '/api/policies';
+    const method = policyId ? 'PUT' : 'POST';
+
+    try {
+        const response = await fetch(url, {
+            method: method,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(policy)
+        });
+
+        if (response.ok) {
+            closePolicyModal();
+            htmx.trigger(document.body, 'policy-updated');
+        } else {
+            const error = await response.json();
+            alert('Error: ' + (error.message || 'Failed to save policy'));
+        }
+    } catch (error) {
+        alert('Error: ' + error.message);
+    }
+}
+
+async function deletePolicy(id) {
+    if (!confirm('Are you sure you want to delete this policy?')) {
+        return;
+    }
+
+    try {
+        const response = await fetch(`/api/policies/${id}`, {
+            method: 'DELETE'
+        });
+
+        if (response.ok) {
+            htmx.trigger(document.body, 'policy-updated');
+        } else {
+            const error = await response.json();
+            alert('Error: ' + (error.message || 'Failed to delete policy'));
+        }
+    } catch (error) {
+        alert('Error: ' + error.message);
+    }
+}
+
+async function togglePolicy(id, enabled) {
+    try {
+        const response = await fetch(`/api/policies/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ enabled: enabled })
+        });
+
+        if (response.ok) {
+            htmx.trigger(document.body, 'policy-updated');
+        } else {
+            alert('Failed to toggle policy');
+        }
+    } catch (error) {
+        alert('Error: ' + error.message);
+    }
+}
+
+// Close modal on outside click
+document.getElementById('policy-modal')?.addEventListener('click', function(e) {
+    if (e.target === this) {
+        closePolicyModal();
+    }
+});
+</script>
+{{end}}

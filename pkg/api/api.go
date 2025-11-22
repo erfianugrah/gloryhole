@@ -89,7 +89,10 @@ func New(cfg *Config) *Server {
 	// UI routes (add after API routes to avoid conflicts)
 	mux.HandleFunc("GET /api/ui/stats", s.handleStatsPartial)
 	mux.HandleFunc("GET /api/ui/queries", s.handleQueriesPartial)
+	mux.HandleFunc("GET /api/ui/top-domains", s.handleTopDomainsPartial)
 	mux.HandleFunc("GET /queries", s.handleQueriesPage)
+	mux.HandleFunc("GET /policies", s.handlePoliciesPage)
+	mux.HandleFunc("GET /settings", s.handleSettingsPage)
 	mux.HandleFunc("GET /{$}", s.handleDashboard) // {$} matches exact path only
 
 	// Static files

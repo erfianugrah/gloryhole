@@ -8,9 +8,9 @@ A high-performance DNS server written in Go, designed as a modern, extensible re
 
 ## 🚀 Project Status
 
-**Current Phase**: Phase 1 (MVP) ✅ **Complete!**
-**Next Phase**: Phase 2 (Essential Features)
-**Version**: 0.5.1
+**Current Phase**: Phase 2 (Essential Features) 🎯 **90% Complete!**
+**Next Phase**: Phase 3 (Advanced Features)
+**Version**: 0.6.0
 **CI Status**: ✅ All checks passing
 
 > **Phase 1 Complete!** Glory-Hole now has a fully functional DNS server with blocklist management, caching, query logging to SQLite, and comprehensive testing. Ready for real-world testing!
@@ -73,9 +73,16 @@ A high-performance DNS server written in Go, designed as a modern, extensible re
   - Thread-safe concurrent evaluation
   - First-match rule semantics
 
-### 🚧 In Development (Phase 2)
-
-- **Web UI**: Built-in web interface for monitoring and configuration
+- **Web UI**: Modern, responsive web interface ✅
+  - Real-time dashboard with live statistics
+  - Query log viewer with auto-refresh
+  - Policy management (CRUD operations)
+  - Settings page for configuration review
+  - Chart.js visualization for query activity
+  - Top domains display (allowed & blocked)
+  - HTMX for dynamic content updates
+  - Mobile-friendly responsive design
+  - Embedded templates (no external dependencies)
 
 ## Architecture
 
@@ -710,3 +717,149 @@ MIT License - see LICENSE file for details
 - Built with [codeberg.org/miekg/dns](https://codeberg.org/miekg/dns) - Go DNS library
 - Uses [modernc.org/sqlite](https://modernc.org/sqlite) - CGO-free SQLite implementation
 - Policy engine powered by [github.com/expr-lang/expr](https://github.com/expr-lang/expr)
+
+## Web UI
+
+Glory-Hole includes a modern, responsive web interface for monitoring and managing your DNS server without needing to edit configuration files or use command-line tools.
+
+### Features
+
+- **📊 Real-Time Dashboard**
+  - Live statistics (total/blocked/cached queries, response times)
+  - Auto-refreshing stats cards (every 5 seconds)
+  - Query activity chart with Chart.js visualization
+  - Top allowed and blocked domains
+  - Recent query log with live updates
+
+- **📜 Query Log Viewer**
+  - Real-time query stream (updates every 2 seconds)
+  - Filter by domain, status (blocked/allowed/cached)
+  - Detailed information: timestamp, client IP, domain, query type, response time
+  - Color-coded badges for quick status identification
+  - Pagination support for large query volumes
+
+- **⚙️ Policy Management**
+  - Create, edit, and delete filtering policies via UI
+  - Expression editor with syntax help
+  - Enable/disable policies with toggle switches
+  - Visual policy cards showing rule logic and action
+  - Support for time-based, client-based, and domain pattern rules
+
+- **🔧 Settings Page**
+  - View current configuration
+  - System information (version, uptime)
+  - Quick blocklist reload
+  - Configuration review (DNS, cache, storage, telemetry)
+
+### Accessing the UI
+
+The Web UI is available at **`http://localhost:8080`** by default (configurable via `api.address` in config.yml).
+
+```bash
+# Start the server
+./glory-hole
+
+# Access Web UI
+open http://localhost:8080
+```
+
+### UI Pages
+
+| Page | URL | Description |
+|------|-----|-------------|
+| **Dashboard** | `/` | Main overview with stats and charts |
+| **Queries** | `/queries` | Query log viewer with real-time updates |
+| **Policies** | `/policies` | Policy management (CRUD operations) |
+| **Settings** | `/settings` | Configuration review and system info |
+
+### Technology Stack
+
+- **Backend**: Go templates with embedded filesystem
+- **Frontend**: Vanilla JavaScript + HTMX for reactivity
+- **Styling**: Custom CSS (no frameworks needed)
+- **Charts**: Chart.js for visualizations
+- **Updates**: HTMX automatic polling for real-time data
+
+### Screenshots
+
+*Dashboard with live statistics and query activity chart*
+![Dashboard](docs/screenshots/dashboard.png)
+
+*Query log viewer with real-time updates*
+![Queries](docs/screenshots/queries.png)
+
+*Policy management interface*
+![Policies](docs/screenshots/policies.png)
+
+### Creating Policies via UI
+
+1. Navigate to `/policies`
+2. Click "Add Policy"
+3. Enter policy details:
+   - **Name**: Descriptive name (e.g., "Block Social Media After Hours")
+   - **Logic**: Expression (e.g., `Hour >= 22 && DomainMatches(Domain, 'facebook')`)
+   - **Action**: BLOCK, ALLOW, or REDIRECT
+   - **Enabled**: Toggle to activate/deactivate
+4. Click "Save Policy"
+
+**Available Functions:**
+- `Hour`, `Minute`, `Day`, `Month`, `Weekday` - Time-based conditions
+- `Domain`, `ClientIP`, `QueryType` - Request properties
+- `DomainMatches()`, `DomainEndsWith()`, `DomainStartsWith()` - Domain patterns
+- `IPInCIDR()` - Client IP matching
+
+**Example Policies:**
+```javascript
+// Block social media during work hours (9 AM - 5 PM, Mon-Fri)
+Weekday >= 1 && Weekday <= 5 && Hour >= 9 && Hour < 17 && 
+(DomainMatches(Domain, 'facebook') || DomainMatches(Domain, 'twitter'))
+
+// Allow specific client bypass blocklist
+ClientIP == "192.168.1.100"
+
+// Block all .ru domains except whitelisted
+DomainEndsWith(Domain, '.ru') && !DomainMatches(Domain, 'whitelisted')
+```
+
+### API Endpoints (for UI)
+
+The UI uses these RESTful endpoints:
+
+```
+GET  /                           Dashboard page
+GET  /queries                    Query log page
+GET  /policies                   Policy management page
+GET  /settings                   Settings page
+
+GET  /api/ui/stats              Stats HTML partial
+GET  /api/ui/queries            Queries HTML partial
+GET  /api/ui/top-domains        Top domains HTML partial
+
+GET  /api/health                Health check (JSON)
+GET  /api/stats                 Statistics (JSON)
+GET  /api/queries               Recent queries (JSON)
+GET  /api/top-domains           Top domains (JSON)
+
+GET  /api/policies              List all policies
+POST /api/policies              Create new policy
+GET  /api/policies/{id}         Get policy by ID
+PUT  /api/policies/{id}         Update policy
+DELETE /api/policies/{id}       Delete policy
+
+POST /api/blocklist/reload      Reload blocklists
+```
+
+### Customization
+
+The Web UI is embedded in the binary but can be customized by modifying:
+- `pkg/api/ui/templates/*.html` - HTML templates
+- `pkg/api/ui/static/css/style.css` - Styling
+- Rebuild with `go build ./cmd/glory-hole`
+
+### Mobile Support
+
+The UI is fully responsive and works on:
+- Desktop browsers (Chrome, Firefox, Safari, Edge)
+- Tablets (iPad, Android tablets)
+- Mobile phones (iOS, Android)
+

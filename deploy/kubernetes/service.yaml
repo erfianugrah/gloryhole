@@ -1,0 +1,54 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: glory-hole-dns
+  labels:
+    app: glory-hole
+spec:
+  type: LoadBalancer
+  selector:
+    app: glory-hole
+  ports:
+  - name: dns-udp
+    port: 53
+    targetPort: 53
+    protocol: UDP
+  - name: dns-tcp
+    port: 53
+    targetPort: 53
+    protocol: TCP
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: glory-hole-ui
+  labels:
+    app: glory-hole
+spec:
+  type: ClusterIP
+  selector:
+    app: glory-hole
+  ports:
+  - name: http
+    port: 80
+    targetPort: 8080
+    protocol: TCP
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: glory-hole-metrics
+  labels:
+    app: glory-hole
+spec:
+  type: ClusterIP
+  selector:
+    app: glory-hole
+  ports:
+  - name: metrics
+    port: 9090
+    targetPort: 9090
+    protocol: TCP

@@ -1,0 +1,40 @@
+{{if .Policies}}
+<div class="policies-grid">
+    {{range .Policies}}
+    <div class="policy-card {{if not .Enabled}}policy-disabled{{end}}">
+        <div class="policy-header">
+            <div class="policy-title">
+                <h3>{{.Name}}</h3>
+                <span class="badge badge-{{.Action | lower}}">{{.Action}}</span>
+            </div>
+            <div class="policy-actions">
+                <label class="toggle-switch">
+                    <input type="checkbox" {{if .Enabled}}checked{{end}}
+                           onchange="togglePolicy({{.ID}}, this.checked)">
+                    <span class="toggle-slider"></span>
+                </label>
+            </div>
+        </div>
+
+        <div class="policy-logic">
+            <code>{{.Logic}}</code>
+        </div>
+
+        <div class="policy-footer">
+            <button class="btn-icon" onclick='showEditPolicyModal({{. | json}})' title="Edit">
+                ✏️ Edit
+            </button>
+            <button class="btn-icon btn-danger" onclick="deletePolicy({{.ID}})" title="Delete">
+                🗑️ Delete
+            </button>
+        </div>
+    </div>
+    {{end}}
+</div>
+{{else}}
+<div class="empty-state">
+    <p>No policies configured yet.</p>
+    <p>Policies allow you to create advanced filtering rules based on time, client IP, and domain patterns.</p>
+    <button class="btn btn-primary" onclick="showAddPolicyModal()">Create Your First Policy</button>
+</div>
+{{end}}

@@ -1,0 +1,18 @@
+{{if .Domains}}
+<div class="domains-list">
+    {{range $index, $domain := .Domains}}
+    <div class="domain-item">
+        <div class="domain-rank">{{add $index 1}}</div>
+        <div class="domain-info">
+            <div class="domain-name">{{$domain.Domain}}</div>
+            <div class="domain-count">{{$domain.Queries}} queries</div>
+        </div>
+        <div class="domain-bar">
+            <div class="domain-bar-fill" style="width: {{$domain.Percentage}}%"></div>
+        </div>
+    </div>
+    {{end}}
+</div>
+{{else}}
+<div class="no-data">No data yet</div>
+{{end}}

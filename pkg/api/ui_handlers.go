@@ -2,10 +2,12 @@ package api
 
 import (
 	"embed"
+	"encoding/json"
 	"html/template"
 	"io/fs"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -26,7 +28,22 @@ func initTemplates() error {
 	if err != nil {
 		return err
 	}
-	templates, err = template.ParseFS(tmplFS, "*.html")
+
+	// Add template functions
+	funcMap := template.FuncMap{
+		"lower": func(s string) string {
+			return strings.ToLower(s)
+		},
+		"json": func(v interface{}) string {
+			b, _ := json.Marshal(v)
+			return string(b)
+		},
+		"add": func(a, b int) int {
+			return a + b
+		},
+	}
+
+	templates, err = template.New("").Funcs(funcMap).ParseFS(tmplFS, "*.html")
 	return err
 }
 
@@ -110,6 +127,104 @@ func (s *Server) handleStatsPartial(w http.ResponseWriter, r *http.Request) {
 
 	if err := templates.ExecuteTemplate(w, "stats_partial.html", stats); err != nil {
 		s.logger.Error("Failed to render stats partial", "error", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+}
+
+// handlePoliciesPage serves the policies management page
+func (s *Server) handlePoliciesPage(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	data := struct {
+		Version string
+	}{
+		Version: s.version,
+	}
+
+	if err := templates.ExecuteTemplate(w, "policies.html", data); err != nil {
+		s.logger.Error("Failed to render policies template", "error", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+}
+
+// handleSettingsPage serves the settings/configuration page
+func (s *Server) handleSettingsPage(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	data := struct {
+		Version string
+	}{
+		Version: s.version,
+	}
+
+	if err := templates.ExecuteTemplate(w, "settings.html", data); err != nil {
+		s.logger.Error("Failed to render settings template", "error", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+}
+
+// handleTopDomainsPartial returns top domains as HTML fragment for HTMX
+func (s *Server) handleTopDomainsPartial(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Parse parameters
+	limitParam := r.URL.Query().Get("limit")
+	limit := 10 // Default
+	if limitParam != "" {
+		if l, err := strconv.Atoi(limitParam); err == nil && l > 0 && l <= 100 {
+			limit = l
+		}
+	}
+
+	blockedParam := r.URL.Query().Get("blocked")
+	blocked := blockedParam == "true"
+
+	// Template-friendly domain data
+	type DomainData struct {
+		Domain     string
+		Queries    int64
+		Percentage float64
+	}
+
+	domains := []DomainData{}
+	var maxQueries int64 = 1
+
+	// Get domains from storage
+	if s.storage != nil {
+		dbDomains, err := s.storage.GetTopDomains(r.Context(), limit, blocked)
+		if err == nil && len(dbDomains) > 0 {
+			maxQueries = dbDomains[0].QueryCount
+			for _, d := range dbDomains {
+				percentage := float64(d.QueryCount) / float64(maxQueries) * 100
+				domains = append(domains, DomainData{
+					Domain:     d.Domain,
+					Queries:    d.QueryCount,
+					Percentage: percentage,
+				})
+			}
+		}
+	}
+
+	data := struct {
+		Domains []DomainData
+	}{
+		Domains: domains,
+	}
+
+	if err := templates.ExecuteTemplate(w, "top_domains_partial.html", data); err != nil {
+		s.logger.Error("Failed to render top domains partial", "error", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}

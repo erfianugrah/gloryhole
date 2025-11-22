@@ -22,7 +22,7 @@
 
     <!-- Charts Section -->
     <div class="charts-section">
-        <h3>Query Activity</h3>
+        <h3>Query Activity (Last Hour)</h3>
         <div class="chart-container">
             <canvas id="queryChart"></canvas>
         </div>
@@ -34,7 +34,7 @@
             <div class="section-col">
                 <h3>Top Allowed Domains</h3>
                 <div id="top-allowed"
-                     hx-get="/api/top-domains?limit=10&blocked=false"
+                     hx-get="/api/ui/top-domains?limit=10&blocked=false"
                      hx-trigger="load, every 10s"
                      hx-swap="innerHTML">
                     <div class="loading">Loading...</div>
@@ -43,7 +43,7 @@
             <div class="section-col">
                 <h3>Top Blocked Domains</h3>
                 <div id="top-blocked"
-                     hx-get="/api/top-domains?limit=10&blocked=true"
+                     hx-get="/api/ui/top-domains?limit=10&blocked=true"
                      hx-trigger="load, every 10s"
                      hx-swap="innerHTML">
                     <div class="loading">Loading...</div>
@@ -65,9 +65,122 @@
 </div>
 
 <script>
-    // Initialize charts if needed
-    document.addEventListener('DOMContentLoaded', function() {
-        console.log('Dashboard loaded');
+let queryChart = null;
+
+document.addEventListener('DOMContentLoaded', function() {
+    initializeChart();
+    updateChart();
+    // Update chart every 30 seconds
+    setInterval(updateChart, 30000);
+});
+
+function initializeChart() {
+    const ctx = document.getElementById('queryChart');
+    if (!ctx) return;
+
+    queryChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: [],
+            datasets: [
+                {
+                    label: 'Total Queries',
+                    data: [],
+                    borderColor: '#3b82f6',
+                    backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                    tension: 0.4,
+                    fill: true
+                },
+                {
+                    label: 'Blocked',
+                    data: [],
+                    borderColor: '#ef4444',
+                    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                    tension: 0.4,
+                    fill: true
+                },
+                {
+                    label: 'Cached',
+                    data: [],
+                    borderColor: '#10b981',
+                    backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                    tension: 0.4,
+                    fill: true
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: {
+                mode: 'index',
+                intersect: false
+            },
+            plugins: {
+                legend: {
+                    display: true,
+                    position: 'top'
+                },
+                tooltip: {
+                    enabled: true
+                }
+            },
+            scales: {
+                x: {
+                    display: true,
+                    title: {
+                        display: true,
+                        text: 'Time'
+                    }
+                },
+                y: {
+                    display: true,
+                    title: {
+                        display: true,
+                        text: 'Queries'
+                    },
+                    beginAtZero: true
+                }
+            }
+        }
     });
+}
+
+async function updateChart() {
+    if (!queryChart) return;
+
+    try {
+        // Generate mock data for demonstration
+        // In production, fetch from /api/stats/timeseries or similar
+        const now = new Date();
+        const labels = [];
+        const total = [];
+        const blocked = [];
+        const cached = [];
+
+        // Generate last 12 5-minute intervals
+        for (let i = 11; i >= 0; i--) {
+            const time = new Date(now - i * 5 * 60 * 1000);
+            labels.push(time.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }));
+
+            // Mock data - replace with real API call
+            const totalQueries = Math.floor(Math.random() * 1000 + 500);
+            const blockedQueries = Math.floor(totalQueries * (Math.random() * 0.3 + 0.1));
+            const cachedQueries = Math.floor(totalQueries * (Math.random() * 0.4 + 0.2));
+
+            total.push(totalQueries);
+            blocked.push(blockedQueries);
+            cached.push(cachedQueries);
+        }
+
+        queryChart.data.labels = labels;
+        queryChart.data.datasets[0].data = total;
+        queryChart.data.datasets[1].data = blocked;
+        queryChart.data.datasets[2].data = cached;
+        queryChart.update('none'); // Skip animation
+    } catch (error) {
+        console.error('Failed to update chart:', error);
+    }
+}
 </script>
 {{end}}
