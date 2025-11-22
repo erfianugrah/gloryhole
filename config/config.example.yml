@@ -24,18 +24,9 @@ blocklists:
 whitelist:
   - "example-allowed-domain.com"
 
-# Local DNS overrides
-overrides:
-  nas.local: "192.168.1.100"
-  router.local: "192.168.1.1"
-
-# CNAME overrides
-cname_overrides:
-  storage.local: "nas.local."
-
-# Local DNS Records (Advanced)
-# This section provides more control than simple overrides
-# Features: Multiple IPs, AAAA records, wildcards, custom TTLs
+# Local DNS Records
+# Define custom DNS responses for specific domains
+# Features: Multiple IPs, AAAA records, wildcards, CNAME records, custom TTLs
 local_records:
   enabled: true
   records:

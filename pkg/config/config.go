@@ -12,8 +12,6 @@ import (
 
 // Config holds the application configuration
 type Config struct {
-	Overrides            map[string]string  `yaml:"overrides"`
-	CNAMEOverrides       map[string]string  `yaml:"cname_overrides"`
 	Telemetry            TelemetryConfig    `yaml:"telemetry"`
 	Server               ServerConfig       `yaml:"server"`
 	Policy               PolicyConfig       `yaml:"policy"`
@@ -34,20 +32,6 @@ type ServerConfig struct {
 	WebUIAddress  string `yaml:"web_ui_address"`
 	TCPEnabled    bool   `yaml:"tcp_enabled"`
 	UDPEnabled    bool   `yaml:"udp_enabled"`
-}
-
-// StorageConfig is deprecated - use storage.Config instead
-// Kept for backwards compatibility with old config files
-type StorageConfig struct {
-	DatabasePath     string `yaml:"database_path"`
-	LogQueries       bool   `yaml:"log_queries"`
-	LogRetentionDays int    `yaml:"log_retention_days"`
-	BufferSize       int    `yaml:"buffer_size"`
-}
-
-// Storage field for backwards compatibility
-type deprecatedStorage struct {
-	Storage StorageConfig `yaml:"storage"`
 }
 
 // CacheConfig holds cache settings

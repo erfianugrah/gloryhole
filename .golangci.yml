@@ -80,11 +80,6 @@ issues:
     - text: "Error return value of.*Write.* is not checked"
       linters:
         - errcheck
-    # Ignore unused types in config (for deprecation)
-    - path: config\.go
-      text: "is unused"
-      linters:
-        - unused
     # Ignore unused test mocks and helpers
     - path: _test\.go
       text: "(type|func).*(is unused)"

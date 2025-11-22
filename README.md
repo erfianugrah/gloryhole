@@ -495,20 +495,10 @@ local_records:
 # Query for storage.local will automatically resolve to 192.168.1.100
 ```
 
-### Legacy Overrides vs Local Records
+### Local DNS Records
 
-Glory-Hole supports both legacy overrides (simpler) and the new local records feature (more powerful):
+Define custom DNS responses using the local records feature:
 
-**Legacy Overrides** (still supported):
-```yaml
-overrides:
-  nas.local: "192.168.1.100"
-
-cname_overrides:
-  storage.local: "nas.local."
-```
-
-**New Local Records** (recommended):
 ```yaml
 local_records:
   enabled: true
@@ -521,12 +511,12 @@ local_records:
       target: "nas.local"
 ```
 
-Use local records for:
-- Multiple IPs per domain
+Features:
+- Multiple IPs per domain (round-robin)
 - IPv6 (AAAA) records
-- Wildcard domains
+- Wildcard domains (*.dev.local)
 - Custom TTLs
-- CNAME chain resolution
+- CNAME chain resolution with loop detection
 
 ## DNS Request Processing Order
 
@@ -538,11 +528,9 @@ Glory-Hole processes DNS requests in the following order:
    - Wildcard domain matches (*.dev.local)
    - CNAME chain resolution with loop detection
 3. **Policy Engine**: Evaluate against user-defined rules
-4. **Local Overrides**: Check for legacy exact A/AAAA record overrides
-5. **CNAME Overrides**: Check for legacy CNAME alias definitions
-6. **Allowlist**: If domain is allowlisted, bypass blocking and forward
-7. **Blocklist**: If domain is blocklisted, return blocked response
-8. **Forward**: Forward to upstream DNS resolver
+4. **Allowlist**: If domain is allowlisted, bypass blocking and forward
+5. **Blocklist**: If domain is blocklisted, return blocked response
+6. **Forward**: Forward to upstream DNS resolver
 
 ## Policy Engine
 
