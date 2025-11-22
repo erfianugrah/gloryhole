@@ -67,6 +67,16 @@ A high-performance DNS server written in Go, designed as a modern, extensible re
   - Multiple IPs per record (round-robin)
   - Custom TTL values per record
 
+- **Conditional Forwarding** ✨ NEW
+  - Route queries to different upstream DNS servers based on rules
+  - Domain pattern matching (*.local, *.corp, exact domains, regex)
+  - Client IP-based routing with CIDR support
+  - Query type filtering (A, AAAA, PTR, etc.)
+  - Priority-based rule evaluation (first-match-wins)
+  - Split-DNS for hybrid cloud/on-premise setups
+  - VPN client routing to corporate DNS
+  - Sub-200ns rule evaluation with zero allocations
+
 - **Intelligent Caching**
   - LRU cache with TTL-aware eviction
   - 63% performance boost on repeated queries
@@ -80,7 +90,8 @@ A high-performance DNS server written in Go, designed as a modern, extensible re
   - Time-based filtering (hour, minute, day, month, weekday)
   - Client IP matching and CIDR range support
   - Domain pattern matching (contains, starts with, ends with)
-  - Actions: BLOCK, ALLOW, REDIRECT
+  - Actions: BLOCK, ALLOW, REDIRECT, FORWARD
+  - FORWARD action for dynamic conditional forwarding
   - Thread-safe concurrent evaluation
   - First-match rule semantics
 
@@ -636,10 +647,136 @@ policy:
 - **BLOCK**: Return NXDOMAIN (blocked) response
 - **ALLOW**: Bypass blocklist and forward to upstream DNS
 - **REDIRECT**: (Coming soon) Redirect to a different domain
+- **FORWARD**: Route query to specific upstream DNS servers (for conditional forwarding)
 
 ### Processing Order
 
 Rules are evaluated in the order they appear in the configuration. The first rule that matches will have its action executed. If no rules match, normal processing continues (blocklist check, then forward).
+
+## Conditional Forwarding
+
+Conditional forwarding allows you to route DNS queries to different upstream servers based on domain patterns, client IPs, or query types. This is essential for split-DNS setups, VPN configurations, and hybrid cloud/on-premise environments.
+
+### Use Cases
+
+- **Split-DNS**: Forward `*.local` domains to internal DNS while using public DNS for everything else
+- **VPN Routing**: Route VPN clients (`10.8.0.0/24`) to corporate DNS for internal domains
+- **Reverse DNS**: Send PTR queries to local network DNS for IP address lookups
+- **Multi-Site**: Route different domain suffixes to site-specific DNS servers
+
+### Configuration
+
+There are two ways to configure conditional forwarding:
+
+#### 1. Declarative Rules (Recommended for simple cases)
+
+```yaml
+conditional_forwarding:
+  enabled: true
+  rules:
+    # Forward local domain queries to internal DNS server
+    - name: "Local domains"
+      priority: 90                    # Higher priority = evaluated first (1-100)
+      domains:
+        - "*.local"                   # Wildcard suffix match
+        - "*.lan"
+        - "home.arpa"                 # Exact match
+      upstreams:
+        - "192.168.1.1:53"           # Internal DNS server
+        - "192.168.1.2:53"           # Backup internal DNS
+      enabled: true
+
+    # Forward VPN client queries to corporate DNS
+    - name: "VPN clients to corporate DNS"
+      priority: 80
+      client_cidrs:
+        - "10.8.0.0/24"              # VPN subnet
+      domains:
+        - "*.corp.example.com"       # Corporate domains
+        - "*.internal"
+      upstreams:
+        - "10.0.0.53:53"             # Corporate DNS
+      enabled: true
+
+    # Forward reverse DNS (PTR) queries to local DNS
+    - name: "Reverse DNS"
+      priority: 70
+      query_types:
+        - "PTR"                      # DNS reverse lookups
+      domains:
+        - "*.in-addr.arpa"           # IPv4 reverse DNS
+        - "*.ip6.arpa"               # IPv6 reverse DNS
+      upstreams:
+        - "192.168.1.1:53"
+      enabled: true
+
+    # Combined rule: All conditions must match (AND logic)
+    - name: "VPN clients accessing local domains"
+      priority: 95                   # Highest priority
+      domains:
+        - "*.local"
+      client_cidrs:
+        - "10.8.0.0/24"
+      query_types:
+        - "A"
+        - "AAAA"
+      upstreams:
+        - "192.168.1.1:53"
+      enabled: true
+```
+
+#### 2. Policy Engine FORWARD Action (For complex logic)
+
+For advanced scenarios requiring time-based routing or complex expressions:
+
+```yaml
+policy:
+  enabled: true
+  rules:
+    # Forward internal queries from VPN clients during business hours
+    - name: "VPN work hours forwarding"
+      logic: >
+        IPInCIDR(ClientIP, "10.8.0.0/24") &&
+        Hour >= 9 && Hour <= 17 &&
+        (DomainMatches(Domain, ".local") || DomainMatches(Domain, ".internal"))
+      action: "FORWARD"
+      action_data: "192.168.1.1:53,192.168.1.2:53"  # Comma-separated upstreams
+      enabled: true
+```
+
+### Domain Pattern Matching
+
+Conditional forwarding supports multiple pattern types:
+
+- **Exact**: `nas.local` - Matches only "nas.local"
+- **Wildcard Suffix**: `*.local` - Matches "nas.local", "router.local", "sub.nas.local", etc.
+- **Wildcard Prefix**: `internal.*` - Matches "internal.corp", "internal.net", etc.
+- **Regex**: `/^[a-z]+\.local$/` - Advanced pattern matching (slower)
+
+### Priority and Evaluation
+
+- Rules are evaluated by **priority** (highest first: 100 → 1)
+- **First-match-wins**: Once a rule matches, its upstreams are used
+- Default priority is **50** if not specified
+- Multiple conditions within a rule use **AND logic** (all must match)
+
+### Performance
+
+Conditional forwarding is highly optimized:
+- **Sub-200ns** rule evaluation per query
+- **Zero allocations** during evaluation
+- **Hash-based** exact domain matching (O(1))
+- **Efficient** wildcard and CIDR matching
+
+### Processing Order
+
+DNS queries are processed in this order:
+
+1. **Policy Engine** (if enabled) - FORWARD action takes precedence
+2. **Local Records** - Custom A/AAAA/CNAME records
+3. **Blocklist Check** - Block ads/malware domains
+4. **Conditional Forwarding** - Route to specific upstreams if rules match
+5. **Default Forwarding** - Use default upstream DNS servers
 
 ## REST API
 

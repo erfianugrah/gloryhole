@@ -6,6 +6,17 @@ server:
 upstream_dns_servers:
   - "1.1.1.1:53"
 
+conditional_forwarding:
+  enabled: true
+  rules:
+    - name: "Local domains"
+      priority: 90
+      domains:
+        - "*.local"
+      upstreams:
+        - "192.168.1.1:53"
+      enabled: true
+
 logging:
   level: "debug"
   format: "json"

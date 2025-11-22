@@ -196,6 +196,79 @@ func (f *Forwarder) ForwardTCP(ctx context.Context, r *dns.Msg) (*dns.Msg, error
 	return nil, fmt.Errorf("all TCP upstream servers failed")
 }
 
+// ForwardWithUpstreams forwards a DNS query to specific upstream servers
+// This is used for conditional forwarding where different upstreams are selected
+// based on rules (domain, client IP, etc.)
+func (f *Forwarder) ForwardWithUpstreams(ctx context.Context, r *dns.Msg, upstreams []string) (*dns.Msg, error) {
+	if len(upstreams) == 0 {
+		return nil, fmt.Errorf("no upstream DNS servers provided")
+	}
+
+	// Try multiple upstreams
+	attempts := min(f.retries, len(upstreams))
+	var lastErr error
+
+	for i := 0; i < attempts; i++ {
+		// Select upstream (round-robin for multiple upstreams)
+		upstream := upstreams[i%len(upstreams)]
+
+		// Get client from pool
+		client := f.clientPool.Get().(*dns.Client)
+		defer f.clientPool.Put(client)
+
+		// Log the forward attempt
+		f.logger.Debug("Forwarding DNS query to conditional upstream",
+			"domain", r.Question[0].Name,
+			"type", dns.TypeToString[r.Question[0].Qtype],
+			"upstream", upstream,
+			"attempt", i+1,
+		)
+
+		// Forward the query
+		resp, rtt, err := client.ExchangeContext(ctx, r, upstream)
+		if err != nil {
+			f.logger.Warn("Conditional upstream query failed",
+				"upstream", upstream,
+				"error", err,
+				"attempt", i+1,
+			)
+			lastErr = err
+			continue
+		}
+
+		// Check if response is valid
+		if resp == nil {
+			lastErr = fmt.Errorf("received nil response from %s", upstream)
+			continue
+		}
+
+		if resp.Rcode == dns.RcodeServerFailure {
+			f.logger.Warn("Conditional upstream returned SERVFAIL",
+				"upstream", upstream,
+				"domain", r.Question[0].Name,
+			)
+			lastErr = fmt.Errorf("upstream %s returned SERVFAIL", upstream)
+			continue
+		}
+
+		// Success!
+		f.logger.Debug("Conditional upstream query succeeded",
+			"upstream", upstream,
+			"domain", r.Question[0].Name,
+			"rtt", rtt,
+			"answers", len(resp.Answer),
+		)
+
+		return resp, nil
+	}
+
+	// All attempts failed
+	if lastErr != nil {
+		return nil, fmt.Errorf("all conditional upstream servers failed: %w", lastErr)
+	}
+	return nil, fmt.Errorf("all conditional upstream servers failed")
+}
+
 // selectUpstream selects the next upstream server using round-robin
 func (f *Forwarder) selectUpstream() string {
 	// #nosec G115 - Conversion is safe: len(f.upstreams) will never exceed uint32 max (4 billion upstreams is unrealistic)

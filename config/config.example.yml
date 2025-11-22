@@ -115,7 +115,76 @@ logging:
   max_backups: 3
   max_age: 7             # days
 
+# Conditional Forwarding (Route queries to different upstream servers)
+# Use this for split-DNS setups, VPN routing, or domain-specific nameservers
+conditional_forwarding:
+  enabled: false
+  rules:
+    # Forward local domain queries to internal DNS server
+    - name: "Local domains"
+      priority: 90                    # Higher priority = evaluated first
+      domains:
+        - "*.local"                   # Wildcard suffix match
+        - "*.lan"
+        - "home.arpa"                 # Exact match
+      upstreams:
+        - "192.168.1.1:53"           # Internal DNS server
+        - "192.168.1.2:53"           # Backup internal DNS
+      enabled: true
+
+    # Forward VPN client queries to corporate DNS
+    - name: "VPN clients to corporate DNS"
+      priority: 80
+      client_cidrs:
+        - "10.8.0.0/24"              # VPN subnet
+      domains:
+        - "*.corp.example.com"       # Corporate domains
+        - "*.internal"
+      upstreams:
+        - "10.0.0.53:53"             # Corporate DNS
+      enabled: true
+
+    # Forward reverse DNS (PTR) queries to local network DNS
+    - name: "Reverse DNS"
+      priority: 70
+      query_types:
+        - "PTR"                      # DNS reverse lookups
+      domains:
+        - "*.in-addr.arpa"           # IPv4 reverse DNS
+        - "*.ip6.arpa"               # IPv6 reverse DNS
+      upstreams:
+        - "192.168.1.1:53"
+      enabled: true
+
+    # Combined rule: VPN clients accessing local domains (high priority)
+    - name: "VPN clients to local domains"
+      priority: 95                   # Highest priority
+      domains:
+        - "*.local"
+      client_cidrs:
+        - "10.8.0.0/24"
+      query_types:
+        - "A"
+        - "AAAA"
+      upstreams:
+        - "192.168.1.1:53"
+      enabled: true
+
+    # Forward specific company domains to authoritative server
+    - name: "Example Corp authoritative"
+      priority: 50
+      domains:
+        - "example.com"
+        - "*.example.com"
+      upstreams:
+        - "ns1.example.com:53"
+        - "ns2.example.com:53"
+      enabled: false
+
 # Policy Engine (Advanced Rule-Based Filtering)
+# NOTE: Policy rules with action: FORWARD can also do conditional forwarding
+# Use conditional_forwarding (above) for simple domain/IP-based routing
+# Use policy engine (below) for complex logic with expressions
 policy:
   enabled: true
   rules:
@@ -136,6 +205,14 @@ policy:
       logic: 'DomainMatches(Domain, "casino") || DomainMatches(Domain, "poker") || DomainMatches(Domain, "betting")'
       action: "block"
       enabled: true
+
+    # Forward internal queries from VPN clients to corporate DNS
+    # This uses the policy engine for complex conditional forwarding
+    - name: "VPN clients to corporate DNS (policy-based)"
+      logic: 'IPInCIDR(ClientIP, "10.8.0.0/24") && (DomainMatches(Domain, ".local") || DomainMatches(Domain, ".internal"))'
+      action: "forward"
+      action_data: "192.168.1.1:53,192.168.1.2:53"  # Comma-separated upstream list
+      enabled: false  # Example only
 
     # Block after hours (outside 6 AM - 11 PM)
     - name: "Block after hours"

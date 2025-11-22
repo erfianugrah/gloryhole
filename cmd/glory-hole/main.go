@@ -16,6 +16,7 @@ import (
 	"glory-hole/pkg/blocklist"
 	"glory-hole/pkg/config"
 	"glory-hole/pkg/dns"
+	"glory-hole/pkg/forwarder"
 	"glory-hole/pkg/localrecords"
 	"glory-hole/pkg/logging"
 	"glory-hole/pkg/policy"
@@ -28,7 +29,7 @@ var (
 	showVersion = flag.Bool("version", false, "Show version information and exit")
 	healthCheck = flag.Bool("health-check", false, "Perform health check and exit (for Docker HEALTHCHECK)")
 	apiAddress  = flag.String("api-address", "", "Override API address for health check (default: from config)")
-	version     = "dev"
+	version     = "0.7.0"
 	buildTime   = "unknown"
 )
 
@@ -276,6 +277,21 @@ func main() {
 		logger.Info("Policy engine initialized",
 			"total_rules", policyEngine.Count(),
 		)
+	}
+
+	// Initialize conditional forwarding rule evaluator
+	if cfg.ConditionalForwarding.Enabled {
+		ruleEvaluator, err := forwarder.NewRuleEvaluator(&cfg.ConditionalForwarding)
+		if err != nil {
+			logger.Error("Failed to initialize conditional forwarding",
+				"error", err,
+			)
+		} else {
+			handler.RuleEvaluator = ruleEvaluator
+			logger.Info("Conditional forwarding initialized",
+				"total_rules", ruleEvaluator.Count(),
+			)
+		}
 	}
 
 	// Create DNS server

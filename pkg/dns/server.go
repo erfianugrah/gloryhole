@@ -34,6 +34,7 @@ type Handler struct {
 	CNAMEOverrides   map[string]string
 	LocalRecords     *localrecords.Manager
 	PolicyEngine     *policy.Engine
+	RuleEvaluator    *forwarder.RuleEvaluator
 	Forwarder        *forwarder.Forwarder
 	Cache            *cache.Cache
 	lookupMu         sync.RWMutex
@@ -293,16 +294,17 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 		}
 	}
 
+	// Get client IP for policy evaluation and conditional forwarding
+	clientIP := ""
+	if addr, ok := w.RemoteAddr().(*net.UDPAddr); ok {
+		clientIP = addr.IP.String()
+	} else if addr, ok := w.RemoteAddr().(*net.TCPAddr); ok {
+		clientIP = addr.IP.String()
+	}
+
 	// Evaluate policy engine rules (if configured)
 	// Policy engine allows complex filtering rules with expressions
 	if h.PolicyEngine != nil && h.PolicyEngine.Count() > 0 {
-		// Get client IP for policy evaluation
-		clientIP := ""
-		if addr, ok := w.RemoteAddr().(*net.UDPAddr); ok {
-			clientIP = addr.IP.String()
-		} else if addr, ok := w.RemoteAddr().(*net.TCPAddr); ok {
-			clientIP = addr.IP.String()
-		}
 
 		// Create policy context
 		policyCtx := policy.NewContext(
@@ -404,6 +406,40 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 				}
 
 				h.writeMsg(w, msg)
+				return
+
+			case policy.ActionForward:
+				// Forward to specific upstream servers from policy rule
+				upstreams := rule.GetUpstreams()
+				if len(upstreams) == 0 || h.Forwarder == nil {
+					// No upstreams configured or no forwarder available
+					responseCode = dns.RcodeServerFailure
+					msg.SetRcode(r, dns.RcodeServerFailure)
+					h.writeMsg(w, msg)
+					return
+				}
+
+				// Forward to conditional upstreams
+				resp, err := h.Forwarder.ForwardWithUpstreams(ctx, r, upstreams)
+				if err != nil {
+					responseCode = dns.RcodeServerFailure
+					msg.SetRcode(r, dns.RcodeServerFailure)
+					h.writeMsg(w, msg)
+					return
+				}
+
+				// Track upstream server
+				if len(upstreams) > 0 {
+					upstream = upstreams[0]
+				}
+
+				// Cache the response
+				if h.Cache != nil {
+					h.Cache.Set(ctx, r, resp)
+				}
+
+				responseCode = resp.Rcode
+				h.writeMsg(w, resp)
 				return
 			}
 		}
@@ -576,6 +612,43 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 	}
 
 	// If we get here, we don't have a local answer (not blocked, no overrides)
+
+	// Check conditional forwarding rules
+	if h.RuleEvaluator != nil && !h.RuleEvaluator.IsEmpty() && h.Forwarder != nil {
+		// Evaluate conditional forwarding rules
+		upstreams := h.RuleEvaluator.Evaluate(
+			strings.TrimSuffix(domain, "."),
+			clientIP,
+			dns.TypeToString[qtype],
+		)
+
+		if upstreams != nil && len(upstreams) > 0 {
+			// Rule matched - forward to conditional upstreams
+			resp, err := h.Forwarder.ForwardWithUpstreams(ctx, r, upstreams)
+			if err != nil {
+				// Forwarding failed, return SERVFAIL
+				responseCode = dns.RcodeServerFailure
+				msg.SetRcode(r, dns.RcodeServerFailure)
+				h.writeMsg(w, msg)
+				return
+			}
+
+			// Track upstream server
+			if len(upstreams) > 0 {
+				upstream = upstreams[0]
+			}
+
+			// Cache the successful response
+			if h.Cache != nil {
+				h.Cache.Set(ctx, r, resp)
+			}
+
+			responseCode = resp.Rcode
+			h.writeMsg(w, resp)
+			return
+		}
+	}
+
 	// Forward to upstream DNS
 	if h.Forwarder != nil {
 		resp, err := h.Forwarder.Forward(ctx, r)

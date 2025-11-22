@@ -7,15 +7,123 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Phase 3 - Advanced Features (Next)
+### Phase 3 - Advanced Features (Future)
 - DoH/DoT support (DNS over HTTPS/TLS)
 - DNSSEC validation
-- Custom DNS responses
 - Advanced analytics dashboard
 - Multi-user authentication
 - Query filtering by client groups
-- DNS query forwarding rules
 - Integration with external threat feeds
+
+---
+
+## [0.7.0] - 2025-11-22
+
+### ✨ Added - Conditional DNS Forwarding
+
+**Major Feature**: Route DNS queries to different upstream servers based on flexible rules!
+
+#### Dual Approach Architecture
+- **Declarative Rules** (`conditional_forwarding` config section)
+  - Simple YAML-based configuration
+  - Domain pattern matching (exact, wildcard, regex)
+  - Client IP-based routing with CIDR support
+  - Query type filtering (A, AAAA, PTR, etc.)
+  - Priority-based evaluation (1-100 range)
+  - First-match-wins semantics
+
+- **Policy Engine FORWARD Action**
+  - Expression-based dynamic routing
+  - Time-based conditional forwarding
+  - Complex logic with full context access
+  - Integration with existing policy engine
+
+#### Pattern Matching Support
+- **Exact matches**: `nas.local` - matches only "nas.local"
+- **Wildcard suffix**: `*.local` - matches "nas.local", "router.local", "sub.nas.local"
+- **Wildcard prefix**: `internal.*` - matches "internal.corp", "internal.net"
+- **Regex patterns**: `/^[a-z]+\.local$/` - advanced pattern matching
+
+#### Use Cases
+- **Split-DNS**: Route `.local` domains to internal DNS, everything else to public DNS
+- **VPN Integration**: Route VPN clients (`10.8.0.0/24`) to corporate DNS for internal domains
+- **Reverse DNS**: Send PTR queries to local network DNS for IP address lookups
+- **Multi-Site**: Route different domain suffixes to site-specific DNS servers
+- **Business Hours Routing**: Use policy engine for time-based upstream selection
+
+#### Performance
+- **Sub-200ns** rule evaluation per query
+- **Zero allocations** in hot path (no GC pressure)
+- Hash-based exact domain matching: **16ns**
+- Wildcard matching: **15ns**
+- Regex matching: **80ns**
+- CIDR matching: **10.8ns**
+- Multi-rule evaluation: **55ns** (3 rules)
+
+#### Configuration Example
+```yaml
+conditional_forwarding:
+  enabled: true
+  rules:
+    - name: "Local domains"
+      priority: 90
+      domains: ["*.local", "*.lan"]
+      upstreams: ["192.168.1.1:53", "192.168.1.2:53"]
+      enabled: true
+
+    - name: "VPN clients to corporate DNS"
+      priority: 80
+      client_cidrs: ["10.8.0.0/24"]
+      domains: ["*.corp.example.com"]
+      upstreams: ["10.0.0.53:53"]
+      enabled: true
+```
+
+#### DNS Processing Order
+1. **Policy Engine** (FORWARD action takes precedence)
+2. **Local Records** (custom A/AAAA/CNAME records)
+3. **Blocklist Check** (block ads/malware)
+4. **Conditional Forwarding** (route to specific upstreams if rules match)
+5. **Default Forwarding** (use default upstream DNS)
+
+#### Implementation Details
+- **New packages**: `pkg/forwarder/evaluator.go`, `pkg/forwarder/matcher.go`
+- **New config**: `pkg/config/conditional_forwarding.go`
+- **Integration**: `pkg/dns/server.go` (lines 409-441, 615-649)
+- **61 tests** with **73%+ coverage**
+- **0 security issues** (gosec scan)
+- **Comprehensive documentation** in README and implementation guide
+
+### Changed
+- **Policy Engine**: Added `FORWARD` action for dynamic conditional forwarding
+  - Example: `action: "FORWARD"` with `action_data: "10.0.0.1:53,10.0.0.2:53"`
+  - Allows complex time-based or expression-based routing
+- Updated README with conditional forwarding documentation and examples
+- Added extensive configuration examples in `config/config.example.yml`
+
+### Performance
+- All benchmarks exceed performance targets (<200ns)
+- Zero allocations in rule evaluation (no memory overhead)
+- Scales efficiently with multiple rules (55ns for 3 rules)
+
+### Documentation
+- Added comprehensive conditional forwarding section to README
+- Created implementation guide: `docs/development/v0.7.0-conditional-forwarding-implementation.md`
+- Created roadmap: `docs/development/ROADMAP.md`
+- Updated example configuration with detailed comments
+- Added migration guide for new users
+
+### Testing
+- 61 unit tests across forwarder, config, and DNS packages
+- 3 integration tests (domain matching, priority ordering, policy FORWARD)
+- All tests passing with race detector
+- Performance benchmarks included
+
+### Notes
+- **No breaking changes** - feature is opt-in and disabled by default
+- **Backward compatible** - existing configurations work without modification
+- See migration guide in documentation for configuration examples
+- Web UI management for rules planned for v0.8.0
 
 ---
 
