@@ -102,7 +102,15 @@ func NewSQLiteStorage(cfg *Config) (Storage, error) {
 	return storage, nil
 }
 
-// applyMigrations applies database migrations
+// applyMigrations applies database schema migrations in a versioned manner.
+// It checks if the schema_version table exists, and if not, applies the initial
+// schema from the embedded SQL file. This function is idempotent and safe to call
+// multiple times. Future schema changes should be added here with version checks
+// to enable zero-downtime migrations.
+//
+// Migration strategy:
+// - Version 1: Initial schema with queries, domain_stats, and schema_version tables
+// - Future versions: Will check current version and apply incremental migrations
 func applyMigrations(db *sql.DB) error {
 	// Check if schema_version table exists
 	var tableExists bool
@@ -147,7 +155,18 @@ func (s *SQLiteStorage) LogQuery(ctx context.Context, query *QueryLog) error {
 	}
 }
 
-// flushWorker processes buffered queries in the background
+// flushWorker runs as a background goroutine that processes buffered DNS queries.
+// It batches queries together for efficient database writes and flushes them either
+// when the batch reaches cfg.BatchSize or when cfg.FlushInterval elapses.
+//
+// This worker ensures that query logging doesn't block DNS request processing:
+// - Queries are received from s.buffer channel (async from DNS handler)
+// - Batching reduces database write overhead (1 txn vs N txns)
+// - Periodic flushes prevent queries from sitting in buffer too long
+// - Graceful shutdown: flushes remaining queries when buffer closes
+//
+// The worker continues running until s.buffer is closed, at which point it
+// flushes any remaining queries and exits.
 func (s *SQLiteStorage) flushWorker() {
 	defer s.wg.Done()
 
@@ -196,7 +215,20 @@ func (s *SQLiteStorage) flushWorker() {
 	}
 }
 
-// flushBatch writes a batch of queries to the database
+// flushBatch writes a batch of queries to the database in a single transaction.
+// This method is called by flushWorker and performs the actual database writes
+// for accumulated queries. Using transactions significantly improves write
+// performance (~50-100x faster than individual INSERTs).
+//
+// Performance characteristics:
+// - Single transaction for entire batch (atomicity + speed)
+// - Prepared statements reused for each query
+// - Domain statistics updated asynchronously to avoid blocking
+//
+// Error handling:
+// - Returns error if transaction fails (logged by caller)
+// - Domain stats failures are logged but don't fail the batch
+// - Transaction automatically rolled back on error (defer)
 func (s *SQLiteStorage) flushBatch(queries []*QueryLog) error {
 	if len(queries) == 0 {
 		return nil
@@ -238,7 +270,21 @@ func (s *SQLiteStorage) flushBatch(queries []*QueryLog) error {
 	return nil
 }
 
-// updateDomainStats updates the domain_stats table
+// updateDomainStats updates the domain_stats table with aggregated statistics.
+// This method maintains per-domain counters and timestamps for analytics purposes.
+// It's called asynchronously from flushBatch to avoid blocking query inserts.
+//
+// The domain_stats table tracks:
+// - query_count: Total queries for this domain
+// - first_queried: Timestamp of first query (never updated)
+// - last_queried: Timestamp of most recent query
+// - blocked: Whether domain is in blocklist
+//
+// Uses UPSERT (INSERT ... ON CONFLICT) for efficient updates:
+// - New domains: INSERT with initial values
+// - Existing domains: Increment counter and update last_queried
+//
+// Errors are logged but don't propagate (non-critical data).
 func (s *SQLiteStorage) updateDomainStats(queries []*QueryLog) {
 	for _, query := range queries {
 		_, err := s.db.Exec(`
@@ -533,7 +579,18 @@ func (s *SQLiteStorage) Ping(ctx context.Context) error {
 	return s.db.PingContext(ctx)
 }
 
-// Helper function to scan query logs from rows
+// scanQueryLogs is a helper function that scans SQL rows into QueryLog structs.
+// It's used by multiple query methods (GetRecentQueries, GetQueriesByDomain, etc.)
+// to avoid code duplication in row scanning logic.
+//
+// The function handles:
+// - Iterating through all rows
+// - Scanning each column into QueryLog fields
+// - NULL handling for optional fields (e.g., upstream)
+// - Collecting all queries into a slice
+//
+// Returns an error if any row scan fails. The caller is responsible for
+// closing the rows object.
 func scanQueryLogs(rows *sql.Rows) ([]*QueryLog, error) {
 	var queries []*QueryLog
 

@@ -193,7 +193,20 @@ type wrappedHandler struct {
 	metrics *telemetry.Metrics
 }
 
-// serveDNS handles DNS requests with logging and metrics
+// serveDNS is the DNS request handler wrapper that adds observability.
+// It wraps the core DNS handler (Handler.ServeDNS) with:
+// - Request logging (domain, query type, client IP)
+// - Prometheus metrics collection (query counts by type)
+// - Query duration measurement
+//
+// This wrapper sits between the miekg/dns library and our Handler,
+// providing a single point for cross-cutting concerns without
+// polluting the core DNS resolution logic.
+//
+// Metrics collected:
+// - DNSQueriesTotal: Counter of total queries
+// - DNSQueriesByType: Counter per query type (A, AAAA, MX, etc.)
+// - DNSQueryDuration: Histogram of query latencies
 func (w *wrappedHandler) serveDNS(rw dns.ResponseWriter, r *dns.Msg) {
 	startTime := time.Now()
 	ctx := context.Background()
@@ -236,7 +249,18 @@ func (w *wrappedHandler) serveDNS(rw dns.ResponseWriter, r *dns.Msg) {
 	)
 }
 
-// getClientIP extracts the client IP from the DNS request
+// getClientIP extracts the client IP address from the DNS ResponseWriter.
+// It handles both UDP and TCP connections by parsing the RemoteAddr(),
+// which can return different address formats depending on the protocol:
+// - UDP: *net.UDPAddr
+// - TCP: *net.TCPAddr
+//
+// The function attempts to extract just the IP portion (without port)
+// using net.SplitHostPort. If that fails (e.g., IPv6 without brackets),
+// it falls back to returning the full address string.
+//
+// Returns "unknown" if RemoteAddr() is nil, which shouldn't happen in
+// normal operation but provides a safe default.
 func getClientIP(w dns.ResponseWriter) string {
 	if w.RemoteAddr() != nil {
 		host, _, err := net.SplitHostPort(w.RemoteAddr().String())
