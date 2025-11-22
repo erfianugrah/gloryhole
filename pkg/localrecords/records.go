@@ -21,16 +21,16 @@ const (
 
 // LocalRecord represents a single local DNS record
 type LocalRecord struct {
-	Domain   string     // Fully qualified domain name (e.g., "nas.local.")
-	Type     RecordType // Record type (A, AAAA, CNAME, etc.)
-	TTL      uint32     // Time to live in seconds
-	Priority uint16     // For MX, SRV records (0 for others)
-	Weight   uint16     // For SRV records (0 for others)
-	Port     uint16     // For SRV records (0 for others)
-	Target   string     // CNAME target, MX host, TXT data, SRV target
-	IPs      []net.IP   // Multiple IPs for A/AAAA records
-	Wildcard bool       // True if this is a wildcard record (*.domain)
-	Enabled  bool       // Can be disabled without removing
+	Domain   string
+	Type     RecordType
+	Target   string
+	IPs      []net.IP
+	TTL      uint32
+	Priority uint16
+	Weight   uint16
+	Port     uint16
+	Wildcard bool
+	Enabled  bool
 }
 
 // Manager manages local DNS records with efficient lookups

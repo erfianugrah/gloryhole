@@ -13,8 +13,8 @@ import (
 
 func TestNew(t *testing.T) {
 	tests := []struct {
-		name    string
 		cfg     *config.LoggingConfig
+		name    string
 		wantErr bool
 	}{
 		{

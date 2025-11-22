@@ -238,9 +238,9 @@ func TestParseIPs(t *testing.T) {
 
 func TestValidateRecord_EdgeCases(t *testing.T) {
 	tests := []struct {
-		name    string
-		record  *LocalRecord
 		wantErr error
+		record  *LocalRecord
+		name    string
 	}{
 		{
 			name:    "nil record",

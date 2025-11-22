@@ -12,11 +12,11 @@ import (
 
 // PolicyResponse represents a policy rule in API responses
 type PolicyResponse struct {
-	ID         int    `json:"id"`
 	Name       string `json:"name"`
 	Logic      string `json:"logic"`
 	Action     string `json:"action"`
 	ActionData string `json:"action_data,omitempty"`
+	ID         int    `json:"id"`
 	Enabled    bool   `json:"enabled"`
 }
 

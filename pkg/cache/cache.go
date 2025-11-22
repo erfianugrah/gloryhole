@@ -14,25 +14,14 @@ import (
 
 // Cache is a thread-safe DNS response cache with LRU eviction and TTL support
 type Cache struct {
-	cfg    *config.CacheConfig
-	logger *logging.Logger
-
-	// Single RWMutex for all cache operations (following our optimization pattern)
-	mu sync.RWMutex
-
-	// Cache entries indexed by cache key (domain + qtype)
-	entries map[string]*cacheEntry
-
-	// LRU tracking - simple timestamp-based approach
-	// For more advanced LRU, we could use a doubly-linked list, but timestamps work well
-	maxEntries int
-
-	// Statistics
-	stats cacheStats
-
-	// Cleanup control
+	cfg         *config.CacheConfig
+	logger      *logging.Logger
+	entries     map[string]*cacheEntry
 	stopCleanup chan struct{}
 	cleanupDone chan struct{}
+	stats       cacheStats
+	maxEntries  int
+	mu          sync.RWMutex
 }
 
 // cacheEntry holds a cached DNS response with metadata

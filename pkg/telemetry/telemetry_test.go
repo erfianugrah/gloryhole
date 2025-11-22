@@ -15,8 +15,8 @@ func TestNew(t *testing.T) {
 	logger := logging.NewDefault()
 
 	tests := []struct {
-		name    string
 		cfg     *config.TelemetryConfig
+		name    string
 		wantErr bool
 	}{
 		{

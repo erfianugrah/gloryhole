@@ -522,10 +522,10 @@ func TestPolicyAPI_NoPolicyEngine(t *testing.T) {
 	})
 
 	tests := []struct {
+		handler    func(http.ResponseWriter, *http.Request)
 		name       string
 		method     string
 		path       string
-		handler    func(http.ResponseWriter, *http.Request)
 		expectCode int
 	}{
 		{

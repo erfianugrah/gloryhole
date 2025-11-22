@@ -26,29 +26,17 @@ var msgPool = sync.Pool{
 
 // Handler is a DNS handler
 type Handler struct {
-	// Single lock for all lookup maps (performance optimization)
-	// Using one lock instead of 4 separate locks reduces overhead from ~2-4μs to ~500ns
-	// Note: BlocklistManager uses lock-free atomic.Pointer, so no lock needed for blocklist lookups
-	lookupMu sync.RWMutex
-
-	// Blocklist manager with lock-free updates (FAST PATH - preferred)
+	Storage          storage.Storage
 	BlocklistManager *blocklist.Manager
-
-	// Legacy static maps (SLOW PATH - backward compatibility)
-	Blocklist      map[string]struct{}
-	Whitelist      map[string]struct{}
-	Overrides      map[string]net.IP
-	CNAMEOverrides map[string]string
-
-	// Local DNS records manager (e.g., nas.local -> 192.168.1.100)
-	LocalRecords *localrecords.Manager // Optional local DNS records
-
-	// Policy engine for advanced rule-based filtering
-	PolicyEngine *policy.Engine // Optional policy engine
-
-	Forwarder *forwarder.Forwarder
-	Cache     *cache.Cache    // Optional DNS response cache
-	Storage   storage.Storage // Optional query logging storage
+	Blocklist        map[string]struct{}
+	Whitelist        map[string]struct{}
+	Overrides        map[string]net.IP
+	CNAMEOverrides   map[string]string
+	LocalRecords     *localrecords.Manager
+	PolicyEngine     *policy.Engine
+	Forwarder        *forwarder.Forwarder
+	Cache            *cache.Cache
+	lookupMu         sync.RWMutex
 }
 
 // NewHandler creates a new DNS handler

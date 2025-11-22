@@ -16,14 +16,12 @@ import (
 
 // Forwarder handles forwarding DNS queries to upstream servers
 type Forwarder struct {
-	upstreams []string
-	index     atomic.Uint32
-	timeout   time.Duration
-	retries   int
-	logger    *logging.Logger
-
-	// Connection pool
 	clientPool sync.Pool
+	logger     *logging.Logger
+	upstreams  []string
+	timeout    time.Duration
+	retries    int
+	index      atomic.Uint32
 }
 
 // NewForwarder creates a new DNS forwarder

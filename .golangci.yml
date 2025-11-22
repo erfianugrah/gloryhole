@@ -44,7 +44,6 @@ linters-settings:
     govet:
       enable-all: true
       disable:
-        - fieldalignment
         - shadow
         - unusedwrite
     cyclop:

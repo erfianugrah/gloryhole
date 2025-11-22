@@ -57,8 +57,8 @@ func TestLoadWithDefaults(t *testing.T) {
 
 func TestValidate(t *testing.T) {
 	tests := []struct {
-		name    string
 		cfg     *Config
+		name    string
 		wantErr bool
 	}{
 		{

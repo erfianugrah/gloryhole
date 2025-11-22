@@ -20,12 +20,12 @@ type Engine struct {
 
 // Rule represents a single policy rule
 type Rule struct {
-	Name       string // Human-readable name
-	Logic      string // Expression to evaluate (e.g., "Hour >= 22 && Domain matches 'facebook.com'")
-	Action     string // Action to take: BLOCK, ALLOW, or REDIRECT
-	ActionData string // Optional data for the action (e.g., redirect target)
-	Enabled    bool   // Whether the rule is active
 	program    *vm.Program
+	Name       string
+	Logic      string
+	Action     string
+	ActionData string
+	Enabled    bool
 }
 
 // Action constants
@@ -37,15 +37,15 @@ const (
 
 // Context represents the evaluation context for a DNS query
 type Context struct {
-	Domain    string    // Fully qualified domain name
-	ClientIP  string    // Client IP address
-	QueryType string    // Query type (A, AAAA, CNAME, etc.)
-	Hour      int       // Current hour (0-23)
-	Minute    int       // Current minute (0-59)
-	Day       int       // Day of month (1-31)
-	Month     int       // Month (1-12)
-	Weekday   int       // Day of week (0-6, Sunday=0)
-	Time      time.Time // Full timestamp
+	Time      time.Time
+	Domain    string
+	ClientIP  string
+	QueryType string
+	Hour      int
+	Minute    int
+	Day       int
+	Month     int
+	Weekday   int
 }
 
 // NewEngine creates a new policy engine

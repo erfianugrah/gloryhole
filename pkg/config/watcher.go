@@ -12,12 +12,12 @@ import (
 
 // Watcher watches configuration files for changes and reloads them
 type Watcher struct {
-	path     string
 	cfg      *Config
-	mu       sync.RWMutex
 	watcher  *fsnotify.Watcher
 	onChange func(*Config)
 	logger   *slog.Logger
+	path     string
+	mu       sync.RWMutex
 }
 
 // NewWatcher creates a new configuration file watcher

@@ -16,17 +16,15 @@ var initialSchema string
 
 // SQLiteStorage implements the Storage interface using SQLite
 type SQLiteStorage struct {
-	db     *sql.DB
-	cfg    *Config
-	buffer chan *QueryLog
-	wg     sync.WaitGroup
-	mu     sync.RWMutex
-	closed bool
-
-	// Prepared statements (cached for performance)
+	db                   *sql.DB
+	cfg                  *Config
+	buffer               chan *QueryLog
 	stmtInsertQuery      *sql.Stmt
 	stmtGetRecentQueries *sql.Stmt
 	stmtGetStatistics    *sql.Stmt
+	wg                   sync.WaitGroup
+	mu                   sync.RWMutex
+	closed               bool
 }
 
 // NewSQLiteStorage creates a new SQLite storage backend

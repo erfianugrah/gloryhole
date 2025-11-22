@@ -152,8 +152,8 @@ func TestGetUptime_Various(t *testing.T) {
 
 	tests := []struct {
 		name     string
-		duration time.Duration
 		contains string
+		duration time.Duration
 	}{
 		{
 			name:     "seconds only",

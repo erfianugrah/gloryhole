@@ -15,18 +15,14 @@ import (
 
 // Server represents the API server
 type Server struct {
-	handler    http.Handler
-	httpServer *http.Server
-	logger     *slog.Logger
-
-	// Dependencies
+	startTime        time.Time
+	handler          http.Handler
 	storage          storage.Storage
+	httpServer       *http.Server
+	logger           *slog.Logger
 	blocklistManager *blocklist.Manager
 	policyEngine     *policy.Engine
-
-	// Metadata
-	version   string
-	startTime time.Time
+	version          string
 }
 
 // Config holds API server configuration

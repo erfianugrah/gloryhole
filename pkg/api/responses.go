@@ -20,34 +20,34 @@ type LivenessResponse struct {
 
 // ReadinessResponse represents the readiness probe response
 type ReadinessResponse struct {
-	Status string            `json:"status"` // "ready" or "not_ready"
-	Checks map[string]string `json:"checks"` // Component health status
+	Checks map[string]string `json:"checks"`
+	Status string            `json:"status"`
 }
 
 // StatsResponse represents query statistics
 type StatsResponse struct {
+	Period         string  `json:"period"`
+	Timestamp      string  `json:"timestamp"`
 	TotalQueries   int64   `json:"total_queries"`
 	BlockedQueries int64   `json:"blocked_queries"`
 	CachedQueries  int64   `json:"cached_queries"`
-	BlockRate      float64 `json:"block_rate"`      // Percentage
-	CacheHitRate   float64 `json:"cache_hit_rate"`  // Percentage
-	AvgResponseMs  float64 `json:"avg_response_ms"` // Average response time
-	Period         string  `json:"period"`          // Time period for stats
-	Timestamp      string  `json:"timestamp"`       // ISO 8601 format
+	BlockRate      float64 `json:"block_rate"`
+	CacheHitRate   float64 `json:"cache_hit_rate"`
+	AvgResponseMs  float64 `json:"avg_response_ms"`
 }
 
 // QueryResponse represents a single DNS query log entry
 type QueryResponse struct {
-	ID             int64  `json:"id"`
-	Timestamp      string `json:"timestamp"` // ISO 8601 format
+	Timestamp      string `json:"timestamp"`
 	ClientIP       string `json:"client_ip"`
 	Domain         string `json:"domain"`
 	QueryType      string `json:"query_type"`
+	Upstream       string `json:"upstream,omitempty"`
+	ID             int64  `json:"id"`
 	ResponseCode   int    `json:"response_code"`
+	ResponseTimeMs int64  `json:"response_time_ms"`
 	Blocked        bool   `json:"blocked"`
 	Cached         bool   `json:"cached"`
-	ResponseTimeMs int64  `json:"response_time_ms"`
-	Upstream       string `json:"upstream,omitempty"`
 }
 
 // QueriesResponse represents paginated query results
@@ -74,15 +74,15 @@ type TopDomainsResponse struct {
 // BlocklistReloadResponse represents blocklist reload result
 type BlocklistReloadResponse struct {
 	Status  string `json:"status"`
-	Domains int    `json:"domains"`
 	Message string `json:"message,omitempty"`
+	Domains int    `json:"domains"`
 }
 
 // ErrorResponse represents an API error
 type ErrorResponse struct {
 	Error   string `json:"error"`
-	Code    int    `json:"code"`
 	Message string `json:"message,omitempty"`
+	Code    int    `json:"code"`
 }
 
 // convertQueryLog converts storage.QueryLog to QueryResponse

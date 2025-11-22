@@ -28,16 +28,16 @@ type Storage interface {
 
 // QueryLog represents a single DNS query log entry
 type QueryLog struct {
-	ID             int64     `json:"id"`
 	Timestamp      time.Time `json:"timestamp"`
 	ClientIP       string    `json:"client_ip"`
 	Domain         string    `json:"domain"`
-	QueryType      string    `json:"query_type"`         // A, AAAA, CNAME, etc.
-	ResponseCode   int       `json:"response_code"`      // DNS response code
-	Blocked        bool      `json:"blocked"`            // Was query blocked?
-	Cached         bool      `json:"cached"`             // Was response from cache?
-	ResponseTimeMs int64     `json:"response_time_ms"`   // Response time in milliseconds
-	Upstream       string    `json:"upstream,omitempty"` // Which upstream was used
+	QueryType      string    `json:"query_type"`
+	Upstream       string    `json:"upstream,omitempty"`
+	ID             int64     `json:"id"`
+	ResponseCode   int       `json:"response_code"`
+	ResponseTimeMs int64     `json:"response_time_ms"`
+	Blocked        bool      `json:"blocked"`
+	Cached         bool      `json:"cached"`
 }
 
 // Statistics represents aggregated query statistics
@@ -56,11 +56,11 @@ type Statistics struct {
 
 // DomainStats represents statistics for a specific domain
 type DomainStats struct {
+	LastQueried  time.Time `json:"last_queried"`
+	FirstQueried time.Time `json:"first_queried,omitempty"`
 	Domain       string    `json:"domain"`
 	QueryCount   int64     `json:"query_count"`
-	LastQueried  time.Time `json:"last_queried"`
 	Blocked      bool      `json:"blocked"`
-	FirstQueried time.Time `json:"first_queried,omitempty"`
 }
 
 // BackendType represents the type of storage backend
@@ -73,21 +73,15 @@ const (
 
 // Config represents storage configuration
 type Config struct {
-	Enabled bool         `yaml:"enabled"`
-	Backend BackendType  `yaml:"backend"`
-	SQLite  SQLiteConfig `yaml:"sqlite"`
-	D1      D1Config     `yaml:"d1"`
-
-	// Buffer settings
-	BufferSize    int           `yaml:"buffer_size"`    // Number of queries to buffer
-	FlushInterval time.Duration `yaml:"flush_interval"` // How often to flush buffer
-	BatchSize     int           `yaml:"batch_size"`     // Max queries per batch
-
-	// Retention settings
-	RetentionDays int `yaml:"retention_days"` // Days to keep detailed logs
-
-	// Statistics settings
-	Statistics StatisticsConfig `yaml:"statistics"`
+	D1            D1Config         `yaml:"d1"`
+	Backend       BackendType      `yaml:"backend"`
+	SQLite        SQLiteConfig     `yaml:"sqlite"`
+	Statistics    StatisticsConfig `yaml:"statistics"`
+	BufferSize    int              `yaml:"buffer_size"`
+	FlushInterval time.Duration    `yaml:"flush_interval"`
+	BatchSize     int              `yaml:"batch_size"`
+	RetentionDays int              `yaml:"retention_days"`
+	Enabled       bool             `yaml:"enabled"`
 }
 
 // SQLiteConfig represents SQLite-specific configuration

@@ -97,8 +97,8 @@ func TestNew_InvalidConfig(t *testing.T) {
 	logger := testLogger(t)
 
 	tests := []struct {
-		name    string
 		cfg     *config.CacheConfig
+		name    string
 		wantErr bool
 	}{
 		{

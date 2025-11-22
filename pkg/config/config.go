@@ -12,47 +12,28 @@ import (
 
 // Config holds the application configuration
 type Config struct {
-	// Server settings
-	Server ServerConfig `yaml:"server"`
-
-	// Upstream DNS servers (global default)
-	UpstreamDNSServers []string `yaml:"upstream_dns_servers"`
-
-	// Update settings
-	UpdateInterval       time.Duration `yaml:"update_interval"`
-	AutoUpdateBlocklists bool          `yaml:"auto_update_blocklists"`
-
-	// Blocklists and filtering
-	Blocklists     []string          `yaml:"blocklists"`
-	Whitelist      []string          `yaml:"whitelist"`
-	Overrides      map[string]string `yaml:"overrides"`
-	CNAMEOverrides map[string]string `yaml:"cname_overrides"`
-
-	// Database (uses storage.Config from pkg/storage)
-	Database storage.Config `yaml:"database"`
-
-	// Cache settings
-	Cache CacheConfig `yaml:"cache"`
-
-	// Local DNS records
-	LocalRecords LocalRecordsConfig `yaml:"local_records"`
-
-	// Policy engine rules
-	Policy PolicyConfig `yaml:"policy"`
-
-	// Logging
-	Logging LoggingConfig `yaml:"logging"`
-
-	// Telemetry (OTEL)
-	Telemetry TelemetryConfig `yaml:"telemetry"`
+	Overrides            map[string]string  `yaml:"overrides"`
+	CNAMEOverrides       map[string]string  `yaml:"cname_overrides"`
+	Telemetry            TelemetryConfig    `yaml:"telemetry"`
+	Server               ServerConfig       `yaml:"server"`
+	Policy               PolicyConfig       `yaml:"policy"`
+	LocalRecords         LocalRecordsConfig `yaml:"local_records"`
+	UpstreamDNSServers   []string           `yaml:"upstream_dns_servers"`
+	Blocklists           []string           `yaml:"blocklists"`
+	Whitelist            []string           `yaml:"whitelist"`
+	Logging              LoggingConfig      `yaml:"logging"`
+	Database             storage.Config     `yaml:"database"`
+	Cache                CacheConfig        `yaml:"cache"`
+	UpdateInterval       time.Duration      `yaml:"update_interval"`
+	AutoUpdateBlocklists bool               `yaml:"auto_update_blocklists"`
 }
 
 // ServerConfig holds server-specific settings
 type ServerConfig struct {
 	ListenAddress string `yaml:"listen_address"`
+	WebUIAddress  string `yaml:"web_ui_address"`
 	TCPEnabled    bool   `yaml:"tcp_enabled"`
 	UDPEnabled    bool   `yaml:"udp_enabled"`
-	WebUIAddress  string `yaml:"web_ui_address"`
 }
 
 // StorageConfig is deprecated - use storage.Config instead
@@ -80,24 +61,24 @@ type CacheConfig struct {
 
 // LocalRecordsConfig holds local DNS records configuration
 type LocalRecordsConfig struct {
-	Enabled bool               `yaml:"enabled"`
 	Records []LocalRecordEntry `yaml:"records"`
+	Enabled bool               `yaml:"enabled"`
 }
 
 // LocalRecordEntry represents a single local DNS record in the config
 type LocalRecordEntry struct {
-	Domain   string   `yaml:"domain"`   // Domain name (e.g., "nas.local", "*.dev.local")
-	Type     string   `yaml:"type"`     // Record type (A, AAAA, CNAME)
-	IPs      []string `yaml:"ips"`      // IP addresses for A/AAAA records
-	Target   string   `yaml:"target"`   // Target for CNAME records
-	TTL      uint32   `yaml:"ttl"`      // TTL in seconds (default: 300)
-	Wildcard bool     `yaml:"wildcard"` // True if this is a wildcard record (*.domain)
+	Domain   string   `yaml:"domain"`
+	Type     string   `yaml:"type"`
+	Target   string   `yaml:"target"`
+	IPs      []string `yaml:"ips"`
+	TTL      uint32   `yaml:"ttl"`
+	Wildcard bool     `yaml:"wildcard"`
 }
 
 // PolicyConfig holds policy engine configuration
 type PolicyConfig struct {
-	Enabled bool              `yaml:"enabled"` // Enable/disable policy engine
-	Rules   []PolicyRuleEntry `yaml:"rules"`   // Policy rules
+	Rules   []PolicyRuleEntry `yaml:"rules"`
+	Enabled bool              `yaml:"enabled"`
 }
 
 // PolicyRuleEntry represents a single policy rule in the config
@@ -123,13 +104,13 @@ type LoggingConfig struct {
 
 // TelemetryConfig holds OpenTelemetry settings
 type TelemetryConfig struct {
-	Enabled           bool   `yaml:"enabled"`
 	ServiceName       string `yaml:"service_name"`
 	ServiceVersion    string `yaml:"service_version"`
-	PrometheusEnabled bool   `yaml:"prometheus_enabled"`
-	PrometheusPort    int    `yaml:"prometheus_port"`
-	TracingEnabled    bool   `yaml:"tracing_enabled"`
 	TracingEndpoint   string `yaml:"tracing_endpoint"`
+	PrometheusPort    int    `yaml:"prometheus_port"`
+	Enabled           bool   `yaml:"enabled"`
+	PrometheusEnabled bool   `yaml:"prometheus_enabled"`
+	TracingEnabled    bool   `yaml:"tracing_enabled"`
 }
 
 // Load loads the configuration from a YAML file
