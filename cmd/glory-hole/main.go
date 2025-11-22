@@ -50,12 +50,16 @@ func main() {
 		os.Exit(performHealthCheck(*apiAddress, *configPath))
 	}
 
-	// Parse configuration
-	cfg, err := config.Load(*configPath)
+	// Create context for application lifecycle
+	ctx := context.Background()
+
+	// Initialize config watcher for hot-reload support
+	cfgWatcher, err := config.NewWatcher(*configPath, nil) // Logger set after initialization
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to load config: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Failed to initialize config watcher: %v\n", err)
 		os.Exit(1)
 	}
+	cfg := cfgWatcher.Config()
 
 	// Initialize logger
 	logger, err := logging.New(&cfg.Logging)
@@ -65,13 +69,33 @@ func main() {
 	}
 	logging.SetGlobal(logger)
 
+	// Update watcher with logger
+	cfgWatcher, err = config.NewWatcher(*configPath, logger.Logger)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to reinitialize config watcher with logger: %v\n", err)
+		os.Exit(1)
+	}
+	cfg = cfgWatcher.Config()
+
+	// Note: OnChange callback will be set after components are created
+	// This allows the callback to update components when config changes
+
+	// Start config watcher in background
+	watcherCtx, watcherCancel := context.WithCancel(ctx)
+	defer watcherCancel()
+
+	go func() {
+		if watcherErr := cfgWatcher.Start(watcherCtx); watcherErr != nil {
+			logger.Error("Config watcher stopped", "error", watcherErr)
+		}
+	}()
+
 	logger.Info("Glory Hole DNS starting",
 		"version", version,
 		"build_time", buildTime,
 	)
 
 	// Initialize telemetry
-	ctx := context.Background()
 	telem, err := telemetry.New(ctx, &cfg.Telemetry, logger)
 	if err != nil {
 		logger.Error("Failed to initialize telemetry", "error", err)
@@ -308,6 +332,151 @@ func main() {
 		Version:          version,
 	})
 
+	// Setup config change callback now that all components are created
+	// This enables hot-reload for configuration changes
+	cfgWatcher.OnChange(func(newCfg *config.Config) {
+		logger.Info("Configuration reloaded",
+			"dns_address", newCfg.Server.ListenAddress,
+			"api_address", newCfg.Server.WebUIAddress,
+		)
+
+		// Hot-reload blocklists if sources changed
+		if blocklistMgr != nil && !equalBlocklistConfig(cfg.Blocklists, newCfg.Blocklists) {
+			logger.Info("Blocklist configuration changed, triggering reload")
+			if err := blocklistMgr.Update(ctx); err != nil {
+				logger.Error("Failed to reload blocklists", "error", err)
+			} else {
+				logger.Info("Blocklists reloaded", "domains", blocklistMgr.Size())
+			}
+		}
+
+		// Hot-reload policy engine if rules changed
+		if policyEngine != nil && !equalPolicyConfig(&cfg.Policy, &newCfg.Policy) {
+			logger.Info("Policy configuration changed, triggering reload")
+			policyEngine.Clear()
+			for _, entry := range newCfg.Policy.Rules {
+				rule := &policy.Rule{
+					Name:       entry.Name,
+					Logic:      entry.Logic,
+					Action:     entry.Action,
+					ActionData: entry.ActionData,
+					Enabled:    entry.Enabled,
+				}
+				if err := policyEngine.AddRule(rule); err != nil {
+					logger.Error("Failed to add policy rule during hot-reload",
+						"name", entry.Name,
+						"error", err,
+					)
+				}
+			}
+			logger.Info("Policy engine reloaded", "total_rules", policyEngine.Count())
+		}
+
+		// Hot-reload conditional forwarding if changed
+		if !equalConditionalForwardingConfig(&cfg.ConditionalForwarding, &newCfg.ConditionalForwarding) {
+			logger.Info("Conditional forwarding configuration changed")
+			if newCfg.ConditionalForwarding.Enabled {
+				ruleEvaluator, err := forwarder.NewRuleEvaluator(&newCfg.ConditionalForwarding)
+				if err != nil {
+					logger.Error("Failed to reload conditional forwarding", "error", err)
+				} else {
+					handler.RuleEvaluator = ruleEvaluator
+					logger.Info("Conditional forwarding reloaded", "total_rules", ruleEvaluator.Count())
+				}
+			} else {
+				handler.RuleEvaluator = nil
+				logger.Info("Conditional forwarding disabled")
+			}
+		}
+
+		// Hot-reload whitelist if changed
+		if !equalStringSlice(cfg.Whitelist, newCfg.Whitelist) {
+			logger.Info("Whitelist configuration changed")
+			handler.Whitelist = make(map[string]struct{})
+			for _, domain := range newCfg.Whitelist {
+				handler.Whitelist[domain] = struct{}{}
+			}
+			logger.Info("Whitelist reloaded", "domains", len(newCfg.Whitelist))
+		}
+
+		// Hot-reload local records if changed
+		if !equalLocalRecordsConfig(&cfg.LocalRecords, &newCfg.LocalRecords) {
+			logger.Info("Local records configuration changed")
+			if newCfg.LocalRecords.Enabled && len(newCfg.LocalRecords.Records) > 0 {
+				localMgr := localrecords.NewManager()
+				for _, entry := range newCfg.LocalRecords.Records {
+					var record *localrecords.LocalRecord
+					switch entry.Type {
+					case "A":
+						if len(entry.IPs) == 0 {
+							continue
+						}
+						ips := make([]net.IP, 0, len(entry.IPs))
+						for _, ipStr := range entry.IPs {
+							if ip := net.ParseIP(ipStr); ip != nil && ip.To4() != nil {
+								ips = append(ips, ip.To4())
+							}
+						}
+						if len(ips) > 0 {
+							record = localrecords.NewARecord(entry.Domain, ips[0])
+							if len(ips) > 1 {
+								record.IPs = ips
+							}
+						}
+					case "AAAA":
+						if len(entry.IPs) == 0 {
+							continue
+						}
+						ips := make([]net.IP, 0, len(entry.IPs))
+						for _, ipStr := range entry.IPs {
+							if ip := net.ParseIP(ipStr); ip != nil && ip.To4() == nil {
+								ips = append(ips, ip.To16())
+							}
+						}
+						if len(ips) > 0 {
+							record = localrecords.NewAAAARecord(entry.Domain, ips[0])
+							if len(ips) > 1 {
+								record.IPs = ips
+							}
+						}
+					case "CNAME":
+						if entry.Target != "" {
+							record = localrecords.NewCNAMERecord(entry.Domain, entry.Target)
+						}
+					}
+
+					if record != nil {
+						if entry.TTL > 0 {
+							record.TTL = entry.TTL
+						}
+						record.Wildcard = entry.Wildcard
+						if err := localMgr.AddRecord(record); err != nil {
+							logger.Error("Failed to add local record during hot-reload",
+								"domain", entry.Domain,
+								"error", err,
+							)
+						}
+					}
+				}
+				handler.SetLocalRecords(localMgr)
+				logger.Info("Local records reloaded", "total_records", localMgr.Count())
+			} else {
+				handler.SetLocalRecords(nil)
+				logger.Info("Local records disabled")
+			}
+		}
+
+		// Update the cfg reference for next comparison
+		cfg = newCfg
+
+		// Note: Some config changes require server restart:
+		// - ListenAddress (DNS/API bind addresses)
+		// - Database settings (connection strings)
+		// - Upstream DNS servers (forwarder recreation)
+		// - Cache settings (cache recreation)
+		// These will take effect on next server restart
+	})
+
 	// Setup signal handling for graceful shutdown
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
@@ -380,6 +549,78 @@ func main() {
 		logger.Error("Server error", "error", err)
 		os.Exit(1)
 	}
+}
+
+// equalBlocklistConfig compares two blocklist configurations
+func equalBlocklistConfig(a, b []string) bool {
+	return equalStringSlice(a, b)
+}
+
+// equalPolicyConfig compares two policy configurations
+func equalPolicyConfig(a, b *config.PolicyConfig) bool {
+	if a.Enabled != b.Enabled || len(a.Rules) != len(b.Rules) {
+		return false
+	}
+	for i := range a.Rules {
+		if a.Rules[i].Name != b.Rules[i].Name ||
+			a.Rules[i].Logic != b.Rules[i].Logic ||
+			a.Rules[i].Action != b.Rules[i].Action ||
+			a.Rules[i].ActionData != b.Rules[i].ActionData ||
+			a.Rules[i].Enabled != b.Rules[i].Enabled {
+			return false
+		}
+	}
+	return true
+}
+
+// equalConditionalForwardingConfig compares two conditional forwarding configurations
+func equalConditionalForwardingConfig(a, b *config.ConditionalForwardingConfig) bool {
+	if a.Enabled != b.Enabled || len(a.Rules) != len(b.Rules) {
+		return false
+	}
+	for i := range a.Rules {
+		if a.Rules[i].Name != b.Rules[i].Name ||
+			!equalStringSlice(a.Rules[i].Domains, b.Rules[i].Domains) ||
+			!equalStringSlice(a.Rules[i].ClientCIDRs, b.Rules[i].ClientCIDRs) ||
+			!equalStringSlice(a.Rules[i].QueryTypes, b.Rules[i].QueryTypes) ||
+			!equalStringSlice(a.Rules[i].Upstreams, b.Rules[i].Upstreams) ||
+			a.Rules[i].Priority != b.Rules[i].Priority ||
+			a.Rules[i].Enabled != b.Rules[i].Enabled {
+			return false
+		}
+	}
+	return true
+}
+
+// equalStringSlice compares two string slices
+func equalStringSlice(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
+// equalLocalRecordsConfig compares two local records configurations
+func equalLocalRecordsConfig(a, b *config.LocalRecordsConfig) bool {
+	if a.Enabled != b.Enabled || len(a.Records) != len(b.Records) {
+		return false
+	}
+	for i := range a.Records {
+		if a.Records[i].Domain != b.Records[i].Domain ||
+			a.Records[i].Type != b.Records[i].Type ||
+			a.Records[i].Target != b.Records[i].Target ||
+			a.Records[i].TTL != b.Records[i].TTL ||
+			a.Records[i].Wildcard != b.Records[i].Wildcard ||
+			!equalStringSlice(a.Records[i].IPs, b.Records[i].IPs) {
+			return false
+		}
+	}
+	return true
 }
 
 // performHealthCheck performs a health check against the API server
