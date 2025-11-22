@@ -33,11 +33,11 @@ Glory-Hole uses a comprehensive testing strategy:
 - **Race Detection**: Catch concurrency bugs
 
 **Testing Philosophy:**
-- ✅ High coverage (>80%) for business logic
-- ✅ Race detector enabled in CI
-- ✅ Fast tests (<10s total run time)
-- ✅ Reliable tests (no flaky tests)
-- ✅ Clear test names describing what's being tested
+-  High coverage (>80%) for business logic
+-  Race detector enabled in CI
+-  Fast tests (<10s total run time)
+-  Reliable tests (no flaky tests)
+-  Clear test names describing what's being tested
 
 ---
 
@@ -368,7 +368,7 @@ func TestIntegration_DNSWithCache(t *testing.T) {
 - Every push to `main`
 - Every pull request
 
-**Status**: ✅ All tests passing (as of 2025-11-21)
+**Status**:  All tests passing (as of 2025-11-21)
 
 ### Race Detection
 
@@ -491,7 +491,7 @@ func TestWithServer(t *testing.T) {
 
 ## Best Practices
 
-### DO ✅
+### DO 
 
 - Write tests before fixing bugs (TDD for bug fixes)
 - Use table-driven tests for multiple scenarios
@@ -501,7 +501,7 @@ func TestWithServer(t *testing.T) {
 - Use subtests for organization
 - Clean up resources (files, servers, goroutines)
 
-### DON'T ❌
+### DON'T 
 
 - Write flaky tests (time-dependent, random)
 - Test implementation details (test behavior)
@@ -568,9 +568,9 @@ Glory-Hole has comprehensive test coverage:
 - Fast test suite (<10s)
 
 The testing strategy ensures:
-- 🛡️ High confidence in code changes
-- 🐛 Early bug detection
-- 📊 Performance regression prevention
+-  High confidence in code changes
+-  Early bug detection
+-  Performance regression prevention
 - 🔒 Thread-safety validation
 
 For questions or test-related issues, refer to the tests themselves as documentation - they show exactly how each component should be used.

@@ -13,10 +13,10 @@ Complete guide for deploying Glory-Hole DNS Server with Docker.
 
 ```bash
 # Pull latest image
-docker pull yourusername/glory-hole:latest
+docker pull erfianugrah/gloryhole:latest
 
 # Create config file
-wget https://raw.githubusercontent.com/yourusername/glory-hole/main/config/config.example.yml -O config.yml
+wget https://raw.githubusercontent.com/erfianugrah/gloryhole/main/config/config.example.yml -O config.yml
 
 # Run container
 docker run -d \
@@ -26,14 +26,14 @@ docker run -d \
   -p 8080:8080 \
   -v $(pwd)/config.yml:/etc/glory-hole/config.yml:ro \
   -v glory-hole-data:/var/lib/glory-hole \
-  yourusername/glory-hole:latest
+  erfianugrah/gloryhole:latest
 ```
 
 ## Building from Source
 
 ```bash
 # Clone repository
-git clone https://github.com/yourusername/glory-hole.git
+git clone https://github.com/erfianugrah/gloryhole.git
 cd glory-hole
 
 # Build image
@@ -41,9 +41,9 @@ docker build -t glory-hole:latest .
 
 # Or with build args
 docker build \
-  --build-arg VERSION=0.6.0 \
+  --build-arg VERSION=0.7.1 \
   --build-arg BUILD_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ") \
-  -t glory-hole:0.6.0 \
+  -t glory-hole:0.7.1 \
   .
 ```
 
@@ -61,7 +61,7 @@ docker run -d \
   -p 9090:9090 \
   -v $(pwd)/config.yml:/etc/glory-hole/config.yml:ro \
   -v glory-hole-data:/var/lib/glory-hole \
-  yourusername/glory-hole:latest
+  erfianugrah/gloryhole:latest
 ```
 
 **Port Mappings:**
@@ -93,7 +93,7 @@ docker run -d \
   --health-interval=30s \
   --health-timeout=3s \
   --health-retries=3 \
-  yourusername/glory-hole:latest
+  erfianugrah/gloryhole:latest
 ```
 
 **Resource Limits:**
@@ -116,7 +116,7 @@ version: '3.8'
 
 services:
   glory-hole:
-    image: yourusername/glory-hole:latest
+    image: erfianugrah/gloryhole:latest
     container_name: glory-hole
     restart: unless-stopped
     
@@ -155,7 +155,7 @@ version: '3.8'
 
 services:
   glory-hole:
-    image: yourusername/glory-hole:latest
+    image: erfianugrah/gloryhole:latest
     container_name: glory-hole
     restart: unless-stopped
     ports:
@@ -248,7 +248,7 @@ docker run -d \
   -v /opt/glory-hole/config.yml:/etc/glory-hole/config.yml:ro \
   -v /opt/glory-hole/data:/var/lib/glory-hole \
   -v /var/log/glory-hole:/var/log/glory-hole \
-  yourusername/glory-hole:latest
+  erfianugrah/gloryhole:latest
 ```
 
 **Advantages:**
@@ -287,7 +287,7 @@ docker run -d \
   --name glory-hole \
   -e TZ=America/New_York \
   -e GLORY_HOLE_LOG_LEVEL=debug \
-  yourusername/glory-hole:latest
+  erfianugrah/gloryhole:latest
 ```
 
 **Supported variables:**
@@ -363,7 +363,7 @@ docker run -d \
   --name glory-hole \
   --network host \
   -v $(pwd)/config.yml:/etc/glory-hole/config.yml:ro \
-  yourusername/glory-hole:latest
+  erfianugrah/gloryhole:latest
 ```
 
 **Note:** Port mappings are ignored in host mode.
@@ -379,7 +379,7 @@ docker run -d \
   --name glory-hole \
   --network glory-hole-network \
   -p 53:53/udp -p 8080:8080 \
-  yourusername/glory-hole:latest
+  erfianugrah/gloryhole:latest
 ```
 
 ### macvlan Network
@@ -397,7 +397,7 @@ docker run -d \
   --name glory-hole \
   --network glory-hole-macvlan \
   --ip 192.168.1.53 \
-  yourusername/glory-hole:latest
+  erfianugrah/gloryhole:latest
 ```
 
 ## Health Checks
@@ -439,7 +439,7 @@ docker run -d \
   --read-only \
   --tmpfs /tmp:rw,noexec,nosuid,size=100m \
   -v glory-hole-data:/var/lib/glory-hole:rw \
-  yourusername/glory-hole:latest
+  erfianugrah/gloryhole:latest
 ```
 
 ### Drop Capabilities
@@ -449,7 +449,7 @@ docker run -d \
   --name glory-hole \
   --cap-drop ALL \
   --cap-add NET_BIND_SERVICE \
-  yourusername/glory-hole:latest
+  erfianugrah/gloryhole:latest
 ```
 
 ### Resource Limits
@@ -462,7 +462,7 @@ docker run -d \
   --cpus 1.0 \
   --cpu-shares 1024 \
   --pids-limit 100 \
-  yourusername/glory-hole:latest
+  erfianugrah/gloryhole:latest
 ```
 
 ## Troubleshooting
@@ -530,7 +530,7 @@ sudo iptables -L -n | grep 53
 
 ```bash
 # Pull new image
-docker pull yourusername/glory-hole:latest
+docker pull erfianugrah/gloryhole:latest
 
 # Stop and remove old container
 docker stop glory-hole
@@ -542,7 +542,7 @@ docker run -d \
   -p 53:53/udp -p 53:53/tcp -p 8080:8080 \
   -v $(pwd)/config.yml:/etc/glory-hole/config.yml:ro \
   -v glory-hole-data:/var/lib/glory-hole \
-  yourusername/glory-hole:latest
+  erfianugrah/gloryhole:latest
 
 # Or with docker-compose
 docker-compose pull
@@ -553,10 +553,10 @@ docker-compose up -d
 
 ```bash
 # Pull specific version
-docker pull yourusername/glory-hole:0.5.0
+docker pull erfianugrah/gloryhole:0.5.0
 
 # Run with specific tag
-docker run -d --name glory-hole yourusername/glory-hole:0.5.0
+docker run -d --name glory-hole erfianugrah/gloryhole:0.5.0
 ```
 
 ## Production Best Practices
@@ -579,7 +579,7 @@ docker run -d --name glory-hole yourusername/glory-hole:0.5.0
 # Production deployment script
 
 # Configuration
-IMAGE="yourusername/glory-hole:0.6.0"
+IMAGE="erfianugrah/gloryhole:0.7.1"
 CONTAINER_NAME="glory-hole"
 CONFIG_PATH="/opt/glory-hole/config.yml"
 DATA_PATH="/opt/glory-hole/data"

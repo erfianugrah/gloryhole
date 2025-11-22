@@ -1,7 +1,7 @@
 # Glory-Hole Component Architecture
 
 **Last Updated:** 2025-11-22
-**Version:** 0.6.0
+**Version:** 0.7.1
 **Status:** Production
 
 This document provides detailed documentation for each component in the Glory-Hole DNS server, including their purpose, key interfaces, thread-safety patterns, and performance characteristics.

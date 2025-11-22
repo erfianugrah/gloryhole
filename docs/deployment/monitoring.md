@@ -784,7 +784,7 @@ go_goroutines
 For issues or questions about monitoring:
 
 1. Check [Troubleshooting Guide](../guide/troubleshooting.md)
-2. Review [GitHub Issues](https://github.com/yourusername/glory-hole/issues)
+2. Review [GitHub Issues](https://github.com/erfianugrah/gloryhole/issues)
 3. Join our community chat
 4. Open a new issue with:
    - Prometheus version

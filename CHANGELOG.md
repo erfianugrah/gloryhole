@@ -19,7 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.7.0] - 2025-11-22
 
-### ✨ Added - Conditional DNS Forwarding
+### Added - Conditional DNS Forwarding
 
 **Major Feature**: Route DNS queries to different upstream servers based on flexible rules!
 
@@ -129,7 +129,7 @@ conditional_forwarding:
 
 ## [0.6.1] - 2025-11-22
 
-### ⚠️ BREAKING CHANGES
+### BREAKING CHANGES
 
 #### Removed Legacy Override Fields
 The legacy `overrides` and `cname_overrides` configuration fields have been removed. These were never actually used in the codebase and have been replaced by the more powerful `local_records` feature.
@@ -196,7 +196,7 @@ The `local_records` feature provides more capabilities:
 
 ## [0.6.0] - 2025-11-22
 
-### 🎉 Phase 2 Complete! Production-Ready Release
+### Phase 2 Complete - Production-Ready Release
 
 **Major Milestone**: All Phase 2 features implemented, tested, and documented. Glory-Hole is now production-ready with comprehensive testing, CI/CD, monitoring, and complete documentation.
 
@@ -382,7 +382,7 @@ Comprehensive test suite covering all components:
 - **Integration tests**: Full system testing
 - **Benchmark tests**: Performance regression detection
 - **Race detector**: Zero race conditions detected
-- **All tests passing**: ✅ Clean CI pipeline
+- **All tests passing**: Clean CI pipeline
 
 ### Documentation
 
@@ -463,10 +463,10 @@ docker run -v ./config.yml:/config/config.yml glory-hole
 - **Total tests**: 242 passing (+141 new tests)
 - **Documentation**: 17,000+ lines (+6,000+ lines)
 - **Test coverage**: 71.6% (accurate measurement)
-- **CI/CD**: ✅ All checks passing
-- **Build**: ✅ Multi-arch success
-- **Race detection**: ✅ Clean (0 races)
-- **Security scans**: ✅ No critical issues
+- **CI/CD**: All checks passing
+- **Build**: Multi-arch success
+- **Race detection**: Clean (0 races)
+- **Security scans**: No critical issues
 
 ---
 
@@ -497,15 +497,15 @@ docker run -v ./config.yml:/config/config.yml glory-hole
 
 ### Statistics
 - **Test coverage**: 82.5% average (was ~95%+ estimate, now measured)
-- **CI status**: ✅ All checks passing
-- **Build status**: ✅ Success
-- **Race detection**: ✅ Clean (0 races detected)
+- **CI status**: All checks passing
+- **Build status**: Success
+- **Race detection**: Clean (0 races detected)
 
 ---
 
 ## [0.5.0] - 2025-11-21
 
-### 🎉 Phase 1 Complete!
+### Phase 1 Complete
 
 **Major Milestone**: All MVP features implemented and tested. Glory-Hole is now a fully functional DNS server with blocklist management, caching, and query logging.
 
@@ -563,7 +563,7 @@ docker run -v ./config.yml:/config/config.yml glory-hole
 - **Test code**: 3,641 lines (+707 since v0.4.0, +24%)
 - **Total tests**: 101 passing (+15 new storage tests)
 - **Documentation**: 11,000+ lines (+1,643 lines)
-- **Build**: ✅ Success
+- **Build**: Success
 - **Test coverage**: 95%+ across all packages
 
 ---
@@ -707,13 +707,13 @@ docker run -v ./config.yml:/config/config.yml glory-hole
 
 | Version | Date | Phase | Status | Lines of Code | Tests | Coverage |
 |---------|------|-------|--------|---------------|-------|----------|
-| 0.6.0 | 2025-11-22 | Phase 2 Complete | ✅ | 15,044 (5,874+9,170) | 242 ✅ | 71.6% |
-| 0.5.1 | 2025-11-21 | Phase 1 - Fixes | ✅ | 7,174 (3,533+3,641) | 208 ✅ | 82.5% |
-| 0.5.0 | 2025-11-21 | Phase 1 Complete | ✅ | 7,174 (3,533+3,641) | 101 ✅ | 95%+ |
-| 0.4.0 | 2025-11-20 | Phase 1 - 80% | ✅ | 5,360 (2,426+2,934) | 86 ✅ | 95%+ |
-| 0.3.0 | 2025-11-19 | Phase 1 - 60% | ✅ | 4,294 | 72 ✅ | 95%+ |
-| 0.2.0 | 2025-11-18 | Phase 1 - 40% | ✅ | 3,333 | 58 ✅ | 95%+ |
-| 0.1.0 | 2025-11-17 | Phase 0 | ✅ | 1,800 | 36 ✅ | 100% |
+| 0.6.0 | 2025-11-22 | Phase 2 Complete | Pass | 15,044 (5,874+9,170) | 242 Pass | 71.6% |
+| 0.5.1 | 2025-11-21 | Phase 1 - Fixes | Pass | 7,174 (3,533+3,641) | 208 Pass | 82.5% |
+| 0.5.0 | 2025-11-21 | Phase 1 Complete | Pass | 7,174 (3,533+3,641) | 101 Pass | 95%+ |
+| 0.4.0 | 2025-11-20 | Phase 1 - 80% | Pass | 5,360 (2,426+2,934) | 86 Pass | 95%+ |
+| 0.3.0 | 2025-11-19 | Phase 1 - 60% | Pass | 4,294 | 72 Pass | 95%+ |
+| 0.2.0 | 2025-11-18 | Phase 1 - 40% | Pass | 3,333 | 58 Pass | 95%+ |
+| 0.1.0 | 2025-11-17 | Phase 0 | Pass | 1,800 | 36 Pass | 100% |
 
 ---
 
@@ -800,11 +800,11 @@ database:
 
 ---
 
-[Unreleased]: https://github.com/yourusername/glory-hole/compare/v0.6.0...HEAD
-[0.6.0]: https://github.com/yourusername/glory-hole/compare/v0.5.1...v0.6.0
-[0.5.1]: https://github.com/yourusername/glory-hole/compare/v0.5.0...v0.5.1
-[0.5.0]: https://github.com/yourusername/glory-hole/compare/v0.4.0...v0.5.0
-[0.4.0]: https://github.com/yourusername/glory-hole/compare/v0.3.0...v0.4.0
-[0.3.0]: https://github.com/yourusername/glory-hole/compare/v0.2.0...v0.3.0
-[0.2.0]: https://github.com/yourusername/glory-hole/compare/v0.1.0...v0.2.0
-[0.1.0]: https://github.com/yourusername/glory-hole/releases/tag/v0.1.0
+[Unreleased]: https://github.com/erfianugrah/gloryhole/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/erfianugrah/gloryhole/compare/v0.5.1...v0.6.0
+[0.5.1]: https://github.com/erfianugrah/gloryhole/compare/v0.5.0...v0.5.1
+[0.5.0]: https://github.com/erfianugrah/gloryhole/compare/v0.4.0...v0.5.0
+[0.4.0]: https://github.com/erfianugrah/gloryhole/compare/v0.3.0...v0.4.0
+[0.3.0]: https://github.com/erfianugrah/gloryhole/compare/v0.2.0...v0.3.0
+[0.2.0]: https://github.com/erfianugrah/gloryhole/compare/v0.1.0...v0.2.0
+[0.1.0]: https://github.com/erfianugrah/gloryhole/releases/tag/v0.1.0

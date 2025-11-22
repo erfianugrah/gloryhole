@@ -7,40 +7,39 @@
 
 A high-performance DNS server written in Go, designed as a modern, extensible replacement for Pi-hole and similar solutions. Glory-Hole provides advanced DNS filtering, caching, policy engine, web UI, and analytics capabilities in a single, self-contained binary.
 
-## 🚀 Project Status
+## Project Status
 
-**Current Phase**: Phase 2 Complete! ✅
-**Version**: 0.6.0
+**Version**: 0.7.1
 **Test Coverage**: 71.6% (242 tests, 0 race conditions)
-**CI Status**: ✅ All checks passing
-**Production Ready**: Yes
+**CI Status**: All checks passing
+**Stability**: Production Ready
 
-> **Phase 2 Complete!** Glory-Hole now has a production-ready DNS server with advanced features including Web UI, Policy Engine, comprehensive monitoring, and complete documentation. Ready for production deployment!
+> Glory-Hole is a production-ready DNS server with advanced features including Web UI, Policy Engine, comprehensive monitoring, and complete documentation. Ready for production deployment.
 
 ### Quick Links
 
-- 📚 **[Documentation](docs/)** - Complete guides and references
-  - 🚀 **[Getting Started](docs/guide/getting-started.md)** - Installation and setup
-  - ⚙️ **[Configuration](docs/guide/configuration.md)** - Configuration reference
-  - 📖 **[User Guide](docs/guide/usage.md)** - Day-to-day operations
-  - 🔧 **[Troubleshooting](docs/guide/troubleshooting.md)** - Common issues
-- 🏗️ **[Architecture](docs/architecture/)** - System design and components
-  - 📊 **[Overview](docs/architecture/overview.md)** - High-level architecture (3,700+ lines)
-  - 🔍 **[Components](docs/architecture/components.md)** - Detailed component guide
-  - ⚡ **[Performance](docs/architecture/performance.md)** - Benchmarks and optimizations
-  - 🎯 **[Design Decisions](docs/architecture/design-decisions.md)** - Architecture decision records
-- 🚢 **[Deployment](docs/deployment/)** - Production deployment guides
-  - 🐳 **[Docker](docs/deployment/docker.md)** - Containerized deployment
-  - ☸️ **[Kubernetes](deploy/kubernetes/)** - Kubernetes manifests
-  - 🔍 **[Monitoring](docs/deployment/monitoring.md)** - Observability setup
-- 📡 **[API Reference](docs/api/)** - REST API and integrations
-  - 🌐 **[Web UI](docs/api/web-ui.md)** - Web interface guide
-  - 🔌 **[REST API](docs/api/rest-api.md)** - HTTP API reference
-  - 🛡️ **[Policy Engine](docs/api/policy-engine.md)** - Policy configuration
-- 💻 **[Development](docs/development/)** - Contributing and development
-  - 🛠️ **[Setup](docs/development/setup.md)** - Development environment
-  - 🧪 **[Testing](docs/development/testing.md)** - Test coverage guide
-  - 🗺️ **[Roadmap](docs/development/roadmap.md)** - Future plans
+- **[Documentation](docs/)** - Complete guides and references
+  - **[Getting Started](docs/guide/getting-started.md)** - Installation and setup
+  - **[Configuration](docs/guide/configuration.md)** - Configuration reference
+  - **[User Guide](docs/guide/usage.md)** - Day-to-day operations
+  - **[Troubleshooting](docs/guide/troubleshooting.md)** - Common issues
+- **[Architecture](docs/architecture/)** - System design and components
+  - **[Overview](docs/architecture/overview.md)** - High-level architecture (3,700+ lines)
+  - **[Components](docs/architecture/components.md)** - Detailed component guide
+  - **[Performance](docs/architecture/performance.md)** - Benchmarks and optimizations
+  - **[Design Decisions](docs/architecture/design-decisions.md)** - Architecture decision records
+- **[Deployment](docs/deployment/)** - Production deployment guides
+  - **[Docker](docs/deployment/docker.md)** - Containerized deployment
+  - **[Kubernetes](deploy/kubernetes/)** - Kubernetes manifests
+  - **[Monitoring](docs/deployment/monitoring.md)** - Observability setup
+- **[API Reference](docs/api/)** - REST API and integrations
+  - **[Web UI](docs/api/web-ui.md)** - Web interface guide
+  - **[REST API](docs/api/rest-api.md)** - HTTP API reference
+  - **[Policy Engine](docs/api/policy-engine.md)** - Policy configuration
+- **[Development](docs/development/)** - Contributing and development
+  - **[Setup](docs/development/setup.md)** - Development environment
+  - **[Testing](docs/development/testing.md)** - Test coverage guide
+  - **[Roadmap](docs/development/roadmap.md)** - Future plans
 
 ## Features
 
@@ -67,7 +66,7 @@ A high-performance DNS server written in Go, designed as a modern, extensible re
   - Multiple IPs per record (round-robin)
   - Custom TTL values per record
 
-- **Conditional Forwarding** ✨ NEW
+- **Conditional Forwarding**
   - Route queries to different upstream DNS servers based on rules
   - Domain pattern matching (*.local, *.corp, exact domains, regex)
   - Client IP-based routing with CIDR support
@@ -205,8 +204,6 @@ Glory-Hole is built following Domain-Driven Design principles with a clean separ
 └── test/                    Integration and load tests
 ```
 
-**Stats**: 15,044 lines of code (5,874 production + 9,170 test lines), 242 tests passing, 71.6% coverage, 0 race conditions ✅
-
 ## Installation
 
 ### From Binary (Recommended)
@@ -274,7 +271,7 @@ go build -o glory-hole ./cmd/glory-hole
 sudo mv glory-hole /usr/local/bin/
 ```
 
-Requirements: Go 1.22 or later
+Requirements: Go 1.24 or later
 
 ## Configuration
 
@@ -463,9 +460,9 @@ local_records:
 
     # Wildcard record (matches any *.dev.local)
     # Note: Only matches one level deep
-    # ✅ api.dev.local → matches
-    # ✅ web.dev.local → matches
-    # ❌ api.staging.dev.local → does not match
+    # api.dev.local → matches
+    # web.dev.local → matches
+    # api.staging.dev.local → does not match
     - domain: "*.dev.local"
       type: "A"
       wildcard: true
@@ -964,7 +961,7 @@ See [Performance Documentation](docs/architecture/performance.md) for detailed b
 
 ### Requirements
 
-- Go 1.22 or later
+- Go 1.24 or later
 - Docker (optional, for containerized development)
 - golangci-lint (optional, for linting)
 
@@ -1020,7 +1017,7 @@ Current test statistics:
 - **242 tests** across 13 packages
 - **71.6% coverage** (5,874 production lines, 9,170 test lines)
 - **0 race conditions** detected
-- **All tests passing** ✅
+- **All tests passing**
 
 See [Testing Guide](docs/development/testing.md) for comprehensive testing documentation.
 
@@ -1078,13 +1075,13 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for comprehensive guidelines (940 lines).
 
 ### Areas for Contribution
 
-- 🐛 Bug fixes and issue resolution
-- ✨ New features from the [roadmap](docs/development/roadmap.md)
-- 📚 Documentation improvements
-- 🧪 Additional tests and test coverage
-- 🔧 Performance optimizations
-- 🌐 Internationalization
-- 📦 Package management (Homebrew, apt, etc.)
+- Bug fixes and issue resolution
+- New features from the [roadmap](docs/development/roadmap.md)
+- Documentation improvements
+- Additional tests and test coverage
+- Performance optimizations
+- Internationalization
+- Package management (Homebrew, apt, etc.)
 
 ## License
 
@@ -1100,30 +1097,32 @@ MIT License - see LICENSE file for details
 
 Glory-Hole includes a modern, responsive web interface for monitoring and managing your DNS server without needing to edit configuration files or use command-line tools.
 
+> **Note**: The dashboard activity chart currently displays mock data for visualization purposes. Real-time chart integration is planned for a future release. All other statistics and features display live data.
+
 ### Features
 
-- **📊 Real-Time Dashboard**
+- **Real-Time Dashboard**
   - Live statistics (total/blocked/cached queries, response times)
   - Auto-refreshing stats cards (every 5 seconds)
   - Query activity chart with Chart.js visualization
   - Top allowed and blocked domains
   - Recent query log with live updates
 
-- **📜 Query Log Viewer**
+- **Query Log Viewer**
   - Real-time query stream (updates every 2 seconds)
   - Filter by domain, status (blocked/allowed/cached)
   - Detailed information: timestamp, client IP, domain, query type, response time
   - Color-coded badges for quick status identification
   - Pagination support for large query volumes
 
-- **⚙️ Policy Management**
+- **Policy Management**
   - Create, edit, and delete filtering policies via UI
   - Expression editor with syntax help
   - Enable/disable policies with toggle switches
   - Visual policy cards showing rule logic and action
   - Support for time-based, client-based, and domain pattern rules
 
-- **🔧 Settings Page**
+- **Settings Page**
   - View current configuration
   - System information (version, uptime)
   - Quick blocklist reload

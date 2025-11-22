@@ -344,12 +344,12 @@ GF_ADMIN_PASSWORD=secure_password_here
 
 After successful deployment:
 
-1. ✅ Verify DNS is working: `dig @localhost example.com`
-2. ✅ Check API health: `curl http://localhost:8080/api/health`
-3. ✅ View metrics: `curl http://localhost:9090/metrics`
-4. ✅ Set up Grafana dashboards
-5. ✅ Configure your devices to use the DNS server
-6. ✅ Monitor query logs and blocked domains
+1.  Verify DNS is working: `dig @localhost example.com`
+2.  Check API health: `curl http://localhost:8080/api/health`
+3.  View metrics: `curl http://localhost:9090/metrics`
+4.  Set up Grafana dashboards
+5.  Configure your devices to use the DNS server
+6.  Monitor query logs and blocked domains
 
 ---
 

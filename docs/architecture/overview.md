@@ -48,13 +48,13 @@ Glory-Hole is a next-generation DNS server that combines the simplicity of Pi-ho
 
 | Feature | Pi-hole | AdGuard Home | Glory-Hole |
 |---------|---------|--------------|------------|
-| Single Binary | ❌ | ✅ | ✅ |
-| Group Management | Limited | ❌ | ✅ Advanced |
-| Rate Limiting | ❌ | Basic | ✅ Advanced |
-| Conditional Forwarding | Basic | Basic | ✅ Advanced |
-| Policy Engine | ❌ | ❌ | ✅ Expression-based |
-| Local DNS Records | Basic | Basic | ✅ Full DNS Server |
-| Performance | Good | Good | ✅ Optimized |
+| Single Binary |  |  |  |
+| Group Management | Limited |  |  Advanced |
+| Rate Limiting |  | Basic |  Advanced |
+| Conditional Forwarding | Basic | Basic |  Advanced |
+| Policy Engine |  |  |  Expression-based |
+| Local DNS Records | Basic | Basic |  Full DNS Server |
+| Performance | Good | Good |  Optimized |
 | Language | PHP/Bash | Go | Go |
 
 ### Target Use Cases
@@ -126,7 +126,7 @@ Glory-Hole is a next-generation DNS server that combines the simplicity of Pi-ho
 ### Technology Stack
 
 **Core Runtime:**
-- **Language:** Go 1.25.4+
+- **Language:** Go 1.24+
 - **DNS Library:** codeberg.org/miekg/dns (v2)
 - **Database:** modernc.org/sqlite (CGO-free)
 - **Expression Engine:** github.com/expr-lang/expr
@@ -3174,7 +3174,7 @@ var (
 
 ```bash
 # Download and run
-wget https://github.com/yourusername/gloryhole/releases/download/v1.0.0/gloryhole-linux-amd64
+wget https://github.com/erfianugrah/gloryhole/releases/download/v1.0.0/gloryhole-linux-amd64
 chmod +x gloryhole-linux-amd64
 ./gloryhole-linux-amd64 --config config.yml
 ```

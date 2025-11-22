@@ -1,8 +1,8 @@
 # Glory-Hole Development Roadmap
 
 **Last Updated:** 2025-11-22
-**Current Version:** 0.6.0
-**Status:** Phase 2 Complete (90%)
+**Current Version:** 0.7.1
+**Status:** Production Ready
 
 This document outlines the future development plans for Glory-Hole DNS server, including upcoming features, enhancements, and long-term vision.
 
@@ -24,33 +24,33 @@ This document outlines the future development plans for Glory-Hole DNS server, i
 
 ### Completed Phases
 
-#### Phase 0: Foundation ✅ (Completed)
-- ✅ Configuration system with YAML
-- ✅ Hot-reload capability
-- ✅ Structured logging (slog)
-- ✅ OpenTelemetry metrics
-- ✅ Prometheus exporter
-- ✅ Comprehensive test coverage
+#### Phase 0: Foundation  (Completed)
+- Configuration system with YAML
+- Hot-reload capability
+- Structured logging (slog)
+- OpenTelemetry metrics
+- Prometheus exporter
+- Comprehensive test coverage
 
-#### Phase 1: MVP ✅ (Completed)
-- ✅ DNS server (UDP + TCP)
-- ✅ Blocklist management with lock-free updates
-- ✅ Upstream forwarding with round-robin
-- ✅ DNS response caching (LRU + TTL)
-- ✅ Query logging to SQLite
-- ✅ REST API for monitoring
-- ✅ Local DNS records (A/AAAA/CNAME)
-- ✅ Whitelist support
-- ✅ Auto-updating blocklists
+#### Phase 1: MVP  (Completed)
+- DNS server (UDP + TCP)
+- Blocklist management with lock-free updates
+- Upstream forwarding with round-robin
+- DNS response caching (LRU + TTL)
+- Query logging to SQLite
+- REST API for monitoring
+- Local DNS records (A/AAAA/CNAME)
+- Whitelist support
+- Auto-updating blocklists
 
-#### Phase 2: Essential Features ✅ (90% Complete)
-- ✅ Policy engine with expression language
-- ✅ Web UI (Dashboard, Query Log, Settings)
-- ✅ Policy management UI
-- ✅ Statistics and analytics
-- ✅ HTMX for dynamic updates
-- ✅ Kubernetes health endpoints
-- 🔄 Enhanced documentation (in progress)
+#### Phase 2: Essential Features  (90% Complete)
+- Policy engine with expression language
+- Web UI (Dashboard, Query Log, Settings)
+- Policy management UI
+- Statistics and analytics
+- HTMX for dynamic updates
+- Kubernetes health endpoints
+-  Enhanced documentation (in progress)
 
 ### Current Statistics
 
@@ -74,7 +74,7 @@ This document outlines the future development plans for Glory-Hole DNS server, i
 **Target:** Q2 2025
 **Status:** Planning
 
-### 3.1 Client Management 🎯
+### 3.1 Client Management 
 
 **Goal:** Track and manage individual devices on the network.
 
@@ -144,7 +144,7 @@ GET    /api/clients/{id}/stats   # Client statistics
 GET    /api/clients/{id}/queries # Client query history
 ```
 
-### 3.2 Group Management 🎯
+### 3.2 Group Management 
 
 **Goal:** Organize clients into groups with shared policies.
 
@@ -190,7 +190,7 @@ groups:
       - "192.168.1.1:53"  # Local DNS only
 ```
 
-### 3.3 Rate Limiting 🎯
+### 3.3 Rate Limiting 
 
 **Goal:** Prevent DNS query flooding and abuse.
 
@@ -249,7 +249,7 @@ func (r *RateLimiter) Allow(clientIP string) bool {
 }
 ```
 
-### 3.4 Enhanced Analytics 🎯
+### 3.4 Enhanced Analytics 
 
 **Goal:** Provide deeper insights into DNS traffic.
 
@@ -287,7 +287,7 @@ POST /api/analytics/reports/schedule
 **Target:** Q3 2025
 **Status:** Planning
 
-### 4.1 High Availability 🚀
+### 4.1 High Availability 
 
 **Goal:** Support production deployments at scale.
 
@@ -332,7 +332,7 @@ POST /api/analytics/reports/schedule
       └──────────┘
 ```
 
-### 4.2 Advanced Monitoring 📊
+### 4.2 Advanced Monitoring 
 
 **Goal:** Production-grade observability.
 
@@ -428,7 +428,7 @@ security:
     key_file: "/etc/glory-hole/tls.key"
 ```
 
-### 4.4 Backup & Recovery 💾
+### 4.4 Backup & Recovery 
 
 **Goal:** Data protection and disaster recovery.
 
@@ -653,36 +653,36 @@ Connect multiple Glory-Hole instances:
 
 From GitHub issues and community feedback:
 
-1. **Docker Compose Examples** ⭐⭐⭐⭐⭐
-   - Status: ✅ Completed (v0.5.0)
+1. **Docker Compose Examples** 
+   - Status:  Completed (v0.5.0)
    - Multiple compose examples added
 
-2. **Kubernetes Deployment** ⭐⭐⭐⭐
-   - Status: ✅ Completed (v0.5.0)
+2. **Kubernetes Deployment** 
+   - Status:  Completed (v0.5.0)
    - Helm chart available
 
-3. **Web UI for Configuration** ⭐⭐⭐⭐
-   - Status: 🔄 In Progress (v0.6.0)
+3. **Web UI for Configuration** 
+   - Status:  In Progress (v0.7.1)
    - Dashboard and policy management done
    - Full config editor planned
 
-4. **Per-Client Policies** ⭐⭐⭐⭐⭐
+4. **Per-Client Policies** 
    - Status: 📋 Planned (Phase 3)
    - See Client Management above
 
-5. **Mobile App** ⭐⭐⭐
+5. **Mobile App** 
    - Status: 🔮 Future
    - Native iOS/Android apps
    - Statistics viewing
    - Quick policy changes
 
-6. **Import/Export Policies** ⭐⭐⭐
+6. **Import/Export Policies** 
    - Status: 📋 Planned
    - JSON/YAML export
    - Share policies with community
    - Policy marketplace
 
-7. **Query Search** ⭐⭐⭐⭐
+7. **Query Search** 
    - Status: 📋 Planned
    - Full-text search
    - Advanced filters
@@ -817,10 +817,10 @@ We follow [Semantic Versioning](https://semver.org/):
 
 ### Planned Releases
 
-**v0.6.0** - Current (November 2025)
-- ✅ Policy engine
-- ✅ Web UI
-- 🔄 Enhanced documentation
+**v0.7.1** - Current (November 2025)
+- Policy engine
+- Web UI
+-  Enhanced documentation
 
 **v0.7.0** - Q1 2025
 - Client discovery
@@ -837,7 +837,7 @@ We follow [Semantic Versioning](https://semver.org/):
 - Alerting
 - Backup/restore
 
-**v1.0.0** - Q4 2025 🎉
+**v1.0.0** - Q4 2025 
 - Production-ready
 - Full documentation
 - Stable API

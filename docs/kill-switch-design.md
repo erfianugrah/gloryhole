@@ -4,14 +4,14 @@
 
 ## Requirements
 
-1. ✅ Disable ad-blocking (blocklist) at runtime
-2. ✅ Disable policy engine at runtime
-3. ✅ Disable both simultaneously
-4. ✅ Hot-reloadable (no restart required)
-5. ✅ Toggleable via Web UI and API
-6. ✅ Persist changes to configuration file
-7. ✅ Thread-safe implementation
-8. ✅ Atomic state updates
+1.  Disable ad-blocking (blocklist) at runtime
+2.  Disable policy engine at runtime
+3.  Disable both simultaneously
+4.  Hot-reloadable (no restart required)
+5.  Toggleable via Web UI and API
+6.  Persist changes to configuration file
+7.  Thread-safe implementation
+8.  Atomic state updates
 
 ## Use Cases
 

@@ -842,7 +842,7 @@ logging:
 ```
 Output:
 ```
-2025-11-22T10:30:45Z INFO Glory Hole DNS starting version=0.6.0
+2025-11-22T10:30:45Z INFO Glory Hole DNS starting version=0.7.1
 2025-11-22T10:30:45Z INFO Blocklist manager started domains=101348
 ```
 
@@ -853,7 +853,7 @@ logging:
 ```
 Output:
 ```json
-{"time":"2025-11-22T10:30:45Z","level":"INFO","msg":"Glory Hole DNS starting","version":"0.6.0"}
+{"time":"2025-11-22T10:30:45Z","level":"INFO","msg":"Glory Hole DNS starting","version":"0.7.1"}
 {"time":"2025-11-22T10:30:45Z","level":"INFO","msg":"Blocklist manager started","domains":101348}
 ```
 
@@ -925,7 +925,7 @@ Configure metrics and tracing.
 telemetry:
   enabled: true                    # Enable telemetry
   service_name: "glory-hole"       # Service identifier
-  service_version: "0.6.0"         # Version string
+  service_version: "0.7.1"         # Version string
   prometheus_enabled: true         # Enable Prometheus metrics
   prometheus_port: 9090            # Metrics endpoint port
   tracing_enabled: false           # Enable OpenTelemetry tracing

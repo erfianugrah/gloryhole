@@ -26,7 +26,7 @@ This guide will help you get Glory-Hole DNS Server up and running in under 5 min
 
 ### Optional Requirements
 
-- **Go 1.23+** - Only needed if building from source
+- **Go 1.24+** - Only needed if building from source
 - **Docker 20.10+** - For Docker deployment
 - **Kubernetes 1.20+** - For Kubernetes deployment
 
@@ -38,17 +38,17 @@ Download the latest release for your platform:
 
 ```bash
 # Linux (amd64)
-wget https://github.com/yourusername/glory-hole/releases/latest/download/glory-hole-linux-amd64
+wget https://github.com/erfianugrah/gloryhole/releases/latest/download/glory-hole-linux-amd64
 chmod +x glory-hole-linux-amd64
 sudo mv glory-hole-linux-amd64 /usr/local/bin/glory-hole
 
 # macOS (amd64)
-wget https://github.com/yourusername/glory-hole/releases/latest/download/glory-hole-darwin-amd64
+wget https://github.com/erfianugrah/gloryhole/releases/latest/download/glory-hole-darwin-amd64
 chmod +x glory-hole-darwin-amd64
 sudo mv glory-hole-darwin-amd64 /usr/local/bin/glory-hole
 
 # macOS (arm64 / Apple Silicon)
-wget https://github.com/yourusername/glory-hole/releases/latest/download/glory-hole-darwin-arm64
+wget https://github.com/erfianugrah/gloryhole/releases/latest/download/glory-hole-darwin-arm64
 chmod +x glory-hole-darwin-arm64
 sudo mv glory-hole-darwin-arm64 /usr/local/bin/glory-hole
 ```
@@ -65,10 +65,10 @@ Pull and run the official Docker image:
 
 ```bash
 # Pull the image
-docker pull yourusername/glory-hole:latest
+docker pull erfianugrah/gloryhole:latest
 
 # Create a config file
-wget https://raw.githubusercontent.com/yourusername/glory-hole/main/config/config.example.yml -O config.yml
+wget https://raw.githubusercontent.com/erfianugrah/gloryhole/main/config/config.example.yml -O config.yml
 
 # Run the container
 docker run -d \
@@ -78,7 +78,7 @@ docker run -d \
   -p 8080:8080 \
   -v $(pwd)/config.yml:/etc/glory-hole/config.yml:ro \
   -v glory-hole-data:/var/lib/glory-hole \
-  yourusername/glory-hole:latest
+  erfianugrah/gloryhole:latest
 ```
 
 Check the container status:
@@ -94,7 +94,7 @@ Deploy to Kubernetes using the provided manifests:
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/glory-hole.git
+git clone https://github.com/erfianugrah/gloryhole.git
 cd glory-hole
 
 # Apply Kubernetes manifests
@@ -110,11 +110,11 @@ kubectl logs -l app=glory-hole
 Build from source if you want the latest development version:
 
 ```bash
-# Install Go 1.23 or later
+# Install Go 1.24 or later
 # https://golang.org/doc/install
 
 # Clone the repository
-git clone https://github.com/yourusername/glory-hole.git
+git clone https://github.com/erfianugrah/gloryhole.git
 cd glory-hole
 
 # Build the binary
@@ -193,7 +193,7 @@ glory-hole -config config.yml
 You should see output similar to:
 
 ```
-INFO Glory Hole DNS starting version=0.6.0
+INFO Glory Hole DNS starting version=0.7.1
 INFO Initializing blocklist manager sources=1
 INFO Blocklist manager started domains=101348
 INFO Storage initialized successfully backend=sqlite
@@ -272,7 +272,7 @@ curl http://localhost:8080/api/health
 # {
 #   "status": "ok",
 #   "uptime": "5m30s",
-#   "version": "0.6.0"
+#   "version": "0.7.1"
 # }
 ```
 
@@ -392,7 +392,7 @@ If you encounter issues:
 1. Check the [Troubleshooting Guide](troubleshooting.md)
 2. Review server logs: `journalctl -u glory-hole -f` (systemd) or `docker logs glory-hole` (Docker)
 3. Enable debug logging: Set `logging.level: "debug"` in config.yml
-4. Open an issue on [GitHub](https://github.com/yourusername/glory-hole/issues)
+4. Open an issue on [GitHub](https://github.com/erfianugrah/gloryhole/issues)
 5. Join our [Discord community](https://discord.gg/glory-hole)
 
 ## Quick Reference Card

@@ -5,20 +5,20 @@
 **Date**: 2025-11-22
 
 ## Next Release: v0.7.0 (Conditional Forwarding)
-**Status**: ✅ Implementation Complete - Ready for Release
+**Status**:  Implementation Complete - Ready for Release
 **Target Date**: TBD
 **Implementation**: See `v0.7.0-conditional-forwarding-implementation.md`
 
 ### Features
-- ✅ Conditional DNS forwarding with dual approach (declarative + policy)
-- ✅ Domain pattern matching (exact, wildcard, regex)
-- ✅ Client IP-based routing (CIDR support)
-- ✅ Query type filtering (A, AAAA, PTR, etc.)
-- ✅ Priority-based rule evaluation (1-100)
-- ✅ Policy engine FORWARD action
-- ✅ Sub-200ns performance, zero allocations
-- ✅ Comprehensive tests (61 tests, 73%+ coverage)
-- ✅ Full documentation
+-  Conditional DNS forwarding with dual approach (declarative + policy)
+-  Domain pattern matching (exact, wildcard, regex)
+-  Client IP-based routing (CIDR support)
+-  Query type filtering (A, AAAA, PTR, etc.)
+-  Priority-based rule evaluation (1-100)
+-  Policy engine FORWARD action
+-  Sub-200ns performance, zero allocations
+-  Comprehensive tests (61 tests, 73%+ coverage)
+-  Full documentation
 
 ### Release Checklist
 

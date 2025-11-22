@@ -126,7 +126,7 @@ docker run -d \
   -p 53:53/tcp \
   -p 8080:8080 \
   -v $(pwd)/config.yml:/etc/glory-hole/config.yml:ro \
-  yourusername/glory-hole:latest
+  erfianugrah/gloryhole:latest
 ```
 
 ### Docker Compose
@@ -969,7 +969,7 @@ Rotation happens automatically when size limit is reached.
 **Binary:**
 ```bash
 # Download new version
-wget https://github.com/yourusername/glory-hole/releases/latest/download/glory-hole-linux-amd64
+wget https://github.com/erfianugrah/gloryhole/releases/latest/download/glory-hole-linux-amd64
 chmod +x glory-hole-linux-amd64
 
 # Stop server
@@ -985,7 +985,7 @@ sudo systemctl start glory-hole
 **Docker:**
 ```bash
 # Pull new image
-docker pull yourusername/glory-hole:latest
+docker pull erfianugrah/gloryhole:latest
 
 # Recreate container
 docker-compose down
@@ -995,7 +995,7 @@ docker-compose up -d
 **Kubernetes:**
 ```bash
 # Update image
-kubectl set image deployment/glory-hole glory-hole=yourusername/glory-hole:latest
+kubectl set image deployment/glory-hole glory-hole=erfianugrah/gloryhole:latest
 
 # Rollout restart
 kubectl rollout restart deployment/glory-hole

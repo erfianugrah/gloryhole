@@ -1,7 +1,7 @@
 # Architecture Decision Records (ADRs)
 
 **Last Updated:** 2025-11-22
-**Version:** 0.6.0
+**Version:** 0.7.1
 
 This document records major architectural and design decisions made in the Glory-Hole DNS server project, including context, options considered, and rationale.
 
@@ -1466,7 +1466,7 @@ Need structured logging for production debugging.
 
 ### Decision
 
-Use Go 1.21+ standard library `log/slog`:
+Use Go 1.24+ standard library `log/slog`:
 - Built-in (no dependency)
 - Structured logging
 - Multiple formats (JSON, text)

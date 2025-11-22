@@ -722,7 +722,7 @@ If you can't resolve the issue:
    ```
 
 3. **Open GitHub issue:**
-   - https://github.com/yourusername/glory-hole/issues
+   - https://github.com/erfianugrah/gloryhole/issues
    - Include version, logs, config
    - Describe steps to reproduce
 

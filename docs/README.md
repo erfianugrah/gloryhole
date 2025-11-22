@@ -2,9 +2,9 @@
 
 Welcome to the Glory-Hole DNS Server documentation. This guide will help you understand, deploy, and operate Glory-Hole in any environment.
 
-## 📚 Documentation Structure
+## Documentation Structure
 
-### 🚀 [User Guide](guide/)
+### [User Guide](guide/)
 Start here if you're new to Glory-Hole or want to deploy it.
 
 - **[Getting Started](guide/getting-started.md)** - Installation and quick setup
@@ -12,7 +12,7 @@ Start here if you're new to Glory-Hole or want to deploy it.
 - **[Usage Guide](guide/usage.md)** - Day-to-day operations
 - **[Troubleshooting](guide/troubleshooting.md)** - Common issues and solutions
 
-### 🏗️ [Architecture](architecture/)
+### [Architecture](architecture/)
 Understand how Glory-Hole works internally.
 
 - **[System Overview](architecture/overview.md)** - High-level architecture
@@ -20,7 +20,7 @@ Understand how Glory-Hole works internally.
 - **[Performance](architecture/performance.md)** - Benchmarks and optimizations
 - **[Design Decisions](architecture/design-decisions.md)** - Architecture decision records
 
-### 💻 [Development](development/)
+### [Development](development/)
 Contributing to Glory-Hole development.
 
 - **[Development Setup](development/setup.md)** - Set up your dev environment
@@ -28,7 +28,7 @@ Contributing to Glory-Hole development.
 - **[Contributing](development/contributing.md)** - How to contribute
 - **[Roadmap](development/roadmap.md)** - Future plans and milestones
 
-### 🚢 [Deployment](deployment/)
+### [Deployment](deployment/)
 Deploy Glory-Hole in production.
 
 - **[Docker](deployment/docker.md)** - Containerized deployment
@@ -37,14 +37,14 @@ Deploy Glory-Hole in production.
 - **[Cloudflare D1](deployment/cloudflare-d1.md)** - Edge deployment with D1
 - **[Monitoring](deployment/monitoring.md)** - Observability and monitoring
 
-### 📡 [API Reference](api/)
+### [API Reference](api/)
 API and integration documentation.
 
 - **[REST API](api/rest-api.md)** - HTTP API reference
 - **[Web UI](api/web-ui.md)** - Web interface guide
 - **[Policy Engine](api/policy-engine.md)** - Policy configuration reference
 
-## 🎯 Quick Links
+## Quick Links
 
 ### For Users
 - [Quick Start Guide](guide/getting-started.md#quick-start)
@@ -61,20 +61,20 @@ API and integration documentation.
 - [Monitoring Setup](deployment/monitoring.md)
 - [Troubleshooting](guide/troubleshooting.md)
 
-## 📖 Additional Resources
+## Additional Resources
 
 - [Changelog](../CHANGELOG.md) - Version history and release notes
-- [GitHub Repository](https://github.com/yourusername/glory-hole)
-- [Issue Tracker](https://github.com/yourusername/glory-hole/issues)
+- [GitHub Repository](https://github.com/erfianugrah/gloryhole)
+- [Issue Tracker](https://github.com/erfianugrah/gloryhole/issues)
 
-## 🆘 Getting Help
+## Getting Help
 
-- **Documentation Issues**: [File an issue](https://github.com/yourusername/glory-hole/issues/new?labels=documentation)
+- **Documentation Issues**: [File an issue](https://github.com/erfianugrah/gloryhole/issues/new?labels=documentation)
 - **Questions**: Check [Troubleshooting](guide/troubleshooting.md) first
-- **Bugs**: [Report a bug](https://github.com/yourusername/glory-hole/issues/new?labels=bug)
-- **Feature Requests**: [Request a feature](https://github.com/yourusername/glory-hole/issues/new?labels=enhancement)
+- **Bugs**: [Report a bug](https://github.com/erfianugrah/gloryhole/issues/new?labels=bug)
+- **Feature Requests**: [Request a feature](https://github.com/erfianugrah/gloryhole/issues/new?labels=enhancement)
 
-## 📝 Documentation Standards
+## Documentation Standards
 
 All Glory-Hole documentation follows these principles:
 - **Accurate**: Verified against actual code and behavior
@@ -85,6 +85,6 @@ All Glory-Hole documentation follows these principles:
 
 ---
 
-**Version:** 0.6.0
+**Version:** 0.7.1
 **Last Updated:** 2025-11-22
 **Status:** Production Ready

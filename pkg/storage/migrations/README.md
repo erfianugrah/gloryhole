@@ -77,19 +77,19 @@ INFO: Applying migration v2: Add composite index on client_ip and timestamp
 ## Migration Guidelines
 
 ### DO:
-- ✅ Use `CREATE TABLE IF NOT EXISTS` for new tables
-- ✅ Use `CREATE INDEX IF NOT EXISTS` for new indexes
-- ✅ Use `ALTER TABLE ADD COLUMN` for new columns (with DEFAULT)
-- ✅ Keep migrations small and focused (one change per migration)
-- ✅ Test migrations on a copy of production data
-- ✅ Add comments explaining the purpose
+-  Use `CREATE TABLE IF NOT EXISTS` for new tables
+-  Use `CREATE INDEX IF NOT EXISTS` for new indexes
+-  Use `ALTER TABLE ADD COLUMN` for new columns (with DEFAULT)
+-  Keep migrations small and focused (one change per migration)
+-  Test migrations on a copy of production data
+-  Add comments explaining the purpose
 
 ### DON'T:
-- ❌ Don't modify existing migration files (create new ones instead)
-- ❌ Don't use `DROP TABLE` without data backup strategy
-- ❌ Don't add `NOT NULL` columns without DEFAULT values
-- ❌ Don't skip version numbers
-- ❌ Don't use database-specific features (stick to SQLite standard SQL)
+-  Don't modify existing migration files (create new ones instead)
+-  Don't use `DROP TABLE` without data backup strategy
+-  Don't add `NOT NULL` columns without DEFAULT values
+-  Don't skip version numbers
+-  Don't use database-specific features (stick to SQLite standard SQL)
 
 ## Rollback Strategy
 

@@ -52,7 +52,7 @@ cp examples/home-network.yml config.yml
 
 ---
 
-### 🎯 [advanced-filtering.yml](./advanced-filtering.yml)
+###  [advanced-filtering.yml](./advanced-filtering.yml)
 
 **Best for:** Power users, complex network setups, learning the Policy Engine
 
@@ -93,10 +93,10 @@ cp examples/home-network.yml config.yml
 | Feature | Home Network | Small Office | Advanced | Minimal |
 |---------|-------------|--------------|----------|---------|
 | **RAM Usage** | ~100MB | ~200MB | ~150MB | ~50MB |
-| **Ad Blocking** | ✅ Comprehensive | ✅ Security-focused | ✅ Basic | ✅ Basic |
-| **Policy Engine** | ✅ Parental controls | ✅ Work hours | ✅ Advanced | ❌ |
-| **Query Logging** | ✅ 7 days | ✅ 30 days | ✅ 7 days | ❌ |
-| **Telemetry** | ✅ Basic | ✅ Full (Prometheus + Jaeger) | ✅ Basic | ❌ |
+| **Ad Blocking** |  Comprehensive |  Security-focused |  Basic |  Basic |
+| **Policy Engine** |  Parental controls |  Work hours |  Advanced |  |
+| **Query Logging** |  7 days |  30 days |  7 days |  |
+| **Telemetry** |  Basic |  Full (Prometheus + Jaeger) |  Basic |  |
 | **Best For** | Families | Businesses | Power users | Raspberry Pi |
 
 ## Policy Engine Quick Reference
@@ -249,7 +249,7 @@ telemetry:
 
 - [Main Documentation](../README.md)
 - [Policy Engine Guide](../docs/policy-engine.md)
-- [GitHub Issues](https://github.com/yourusername/glory-hole/issues)
+- [GitHub Issues](https://github.com/erfianugrah/gloryhole/issues)
 
 ---
 

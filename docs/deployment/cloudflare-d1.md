@@ -20,20 +20,20 @@ Cloudflare D1 is a serverless SQL database built on SQLite, designed for edge co
 ## When to Use D1 vs SQLite
 
 ### Use D1 When:
-- ✅ Deploying to Cloudflare Workers/Pages
-- ✅ Need multi-region deployment
-- ✅ Want automatic backups (Time Travel)
-- ✅ Building multi-tenant applications (per-user databases)
-- ✅ Need zero-maintenance databases
-- ✅ Have modest query volume (<1000 QPS per database)
+-  Deploying to Cloudflare Workers/Pages
+-  Need multi-region deployment
+-  Want automatic backups (Time Travel)
+-  Building multi-tenant applications (per-user databases)
+-  Need zero-maintenance databases
+-  Have modest query volume (<1000 QPS per database)
 
 ### Use SQLite When:
-- ✅ Self-hosting on your own infrastructure
-- ✅ Need maximum performance (local disk access)
-- ✅ Have very high query volume (>10,000 QPS)
-- ✅ Want zero cloud dependencies
-- ✅ Need complex transactions or long-running queries
-- ✅ Have sensitive data that must stay local
+-  Self-hosting on your own infrastructure
+-  Need maximum performance (local disk access)
+-  Have very high query volume (>10,000 QPS)
+-  Want zero cloud dependencies
+-  Need complex transactions or long-running queries
+-  Have sensitive data that must stay local
 
 ---
 
@@ -115,7 +115,7 @@ Cloudflare D1 is a serverless SQL database built on SQLite, designed for edge co
 1. **Cloudflare Account**: Sign up at https://dash.cloudflare.com
 2. **Workers Plan**: Free or Paid (Paid recommended for production)
 3. **Wrangler CLI**: Install with `npm install -g wrangler`
-4. **Go 1.25+**: For building the Glory-Hole binary
+4. **Go 1.24+**: For building the Glory-Hole binary
 
 ### Step 1: Create D1 Database
 
@@ -127,7 +127,7 @@ wrangler login
 wrangler d1 create glory-hole-queries
 
 # Output:
-✅ Successfully created DB 'glory-hole-queries' in region WEUR
+ Successfully created DB 'glory-hole-queries' in region WEUR
 
 [[d1_databases]]
 binding = "DB"
@@ -559,26 +559,26 @@ wrangler d1 info glory-hole-queries
 
 ## Best Practices
 
-### Do's ✅
+### Do's 
 
-- ✅ Use batching for all writes
-- ✅ Set appropriate retention policies
-- ✅ Pre-aggregate statistics
-- ✅ Use indexes on frequently queried columns
-- ✅ Monitor costs and usage
-- ✅ Enable Time Travel backups
-- ✅ Use async logging (non-blocking)
-- ✅ Handle API errors gracefully
+-  Use batching for all writes
+-  Set appropriate retention policies
+-  Pre-aggregate statistics
+-  Use indexes on frequently queried columns
+-  Monitor costs and usage
+-  Enable Time Travel backups
+-  Use async logging (non-blocking)
+-  Handle API errors gracefully
 
-### Don'ts ❌
+### Don'ts 
 
-- ❌ Don't write one query at a time (inefficient)
-- ❌ Don't store unbounded data (use retention)
-- ❌ Don't query raw data for dashboards (pre-aggregate)
-- ❌ Don't ignore API rate limits
-- ❌ Don't hardcode credentials (use env vars)
-- ❌ Don't block DNS queries waiting for logging
-- ❌ Don't store sensitive data without encryption
+-  Don't write one query at a time (inefficient)
+-  Don't store unbounded data (use retention)
+-  Don't query raw data for dashboards (pre-aggregate)
+-  Don't ignore API rate limits
+-  Don't hardcode credentials (use env vars)
+-  Don't block DNS queries waiting for logging
+-  Don't store sensitive data without encryption
 
 ---
 
@@ -599,12 +599,12 @@ wrangler d1 info glory-hole-queries
 
 ## Next Steps
 
-1. ✅ Create D1 database
-2. ✅ Configure Glory-Hole with D1 backend
-3. ✅ Test query logging locally
-4. ✅ Deploy to production
-5. ✅ Monitor metrics and costs
-6. ✅ Optimize based on usage patterns
+1.  Create D1 database
+2.  Configure Glory-Hole with D1 backend
+3.  Test query logging locally
+4.  Deploy to production
+5.  Monitor metrics and costs
+6.  Optimize based on usage patterns
 
 ---
 

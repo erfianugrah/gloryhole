@@ -27,11 +27,11 @@ Glory-Hole achieves high performance through careful architectural decisions:
 - **Minimal allocations**: Careful memory management
 
 **Performance Highlights:**
-- 🚀 **1M+ QPS** for blocked domain queries
-- 🚀 **26ns average** blocklist map lookups (327K domains)
-- 🚀 **<1µs overhead** for blocklist checks in DNS handler
-- 🚀 **<1ms** cache hit latency
-- 🚀 **<10µs** query logging overhead
+-  **1M+ QPS** for blocked domain queries
+-  **26ns average** blocklist map lookups (327K domains)
+-  **<1µs overhead** for blocklist checks in DNS handler
+-  **<1ms** cache hit latency
+-  **<10µs** query logging overhead
 
 ---
 

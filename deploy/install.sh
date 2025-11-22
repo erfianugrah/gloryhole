@@ -60,7 +60,7 @@ build_binary() {
     print_info "Building glory-hole binary..."
 
     if ! command -v go &> /dev/null; then
-        print_error "Go is not installed. Please install Go 1.24+ and try again"
+        print_error "Go is not installed. Please install Go 1.24 or later and try again"
         exit 1
     fi
 
