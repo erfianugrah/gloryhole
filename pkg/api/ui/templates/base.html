@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{block "title" .}}Glory-Hole DNS{{end}}</title>
+    <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="container">
+            <div class="nav-brand">
+                <h1>🕳️ Glory-Hole DNS</h1>
+                <span class="version">v{{.Version}}</span>
+            </div>
+            <div class="nav-links">
+                <a href="/" class="nav-link">Dashboard</a>
+                <a href="/queries" class="nav-link">Queries</a>
+                <a href="/policies" class="nav-link">Policies</a>
+                <a href="/settings" class="nav-link">Settings</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="container">
+        {{block "content" .}}{{end}}
+    </main>
+
+    <footer class="footer">
+        <div class="container">
+            <p>Glory-Hole DNS Server - High-Performance Ad Blocking</p>
+        </div>
+    </footer>
+</body>
+</html>

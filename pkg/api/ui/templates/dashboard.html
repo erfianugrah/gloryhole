@@ -1,0 +1,73 @@
+{{template "base.html" .}}
+
+{{define "title"}}Dashboard - Glory-Hole DNS{{end}}
+
+{{define "content"}}
+<div class="dashboard">
+    <div class="stats-header">
+        <h2>Dashboard</h2>
+        <div class="uptime">
+            <span class="label">Uptime:</span>
+            <span class="value">{{.Uptime}}</span>
+        </div>
+    </div>
+
+    <!-- Statistics Cards -->
+    <div id="stats-container"
+         hx-get="/api/ui/stats"
+         hx-trigger="load, every 5s"
+         hx-swap="innerHTML">
+        <div class="loading">Loading statistics...</div>
+    </div>
+
+    <!-- Charts Section -->
+    <div class="charts-section">
+        <h3>Query Activity</h3>
+        <div class="chart-container">
+            <canvas id="queryChart"></canvas>
+        </div>
+    </div>
+
+    <!-- Top Domains -->
+    <div class="top-domains-section">
+        <div class="section-row">
+            <div class="section-col">
+                <h3>Top Allowed Domains</h3>
+                <div id="top-allowed"
+                     hx-get="/api/top-domains?limit=10&blocked=false"
+                     hx-trigger="load, every 10s"
+                     hx-swap="innerHTML">
+                    <div class="loading">Loading...</div>
+                </div>
+            </div>
+            <div class="section-col">
+                <h3>Top Blocked Domains</h3>
+                <div id="top-blocked"
+                     hx-get="/api/top-domains?limit=10&blocked=true"
+                     hx-trigger="load, every 10s"
+                     hx-swap="innerHTML">
+                    <div class="loading">Loading...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent Queries -->
+    <div class="recent-queries-section">
+        <h3>Recent Queries</h3>
+        <div id="recent-queries"
+             hx-get="/api/ui/queries?limit=20"
+             hx-trigger="load, every 3s"
+             hx-swap="innerHTML">
+            <div class="loading">Loading queries...</div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Initialize charts if needed
+    document.addEventListener('DOMContentLoaded', function() {
+        console.log('Dashboard loaded');
+    });
+</script>
+{{end}}

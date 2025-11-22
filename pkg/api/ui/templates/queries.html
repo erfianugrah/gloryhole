@@ -1,0 +1,41 @@
+{{template "base.html" .}}
+
+{{define "title"}}Query Log - Glory-Hole DNS{{end}}
+
+{{define "content"}}
+<div class="queries-page">
+    <div class="page-header">
+        <h2>Query Log</h2>
+        <div class="filters">
+            <input type="text" id="filter-domain" placeholder="Filter by domain..." class="filter-input">
+            <select id="filter-status" class="filter-select">
+                <option value="">All Queries</option>
+                <option value="blocked">Blocked Only</option>
+                <option value="allowed">Allowed Only</option>
+                <option value="cached">Cached Only</option>
+            </select>
+        </div>
+    </div>
+
+    <div id="queries-container"
+         hx-get="/api/ui/queries?limit=100"
+         hx-trigger="load, every 2s"
+         hx-swap="innerHTML">
+        <div class="loading">Loading queries...</div>
+    </div>
+
+    <div class="pagination">
+        <button class="btn btn-secondary" onclick="loadPage(-50)">Previous</button>
+        <button class="btn btn-secondary" onclick="loadPage(50)">Next</button>
+    </div>
+</div>
+
+<script>
+    let currentOffset = 0;
+
+    function loadPage(offsetDelta) {
+        currentOffset = Math.max(0, currentOffset + offsetDelta);
+        htmx.trigger('#queries-container', 'load');
+    }
+</script>
+{{end}}

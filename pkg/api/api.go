@@ -45,6 +45,11 @@ func New(cfg *Config) *Server {
 		cfg.Logger = slog.Default()
 	}
 
+	// Initialize templates
+	if err := initTemplates(); err != nil {
+		cfg.Logger.Warn("Failed to initialize UI templates", "error", err)
+	}
+
 	s := &Server{
 		storage:          cfg.Storage,
 		blocklistManager: cfg.BlocklistManager,
@@ -80,6 +85,19 @@ func New(cfg *Config) *Server {
 	mux.HandleFunc("GET /api/policies/{id}", s.handleGetPolicy)
 	mux.HandleFunc("PUT /api/policies/{id}", s.handleUpdatePolicy)
 	mux.HandleFunc("DELETE /api/policies/{id}", s.handleDeletePolicy)
+
+	// UI routes (add after API routes to avoid conflicts)
+	mux.HandleFunc("GET /api/ui/stats", s.handleStatsPartial)
+	mux.HandleFunc("GET /api/ui/queries", s.handleQueriesPartial)
+	mux.HandleFunc("GET /queries", s.handleQueriesPage)
+	mux.HandleFunc("GET /{$}", s.handleDashboard) // {$} matches exact path only
+
+	// Static files
+	if staticFS, err := getStaticFS(); err == nil {
+		mux.Handle("/static/", http.StripPrefix("/static/", http.FileServer(staticFS)))
+	} else {
+		cfg.Logger.Warn("Failed to initialize static file server", "error", err)
+	}
 
 	// Apply middleware
 	handler := s.loggingMiddleware(mux)

@@ -1,0 +1,23 @@
+<div class="stats-grid">
+    <div class="stat-card">
+        <div class="stat-label">Total Queries</div>
+        <div class="stat-value">{{.TotalQueries}}</div>
+    </div>
+
+    <div class="stat-card blocked">
+        <div class="stat-label">Blocked</div>
+        <div class="stat-value">{{.BlockedQueries}}</div>
+        <div class="stat-percent">{{printf "%.1f" .BlockRate}}%</div>
+    </div>
+
+    <div class="stat-card cached">
+        <div class="stat-label">Cached</div>
+        <div class="stat-value">{{.CachedQueries}}</div>
+        <div class="stat-percent">{{printf "%.1f" .CacheHitRate}}%</div>
+    </div>
+
+    <div class="stat-card">
+        <div class="stat-label">Avg Response</div>
+        <div class="stat-value">{{printf "%.2f" .AvgResponseMs}}ms</div>
+    </div>
+</div>

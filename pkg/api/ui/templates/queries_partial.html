@@ -1,0 +1,36 @@
+<table class="queries-table">
+    <thead>
+        <tr>
+            <th>Time</th>
+            <th>Client</th>
+            <th>Domain</th>
+            <th>Type</th>
+            <th>Status</th>
+            <th>Response Time</th>
+        </tr>
+    </thead>
+    <tbody>
+        {{range .Queries}}
+        <tr class="{{if .Blocked}}blocked{{else}}allowed{{end}}">
+            <td>{{.Timestamp.Format "15:04:05"}}</td>
+            <td>{{.ClientIP}}</td>
+            <td>{{.Domain}}</td>
+            <td>{{.QueryType}}</td>
+            <td>
+                {{if .Blocked}}
+                    <span class="badge badge-blocked">BLOCKED</span>
+                {{else if .Cached}}
+                    <span class="badge badge-cached">CACHED</span>
+                {{else}}
+                    <span class="badge badge-allowed">ALLOWED</span>
+                {{end}}
+            </td>
+            <td>{{.ResponseTimeMs}}ms</td>
+        </tr>
+        {{else}}
+        <tr>
+            <td colspan="6" class="no-data">No queries yet</td>
+        </tr>
+        {{end}}
+    </tbody>
+</table>
