@@ -295,8 +295,12 @@ func TestServer_StartUDPDisabled(t *testing.T) {
 
 	time.Sleep(50 * time.Millisecond)
 
-	// Verify server started (even briefly)
-	if server.tcpServer == nil && !cfg.Server.UDPEnabled {
+	// Verify server started (even briefly) - use read lock to avoid race
+	server.mu.RLock()
+	tcpServerExists := server.tcpServer != nil
+	server.mu.RUnlock()
+
+	if !tcpServerExists && cfg.Server.TCPEnabled {
 		t.Error("Expected TCP server to be created")
 	}
 }
@@ -346,8 +350,12 @@ func TestServer_StartTCPDisabled(t *testing.T) {
 
 	time.Sleep(50 * time.Millisecond)
 
-	// Verify server started (even briefly)
-	if server.udpServer == nil && cfg.Server.UDPEnabled {
+	// Verify server started (even briefly) - use read lock to avoid race
+	server.mu.RLock()
+	udpServerExists := server.udpServer != nil
+	server.mu.RUnlock()
+
+	if !udpServerExists && cfg.Server.UDPEnabled {
 		t.Error("Expected UDP server to be created")
 	}
 }
