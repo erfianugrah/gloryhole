@@ -38,7 +38,7 @@ vendor/
 .DS_Store
 
 # Build output
-glory-hole # The name of our executable
+/glory-hole # The executable in root directory
 
 # Configuration files that might contain sensitive info or be user-specific
 /config.yml
@@ -47,8 +47,9 @@ glory-hole # The name of our executable
 .claude/
 cf-docs
 *glory-hole.db*
-glory-hole
 CLAUDE.md
 coverage.out
-*pihole*
+/pihole/
 config.personal.yml
+test-output.txt
+

@@ -20,6 +20,7 @@ import (
 	"glory-hole/pkg/forwarder"
 	"glory-hole/pkg/localrecords"
 	"glory-hole/pkg/logging"
+	"glory-hole/pkg/pattern"
 	"glory-hole/pkg/policy"
 	"glory-hole/pkg/storage"
 	"glory-hole/pkg/telemetry"
@@ -39,6 +40,12 @@ var (
 )
 
 func main() {
+	// Check for subcommands before flag parsing
+	if len(os.Args) > 1 && os.Args[1] == "import-pihole" {
+		runImportPihole(os.Args[2:])
+		return
+	}
+
 	flag.Parse()
 
 	// Handle --version flag
@@ -143,10 +150,40 @@ func main() {
 
 	// Load whitelist if configured
 	if len(cfg.Whitelist) > 0 {
-		for _, domain := range cfg.Whitelist {
-			handler.Whitelist[domain] = struct{}{}
+		var exactMatches []string
+		var patterns []string
+
+		// Separate exact matches from patterns
+		for _, entry := range cfg.Whitelist {
+			if strings.HasPrefix(entry, "*.") || strings.ContainsAny(entry, "()[]{}^$|\\+?") {
+				// Pattern (wildcard or regex)
+				patterns = append(patterns, entry)
+			} else {
+				// Exact match
+				exactMatches = append(exactMatches, entry)
+				handler.Whitelist[entry] = struct{}{}
+			}
 		}
-		logger.Info("Whitelist loaded", "domains", len(cfg.Whitelist))
+
+		// Load whitelist patterns
+		if len(patterns) > 0 {
+			matcher, err := pattern.NewMatcher(patterns)
+			if err != nil {
+				logger.Error("Failed to parse whitelist patterns", "error", err)
+			} else {
+				handler.WhitelistPatterns.Store(matcher)
+				stats := matcher.Stats()
+				logger.Info("Whitelist patterns loaded",
+					"wildcard", stats["wildcard"],
+					"regex", stats["regex"],
+					"total_patterns", len(patterns))
+			}
+		}
+
+		logger.Info("Whitelist loaded",
+			"exact", len(exactMatches),
+			"patterns", len(patterns),
+			"total", len(cfg.Whitelist))
 	}
 
 	// Initialize storage (database for query logging)
@@ -510,11 +547,44 @@ func main() {
 		// Hot-reload whitelist if changed
 		if !equalStringSlice(cfg.Whitelist, newCfg.Whitelist) {
 			logger.Info("Whitelist configuration changed")
+
+			var exactMatches []string
+			var patterns []string
+
+			// Separate exact matches from patterns
 			handler.Whitelist = make(map[string]struct{})
-			for _, domain := range newCfg.Whitelist {
-				handler.Whitelist[domain] = struct{}{}
+			for _, entry := range newCfg.Whitelist {
+				if strings.HasPrefix(entry, "*.") || strings.ContainsAny(entry, "()[]{}^$|\\+?") {
+					// Pattern (wildcard or regex)
+					patterns = append(patterns, entry)
+				} else {
+					// Exact match
+					exactMatches = append(exactMatches, entry)
+					handler.Whitelist[entry] = struct{}{}
+				}
 			}
-			logger.Info("Whitelist reloaded", "domains", len(newCfg.Whitelist))
+
+			// Reload whitelist patterns
+			if len(patterns) > 0 {
+				matcher, err := pattern.NewMatcher(patterns)
+				if err != nil {
+					logger.Error("Failed to parse whitelist patterns during hot-reload", "error", err)
+				} else {
+					handler.WhitelistPatterns.Store(matcher)
+					stats := matcher.Stats()
+					logger.Info("Whitelist patterns reloaded",
+						"wildcard", stats["wildcard"],
+						"regex", stats["regex"])
+				}
+			} else {
+				// Clear patterns if none configured
+				handler.WhitelistPatterns.Store(nil)
+			}
+
+			logger.Info("Whitelist reloaded",
+				"exact", len(exactMatches),
+				"patterns", len(patterns),
+				"total", len(newCfg.Whitelist))
 		}
 
 		// Hot-reload local records if changed
@@ -847,4 +917,69 @@ func performHealthCheck(apiAddr, configPath string) int {
 
 	fmt.Println("Health check passed")
 	return 0
+}
+
+// runImportPihole runs the Pi-hole import command
+func runImportPihole(args []string) {
+	// Create flagset for import command
+	fs := flag.NewFlagSet("import-pihole", flag.ExitOnError)
+
+	// Define import flags
+	zipPath := fs.String("zip", "", "Path to Pi-hole Teleporter backup ZIP (recommended)")
+	gravityDB := fs.String("gravity-db", "", "Path to gravity.db (alternative to --zip)")
+	piholeConfig := fs.String("pihole-config", "", "Path to pihole.toml (optional)")
+	customList := fs.String("custom-list", "", "Path to custom.list (optional)")
+	output := fs.String("output", "", "Output file path (default: stdout)")
+	dryRun := fs.Bool("dry-run", false, "Show what would be imported without writing")
+	validate := fs.Bool("validate", true, "Validate config before writing")
+
+	fs.Usage = func() {
+		fmt.Fprintf(os.Stderr, "Usage: glory-hole import-pihole [options]\n\n")
+		fmt.Fprintf(os.Stderr, "Import Pi-hole configuration to Glory-Hole format\n\n")
+		fmt.Fprintf(os.Stderr, "Options:\n")
+		fs.PrintDefaults()
+		fmt.Fprintf(os.Stderr, "\nExamples:\n")
+		fmt.Fprintf(os.Stderr, "  # Import from Pi-hole Teleporter ZIP (recommended)\n")
+		fmt.Fprintf(os.Stderr, "  glory-hole import-pihole --zip=pihole-teleporter-2025-11-23.zip\n\n")
+		fmt.Fprintf(os.Stderr, "  # With output file\n")
+		fmt.Fprintf(os.Stderr, "  glory-hole import-pihole --zip=backup.zip --output=config.yml\n\n")
+		fmt.Fprintf(os.Stderr, "  # Dry run to preview\n")
+		fmt.Fprintf(os.Stderr, "  glory-hole import-pihole --zip=backup.zip --dry-run\n\n")
+		fmt.Fprintf(os.Stderr, "  # Alternative: Direct file paths\n")
+		fmt.Fprintf(os.Stderr, "  glory-hole import-pihole --gravity-db=/etc/pihole/gravity.db --output=config.yml\n\n")
+	}
+
+	if err := fs.Parse(args); err != nil {
+		os.Exit(1)
+	}
+
+	// Validate inputs
+	if *zipPath == "" && *gravityDB == "" {
+		fmt.Fprintf(os.Stderr, "Error: Must provide either --zip or --gravity-db\n\n")
+		fs.Usage()
+		os.Exit(1)
+	}
+
+	// Create importer
+	importer := NewPiholeImporter()
+	importer.zipPath = *zipPath
+	importer.gravityDB = *gravityDB
+	importer.piholeConfig = *piholeConfig
+	importer.customList = *customList
+	importer.output = *output
+	importer.dryRun = *dryRun
+	importer.validate = *validate
+
+	// Run import
+	cfg, err := importer.Import()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Import failed: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Write configuration
+	if err := importer.WriteConfig(cfg); err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to write config: %v\n", err)
+		os.Exit(1)
+	}
 }

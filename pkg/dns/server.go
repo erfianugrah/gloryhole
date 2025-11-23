@@ -5,6 +5,7 @@ import (
 	"net"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"glory-hole/pkg/blocklist"
@@ -13,6 +14,7 @@ import (
 	"glory-hole/pkg/forwarder"
 	"glory-hole/pkg/localrecords"
 	"glory-hole/pkg/logging"
+	"glory-hole/pkg/pattern"
 	"glory-hole/pkg/policy"
 	"glory-hole/pkg/storage"
 	"glory-hole/pkg/telemetry"
@@ -39,6 +41,7 @@ type Handler struct {
 	BlocklistManager *blocklist.Manager
 	Blocklist        map[string]struct{}
 	Whitelist        map[string]struct{}
+	WhitelistPatterns atomic.Pointer[pattern.Matcher] // Pattern-based whitelist (wildcard/regex)
 	Overrides        map[string]net.IP
 	CNAMEOverrides   map[string]string
 	LocalRecords     *localrecords.Manager
@@ -769,11 +772,22 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 		// Note: Could be optimized with atomic pointer in future if needed
 		h.lookupMu.RLock()
 		_, whitelisted = h.Whitelist[domain]
+		h.lookupMu.RUnlock()
+
+		// Check whitelist patterns if not exact match
+		if !whitelisted {
+			patterns := h.WhitelistPatterns.Load()
+			if patterns != nil {
+				whitelisted = patterns.Match(domain)
+			}
+		}
 
 		// Override blocklist if whitelisted
 		if whitelisted {
 			blocked = false
 		}
+
+		h.lookupMu.RLock() // Re-acquire lock for subsequent map reads
 
 		// Check local overrides for A/AAAA records
 		var overrideIP net.IP
@@ -855,11 +869,24 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 
 		// Check whitelist first (always allow)
 		_, whitelisted = h.Whitelist[domain]
+		h.lookupMu.RUnlock()
+
+		// Check whitelist patterns if not exact match
+		if !whitelisted {
+			patterns := h.WhitelistPatterns.Load()
+			if patterns != nil {
+				whitelisted = patterns.Match(domain)
+			}
+		}
 
 		// Check blocklist (if not whitelisted)
 		if !whitelisted {
+			h.lookupMu.RLock()
 			_, blocked = h.Blocklist[domain]
+			h.lookupMu.RUnlock()
 		}
+
+		h.lookupMu.RLock() // Re-acquire lock for subsequent map reads
 
 		// Check local overrides for A/AAAA records
 		var overrideIP net.IP

@@ -8,6 +8,7 @@ import (
 
 	"glory-hole/pkg/config"
 	"glory-hole/pkg/logging"
+	"glory-hole/pkg/pattern"
 	"glory-hole/pkg/telemetry"
 )
 
@@ -20,6 +21,9 @@ type Manager struct {
 
 	// Current blocklist (atomic pointer for zero-copy reads)
 	current atomic.Pointer[map[string]struct{}]
+
+	// Pattern-based blocklist (wildcard and regex)
+	patterns atomic.Pointer[pattern.Matcher]
 
 	// Lifecycle management
 	updateTicker *time.Ticker
@@ -163,22 +167,83 @@ func (m *Manager) Get() *map[string]struct{} {
 }
 
 // IsBlocked checks if a domain is blocked
+// It uses a multi-tier matching strategy for optimal performance:
+//  1. Try exact match first (fastest - O(1))
+//  2. Try pattern match if no exact match (wildcard/regex)
 func (m *Manager) IsBlocked(domain string) bool {
+	// Try exact match first (fastest path)
 	blocklist := m.current.Load()
-	if blocklist == nil {
-		return false
+	if blocklist != nil {
+		if _, blocked := (*blocklist)[domain]; blocked {
+			return true
+		}
 	}
-	_, blocked := (*blocklist)[domain]
-	return blocked
+
+	// Try pattern match (wildcard/regex)
+	patterns := m.patterns.Load()
+	if patterns != nil {
+		return patterns.Match(domain)
+	}
+
+	return false
 }
 
-// Size returns the number of blocked domains
+// Size returns the number of blocked domains (exact matches only)
 func (m *Manager) Size() int {
 	blocklist := m.current.Load()
 	if blocklist == nil {
 		return 0
 	}
 	return len(*blocklist)
+}
+
+// SetPatterns sets the pattern-based blocklist (wildcard and regex)
+func (m *Manager) SetPatterns(patternList []string) error {
+	if len(patternList) == 0 {
+		// Clear patterns
+		m.patterns.Store(nil)
+		m.logger.Debug("Cleared blocklist patterns")
+		return nil
+	}
+
+	matcher, err := pattern.NewMatcher(patternList)
+	if err != nil {
+		return err
+	}
+
+	m.patterns.Store(matcher)
+
+	stats := matcher.Stats()
+	m.logger.Info("Updated blocklist patterns",
+		"exact", stats["exact"],
+		"wildcard", stats["wildcard"],
+		"regex", stats["regex"],
+		"total", stats["total"])
+
+	return nil
+}
+
+// Stats returns statistics about the blocklist
+func (m *Manager) Stats() map[string]int {
+	stats := map[string]int{
+		"exact": m.Size(),
+	}
+
+	patterns := m.patterns.Load()
+	if patterns != nil {
+		patternStats := patterns.Stats()
+		stats["pattern_exact"] = patternStats["exact"]
+		stats["pattern_wildcard"] = patternStats["wildcard"]
+		stats["pattern_regex"] = patternStats["regex"]
+		stats["total"] = stats["exact"] + patternStats["total"]
+	} else {
+		stats["pattern_exact"] = 0
+		stats["pattern_wildcard"] = 0
+		stats["pattern_regex"] = 0
+		stats["total"] = stats["exact"]
+	}
+
+	return stats
 }
 
 // updateLoop runs the automatic update loop
