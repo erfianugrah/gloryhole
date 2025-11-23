@@ -767,6 +767,7 @@ func TestSetBlocked_MultipleQueries(t *testing.T) {
 		cached := cache.Get(ctx, query)
 		if cached == nil {
 			t.Errorf("Domain %s not cached", domain)
+			continue
 		}
 		if cached.Rcode != dns.RcodeNameError {
 			t.Errorf("Domain %s: Expected NXDOMAIN, got %d", domain, cached.Rcode)
