@@ -891,34 +891,53 @@ rules:
 - **A** - IPv4 addresses
 - **AAAA** - IPv6 addresses
 - **CNAME** - Canonical name aliases
-- **MX** - Mail exchange
-- **TXT** - Text records (SPF, DKIM, etc.)
-- **SRV** - Service locator
-- **PTR** - Reverse DNS
+- **TXT** - Text records (SPF, DKIM, domain verification)
+- **MX** - Mail exchange records (with priority)
+- **PTR** - Reverse DNS lookups
+- **SRV** - Service discovery (with priority, weight, port)
+- **NS** - Nameserver delegation
+- **SOA** - Start of Authority (zone management)
+- **CAA** - Certificate Authority Authorization (RFC 8659)
 
 **Data Model:**
 ```go
 type LocalRecord struct {
-    ID          string       `json:"id"`
-    Domain      string       `json:"domain"`
-    Type        RecordType   `json:"type"`
-    TTL         uint32       `json:"ttl"`
+    // Core fields
+    Domain      string       `json:"domain"`               // All records
+    Type        RecordType   `json:"type"`                 // All records
+    TTL         uint32       `json:"ttl"`                  // All records (default: 300)
+    Wildcard    bool         `json:"wildcard"`             // All records
+    Enabled     bool         `json:"enabled"`              // All records (default: true)
 
-    // Type-specific fields
-    IPs         []net.IP     `json:"ips,omitempty"`        // A, AAAA
-    Target      string       `json:"target,omitempty"`     // CNAME, MX, PTR, SRV
-    Priority    uint16       `json:"priority,omitempty"`   // MX, SRV
-    Weight      uint16       `json:"weight,omitempty"`     // SRV
-    Port        uint16       `json:"port,omitempty"`       // SRV
-    Text        string       `json:"text,omitempty"`       // TXT
+    // IP-based records (A, AAAA)
+    IPs         []net.IP     `json:"ips,omitempty"`        // A, AAAA records
 
-    // Features
-    Wildcard    bool         `json:"wildcard"`
-    Enabled     bool         `json:"enabled"`
+    // Target-based records (CNAME, MX, PTR, SRV, NS)
+    Target      string       `json:"target,omitempty"`     // CNAME, MX, PTR, SRV, NS target
 
-    // Metadata
-    Created     time.Time    `json:"created"`
-    Updated     time.Time    `json:"updated"`
+    // Priority records (MX, SRV)
+    Priority    uint16       `json:"priority,omitempty"`   // MX preference, SRV priority
+
+    // Service discovery (SRV)
+    Weight      uint16       `json:"weight,omitempty"`     // SRV weight
+    Port        uint16       `json:"port,omitempty"`       // SRV port
+
+    // Text records (TXT)
+    TxtRecords  []string     `json:"txt,omitempty"`        // TXT record values (multiple strings)
+
+    // Start of Authority (SOA)
+    Ns          string       `json:"ns,omitempty"`         // SOA: Primary nameserver
+    Mbox        string       `json:"mbox,omitempty"`       // SOA: Responsible person email
+    Serial      uint32       `json:"serial,omitempty"`     // SOA: Zone serial number
+    Refresh     uint32       `json:"refresh,omitempty"`    // SOA: Refresh interval (seconds)
+    Retry       uint32       `json:"retry,omitempty"`      // SOA: Retry interval (seconds)
+    Expire      uint32       `json:"expire,omitempty"`     // SOA: Expiration time (seconds)
+    Minttl      uint32       `json:"minttl,omitempty"`     // SOA: Minimum TTL (seconds)
+
+    // Certificate Authority Authorization (CAA)
+    CaaFlag     uint8        `json:"caa_flag,omitempty"`   // CAA: Flags (usually 0 or 128)
+    CaaTag      string       `json:"caa_tag,omitempty"`    // CAA: Property tag (issue/issuewild/iodef)
+    CaaValue    string       `json:"caa_value,omitempty"`  // CAA: Property value (CA domain or URL)
 }
 
 type Manager struct {

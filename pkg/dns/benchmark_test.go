@@ -231,3 +231,151 @@ func BenchmarkHandler_ConcurrentRequests(b *testing.B) {
 		}
 	})
 }
+
+// BenchmarkHandler_TXTRecord benchmarks TXT record resolution
+func BenchmarkHandler_TXTRecord(b *testing.B) {
+	handler := NewHandler()
+
+	localMgr := localrecords.NewManager()
+	_ = localMgr.AddRecord(localrecords.NewTXTRecord("test.local.", []string{
+		"v=spf1 include:_spf.example.com ~all",
+		"google-site-verification=abc123",
+	}))
+	handler.SetLocalRecords(localMgr)
+
+	msg := new(dns.Msg)
+	msg.SetQuestion("test.local.", dns.TypeTXT)
+
+	writer := &mockResponseWriter{remoteAddr: &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 12345}}
+	ctx := context.Background()
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		handler.ServeDNS(ctx, writer, msg)
+	}
+}
+
+// BenchmarkHandler_MXRecord benchmarks MX record resolution with sorting
+func BenchmarkHandler_MXRecord(b *testing.B) {
+	handler := NewHandler()
+
+	localMgr := localrecords.NewManager()
+	_ = localMgr.AddRecord(localrecords.NewMXRecord("test.local.", "mail1.test.local.", 10))
+	_ = localMgr.AddRecord(localrecords.NewMXRecord("test.local.", "mail2.test.local.", 20))
+	_ = localMgr.AddRecord(localrecords.NewMXRecord("test.local.", "mail3.test.local.", 30))
+	handler.SetLocalRecords(localMgr)
+
+	msg := new(dns.Msg)
+	msg.SetQuestion("test.local.", dns.TypeMX)
+
+	writer := &mockResponseWriter{remoteAddr: &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 12345}}
+	ctx := context.Background()
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		handler.ServeDNS(ctx, writer, msg)
+	}
+}
+
+// BenchmarkHandler_PTRRecord benchmarks PTR record resolution
+func BenchmarkHandler_PTRRecord(b *testing.B) {
+	handler := NewHandler()
+
+	localMgr := localrecords.NewManager()
+	_ = localMgr.AddRecord(localrecords.NewPTRRecord("100.1.168.192.in-addr.arpa.", "test.local."))
+	handler.SetLocalRecords(localMgr)
+
+	msg := new(dns.Msg)
+	msg.SetQuestion("100.1.168.192.in-addr.arpa.", dns.TypePTR)
+
+	writer := &mockResponseWriter{remoteAddr: &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 12345}}
+	ctx := context.Background()
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		handler.ServeDNS(ctx, writer, msg)
+	}
+}
+
+// BenchmarkHandler_SRVRecord benchmarks SRV record resolution with sorting
+func BenchmarkHandler_SRVRecord(b *testing.B) {
+	handler := NewHandler()
+
+	localMgr := localrecords.NewManager()
+	_ = localMgr.AddRecord(localrecords.NewSRVRecord("_ldap._tcp.test.local.", "ldap1.test.local.", 0, 5, 389))
+	_ = localMgr.AddRecord(localrecords.NewSRVRecord("_ldap._tcp.test.local.", "ldap2.test.local.", 0, 10, 389))
+	handler.SetLocalRecords(localMgr)
+
+	msg := new(dns.Msg)
+	msg.SetQuestion("_ldap._tcp.test.local.", dns.TypeSRV)
+
+	writer := &mockResponseWriter{remoteAddr: &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 12345}}
+	ctx := context.Background()
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		handler.ServeDNS(ctx, writer, msg)
+	}
+}
+
+// BenchmarkHandler_NSRecord benchmarks NS record resolution
+func BenchmarkHandler_NSRecord(b *testing.B) {
+	handler := NewHandler()
+
+	localMgr := localrecords.NewManager()
+	_ = localMgr.AddRecord(localrecords.NewNSRecord("test.local.", "ns1.test.local."))
+	_ = localMgr.AddRecord(localrecords.NewNSRecord("test.local.", "ns2.test.local."))
+	handler.SetLocalRecords(localMgr)
+
+	msg := new(dns.Msg)
+	msg.SetQuestion("test.local.", dns.TypeNS)
+
+	writer := &mockResponseWriter{remoteAddr: &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 12345}}
+	ctx := context.Background()
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		handler.ServeDNS(ctx, writer, msg)
+	}
+}
+
+// BenchmarkHandler_SOARecord benchmarks SOA record resolution
+func BenchmarkHandler_SOARecord(b *testing.B) {
+	handler := NewHandler()
+
+	localMgr := localrecords.NewManager()
+	_ = localMgr.AddRecord(localrecords.NewSOARecord("test.local.", "ns1.test.local.", "admin.test.local.", 1, 3600, 600, 86400, 300))
+	handler.SetLocalRecords(localMgr)
+
+	msg := new(dns.Msg)
+	msg.SetQuestion("test.local.", dns.TypeSOA)
+
+	writer := &mockResponseWriter{remoteAddr: &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 12345}}
+	ctx := context.Background()
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		handler.ServeDNS(ctx, writer, msg)
+	}
+}
+
+// BenchmarkHandler_CAARecord benchmarks CAA record resolution
+func BenchmarkHandler_CAARecord(b *testing.B) {
+	handler := NewHandler()
+
+	localMgr := localrecords.NewManager()
+	_ = localMgr.AddRecord(localrecords.NewCAARecord("test.local.", "issue", "letsencrypt.org", 0))
+	_ = localMgr.AddRecord(localrecords.NewCAARecord("test.local.", "issuewild", "letsencrypt.org", 0))
+	handler.SetLocalRecords(localMgr)
+
+	msg := new(dns.Msg)
+	msg.SetQuestion("test.local.", dns.TypeCAA)
+
+	writer := &mockResponseWriter{remoteAddr: &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 12345}}
+	ctx := context.Background()
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		handler.ServeDNS(ctx, writer, msg)
+	}
+}
