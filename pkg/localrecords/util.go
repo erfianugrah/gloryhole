@@ -102,13 +102,30 @@ func validateRecord(record *LocalRecord) error {
 		}
 
 	case RecordTypeTXT:
-		if record.Target == "" {
-			return ErrEmptyTarget
+		if len(record.TxtRecords) == 0 {
+			return ErrNoTxtData
+		}
+		// Validate each TXT string length (max 255 chars per string per RFC 1035)
+		for _, txt := range record.TxtRecords {
+			if len(txt) > 255 {
+				return ErrTxtTooLong
+			}
 		}
 
 	case RecordTypePTR:
 		if record.Target == "" {
 			return ErrEmptyTarget
+		}
+
+	case RecordTypeNS:
+		if record.Target == "" {
+			return ErrEmptyTarget
+		}
+
+	case RecordTypeSOA:
+		// SOA records must have primary nameserver and responsible person email
+		if record.Ns == "" || record.Mbox == "" {
+			return ErrInvalidSOA
 		}
 
 	default:

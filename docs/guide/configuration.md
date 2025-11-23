@@ -504,6 +504,140 @@ local_records:
 
 Glory-Hole automatically resolves CNAME chains up to 10 levels:
 
+#### TXT Records (Text Records)
+
+```yaml
+- domain: "example.local"
+  type: "TXT"
+  txt:
+    - "v=spf1 include:_spf.example.com ~all"
+    - "google-site-verification=abc123def456"
+  ttl: 300
+```
+
+**Use cases:**
+- SPF records for email validation
+- Domain verification (Google, Microsoft, etc.)
+- DKIM records
+- Arbitrary text data
+
+#### MX Records (Mail Exchange)
+
+```yaml
+- domain: "example.local"
+  type: "MX"
+  target: "mail.example.local"
+  priority: 10
+  ttl: 300
+
+- domain: "example.local"
+  type: "MX"
+  target: "backup-mail.example.local"
+  priority: 20
+```
+
+**Priority:** Lower values have higher preference (mail.example.local with priority 10 is preferred over backup-mail with priority 20).
+
+#### PTR Records (Reverse DNS)
+
+```yaml
+- domain: "100.1.168.192.in-addr.arpa"
+  type: "PTR"
+  target: "nas.local"
+  ttl: 300
+```
+
+**Use cases:**
+- Reverse DNS lookups (IP to hostname)
+- Email server reputation
+
+#### SRV Records (Service Discovery)
+
+```yaml
+- domain: "_http._tcp.example.local"
+  type: "SRV"
+  target: "web.example.local"
+  priority: 10
+  weight: 60
+  port: 80
+  ttl: 300
+
+- domain: "_ldap._tcp.example.local"
+  type: "SRV"
+  target: "dc1.example.local"
+  priority: 0
+  weight: 100
+  port: 389
+```
+
+**Fields:**
+- `priority`: Lower values have higher priority (0 is highest)
+- `weight`: For same priority, higher weight = more likely to be selected
+- `port`: Service port number
+
+**Use cases:**
+- Service discovery (LDAP, Kerberos, SIP)
+- Load balancing across services
+- Active Directory integration
+
+#### NS Records (Nameserver)
+
+```yaml
+- domain: "subdomain.example.local"
+  type: "NS"
+  target: "ns1.example.local"
+  ttl: 86400
+
+- domain: "subdomain.example.local"
+  type: "NS"
+  target: "ns2.example.local"
+  ttl: 86400
+```
+
+**Use cases:**
+- Delegating subdomains to other nameservers
+- Zone delegation
+
+#### SOA Records (Start of Authority)
+
+```yaml
+- domain: "example.local"
+  type: "SOA"
+  ns: "ns1.example.local"           # Primary nameserver
+  mbox: "admin.example.local"       # Responsible person email
+  serial: 2023010101                # Zone serial number
+  refresh: 3600                     # Refresh interval (seconds)
+  retry: 600                        # Retry interval (seconds)
+  expire: 86400                     # Expiration time (seconds)
+  minttl: 300                       # Minimum TTL (seconds)
+  ttl: 86400
+```
+
+**Fields:**
+- `ns`: Primary nameserver for the zone (required)
+- `mbox`: Email address of zone administrator (required)
+- `serial`: Version number of the zone (defaults to 1)
+- `refresh`: How often secondaries check for updates (defaults to 3600)
+- `retry`: How often to retry failed refresh (defaults to 600)
+- `expire`: When zone data expires if not refreshed (defaults to 86400)
+- `minttl`: Minimum TTL for negative responses (defaults to 300)
+
+**Use cases:**
+- Zone authority declaration
+- Zone transfer configuration
+
+### EDNS0 Support
+
+Glory-Hole automatically handles EDNS0 (Extension Mechanisms for DNS):
+
+**Features:**
+- Automatic EDNS0 detection in requests
+- Buffer size negotiation (512 - 4096 bytes)
+- DNSSEC OK (DO) bit preservation
+- RFC 6891 compliant
+
+**No configuration required** - EDNS0 is handled automatically for all DNS responses.
+
 ```yaml
 local_records:
   enabled: true

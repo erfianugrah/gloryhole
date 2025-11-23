@@ -29,4 +29,13 @@ var (
 
 	// ErrNoIPs is returned when an A/AAAA record has no IP addresses
 	ErrNoIPs = errors.New("A/AAAA record must have at least one IP address")
+
+	// ErrNoTxtData is returned when a TXT record has no text data
+	ErrNoTxtData = errors.New("TXT record must have at least one text string")
+
+	// ErrTxtTooLong is returned when a TXT string exceeds 255 characters
+	ErrTxtTooLong = errors.New("TXT string exceeds 255 characters")
+
+	// ErrInvalidSOA is returned when a SOA record is invalid
+	ErrInvalidSOA = errors.New("SOA record must have primary nameserver (ns) and responsible person (mbox)")
 )

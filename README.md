@@ -62,9 +62,16 @@ A high-performance DNS server written in Go, designed as a modern, extensible re
 - **Local DNS Records**
   - A/AAAA records for IPv4/IPv6 hosts
   - CNAME records with automatic chain resolution
+  - TXT records (SPF, DKIM, domain verification)
+  - MX records (mail exchange with priority)
+  - PTR records (reverse DNS)
+  - SRV records (service discovery)
+  - NS records (nameserver delegation)
+  - SOA records (zone authority)
   - Wildcard domain support (*.local)
   - Multiple IPs per record (round-robin)
   - Custom TTL values per record
+  - EDNS0 support (RFC 6891 compliant)
 
 - **Conditional Forwarding**
   - Route queries to different upstream DNS servers based on rules
@@ -421,9 +428,16 @@ Glory-Hole supports custom DNS records for your local network, perfect for resol
 
 - **A/AAAA Records**: Define IPv4 and IPv6 addresses for local hosts
 - **CNAME Records**: Create aliases that point to other domains
+- **TXT Records**: SPF, DKIM, domain verification, arbitrary text data
+- **MX Records**: Mail exchange records with priority-based routing
+- **PTR Records**: Reverse DNS (IP to hostname)
+- **SRV Records**: Service discovery with priority/weight load balancing
+- **NS Records**: Nameserver delegation for subdomains
+- **SOA Records**: Start of Authority for zone management
 - **Wildcard Domains**: Use `*.dev.local` to match any subdomain (one level only)
 - **Multiple IPs**: Assign multiple IP addresses to a single domain
 - **Custom TTL**: Set custom time-to-live values (default: 300 seconds)
+- **EDNS0**: Automatic Extended DNS support with buffer size negotiation
 - **CNAME Chain Resolution**: Automatically follows CNAME chains with loop detection
 
 ### Example Configuration
@@ -531,10 +545,11 @@ Features:
 Glory-Hole processes DNS requests in the following order:
 
 1. **Cache Check**: Return cached response if available and not expired
-2. **Local DNS Records**: Check for custom A/AAAA/CNAME records (highest priority for authoritative answers)
-   - Supports exact domain matches
-   - Wildcard domain matches (*.dev.local)
+2. **Local DNS Records**: Check for custom DNS records (highest priority for authoritative answers)
+   - Supports A, AAAA, CNAME, TXT, MX, PTR, SRV, NS, SOA record types
+   - Exact domain matches and wildcard patterns (*.dev.local)
    - CNAME chain resolution with loop detection
+   - EDNS0 support for all responses
 3. **Policy Engine**: Evaluate against user-defined rules
 4. **Allowlist**: If domain is allowlisted, bypass blocking and forward
 5. **Blocklist**: If domain is blocklisted, return blocked response

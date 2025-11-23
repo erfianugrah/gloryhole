@@ -330,13 +330,13 @@ func TestValidateRecord_EdgeCases(t *testing.T) {
 			wantErr: ErrInvalidRecord,
 		},
 		{
-			name: "TXT record with empty target",
+			name: "TXT record with empty array",
 			record: &LocalRecord{
-				Domain: "txt.local",
-				Type:   RecordTypeTXT,
-				Target: "",
+				Domain:     "txt.local",
+				Type:       RecordTypeTXT,
+				TxtRecords: []string{},
 			},
-			wantErr: ErrEmptyTarget,
+			wantErr: ErrNoTxtData,
 		},
 		{
 			name: "PTR record with empty target",
@@ -407,9 +407,9 @@ func TestValidateRecord_EdgeCases(t *testing.T) {
 		{
 			name: "valid TXT record",
 			record: &LocalRecord{
-				Domain: "txt.local",
-				Type:   RecordTypeTXT,
-				Target: "v=spf1 include:example.com ~all",
+				Domain:     "txt.local",
+				Type:       RecordTypeTXT,
+				TxtRecords: []string{"v=spf1 include:example.com ~all"},
 			},
 			wantErr: nil,
 		},

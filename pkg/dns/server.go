@@ -151,6 +151,9 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 	msg.Authoritative = true
 	msg.RecursionAvailable = true
 
+	// Handle EDNS0 (RFC 6891) - must be done early to apply to all responses
+	HandleEDNS0(r, msg)
+
 	// Validate request
 	if len(r.Question) == 0 {
 		msg.SetRcode(r, dns.RcodeFormatError)
@@ -170,6 +173,10 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 			// Important: Update the message ID to match the query
 			// Cached responses have the original query's ID, but we need this query's ID
 			cachedResp.Id = r.Id
+
+			// Handle EDNS0 for cached response
+			HandleEDNS0(r, cachedResp)
+
 			cached = true
 			responseCode = cachedResp.Rcode
 			h.writeMsg(w, cachedResp)
@@ -286,6 +293,142 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 						Ttl:    ttl,
 					},
 					Target: target,
+				}
+				msg.Answer = append(msg.Answer, rr)
+				responseCode = dns.RcodeSuccess
+				h.writeMsg(w, msg)
+				return
+			}
+
+		case dns.TypeTXT:
+			// Check for TXT records
+			records := h.LocalRecords.LookupTXT(domain)
+			if len(records) > 0 {
+				for _, rec := range records {
+					rr := &dns.TXT{
+						Hdr: dns.RR_Header{
+							Name:   domain,
+							Rrtype: dns.TypeTXT,
+							Class:  dns.ClassINET,
+							Ttl:    rec.TTL,
+						},
+						Txt: rec.TxtRecords,
+					}
+					msg.Answer = append(msg.Answer, rr)
+				}
+				responseCode = dns.RcodeSuccess
+				h.writeMsg(w, msg)
+				return
+			}
+
+		case dns.TypeMX:
+			// Check for MX records
+			records := h.LocalRecords.LookupMX(domain)
+			if len(records) > 0 {
+				for _, rec := range records {
+					rr := &dns.MX{
+						Hdr: dns.RR_Header{
+							Name:   domain,
+							Rrtype: dns.TypeMX,
+							Class:  dns.ClassINET,
+							Ttl:    rec.TTL,
+						},
+						Preference: rec.Priority,
+						Mx:         rec.Target,
+					}
+					msg.Answer = append(msg.Answer, rr)
+				}
+				responseCode = dns.RcodeSuccess
+				h.writeMsg(w, msg)
+				return
+			}
+
+		case dns.TypePTR:
+			// Check for PTR records (reverse DNS)
+			records := h.LocalRecords.LookupPTR(domain)
+			if len(records) > 0 {
+				for _, rec := range records {
+					rr := &dns.PTR{
+						Hdr: dns.RR_Header{
+							Name:   domain,
+							Rrtype: dns.TypePTR,
+							Class:  dns.ClassINET,
+							Ttl:    rec.TTL,
+						},
+						Ptr: rec.Target,
+					}
+					msg.Answer = append(msg.Answer, rr)
+				}
+				responseCode = dns.RcodeSuccess
+				h.writeMsg(w, msg)
+				return
+			}
+
+		case dns.TypeSRV:
+			// Check for SRV records (service discovery)
+			records := h.LocalRecords.LookupSRV(domain)
+			if len(records) > 0 {
+				for _, rec := range records {
+					rr := &dns.SRV{
+						Hdr: dns.RR_Header{
+							Name:   domain,
+							Rrtype: dns.TypeSRV,
+							Class:  dns.ClassINET,
+							Ttl:    rec.TTL,
+						},
+						Priority: rec.Priority,
+						Weight:   rec.Weight,
+						Port:     rec.Port,
+						Target:   rec.Target,
+					}
+					msg.Answer = append(msg.Answer, rr)
+				}
+				responseCode = dns.RcodeSuccess
+				h.writeMsg(w, msg)
+				return
+			}
+
+		case dns.TypeNS:
+			// Check for NS records (nameserver records)
+			records := h.LocalRecords.LookupNS(domain)
+			if len(records) > 0 {
+				for _, rec := range records {
+					rr := &dns.NS{
+						Hdr: dns.RR_Header{
+							Name:   domain,
+							Rrtype: dns.TypeNS,
+							Class:  dns.ClassINET,
+							Ttl:    rec.TTL,
+						},
+						Ns: rec.Target,
+					}
+					msg.Answer = append(msg.Answer, rr)
+				}
+				responseCode = dns.RcodeSuccess
+				h.writeMsg(w, msg)
+				return
+			}
+
+		case dns.TypeSOA:
+			// Check for SOA records (Start of Authority)
+			records := h.LocalRecords.LookupSOA(domain)
+			if len(records) > 0 {
+				// Typically only one SOA per zone
+				rec := records[0]
+				rr := &dns.SOA{
+					Hdr: dns.RR_Header{
+						Name:   domain,
+						Rrtype: dns.TypeSOA,
+						Class:  dns.ClassINET,
+						Ttl:    rec.TTL,
+					},
+					Ns:      rec.Ns,
+					Mbox:    rec.Mbox,
+					Serial:  rec.Serial,
+					Refresh: rec.Refresh,
+					Retry:   rec.Retry,
+					Expire:  rec.Expire,
+					Minttl:  rec.Minttl,
 				}
 				msg.Answer = append(msg.Answer, rr)
 				responseCode = dns.RcodeSuccess

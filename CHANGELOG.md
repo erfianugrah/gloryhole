@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added - Extended DNS Record Type Support (v0.7.2)
+
+**Major Feature**: Comprehensive DNS record type support for full-featured local DNS resolution!
+
+#### New Record Types
+- **TXT Records**: Multi-string text records for SPF, DKIM, domain verification
+- **MX Records**: Mail exchange records with priority-based routing
+- **PTR Records**: Reverse DNS lookups (IP to hostname)
+- **SRV Records**: Service discovery with priority/weight load balancing
+- **NS Records**: Nameserver delegation for subdomains
+- **SOA Records**: Start of Authority for zone management (all 7 fields)
+
+#### EDNS0 Support
+- **RFC 6891 Compliant**: Automatic Extended DNS mechanism support
+- **Buffer Size Negotiation**: 512-4096 bytes with automatic negotiation
+- **DNSSEC OK Bit**: DO bit preservation from requests
+- **Universal Coverage**: EDNS0 applied to all response types (local records, cached, blocked, forwarded)
+
+#### Features
+- Priority-based routing for MX and SRV records
+- Multi-string support for TXT records (RFC 1035 compliant, 255 char limit per string)
+- Wildcard support for all new record types
+- Hot-reload configuration support
+- Comprehensive test coverage (41 new tests, 100% passing)
+
 ### Phase 3 - Advanced Features (Future)
 - DoH/DoT support (DNS over HTTPS/TLS)
 - DNSSEC validation

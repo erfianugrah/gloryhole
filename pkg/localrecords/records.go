@@ -17,6 +17,8 @@ const (
 	RecordTypeTXT   RecordType = "TXT"
 	RecordTypeSRV   RecordType = "SRV"
 	RecordTypePTR   RecordType = "PTR"
+	RecordTypeNS    RecordType = "NS"
+	RecordTypeSOA   RecordType = "SOA"
 )
 
 // LocalRecord represents a single local DNS record
@@ -31,6 +33,18 @@ type LocalRecord struct {
 	Port     uint16
 	Wildcard bool
 	Enabled  bool
+
+	// TXT record data (multiple strings per record)
+	TxtRecords []string
+
+	// SOA record data (Start of Authority)
+	Ns      string // SOA: Primary nameserver
+	Mbox    string // SOA: Responsible person email
+	Serial  uint32 // SOA: Zone serial number
+	Refresh uint32 // SOA: Refresh interval (seconds)
+	Retry   uint32 // SOA: Retry interval (seconds)
+	Expire  uint32 // SOA: Expiration time (seconds)
+	Minttl  uint32 // SOA: Minimum TTL (seconds)
 }
 
 // Manager manages local DNS records with efficient lookups
@@ -175,6 +189,207 @@ func (m *Manager) LookupCNAME(domain string) (string, uint32, bool) {
 	}
 
 	return "", 0, false
+}
+
+// LookupTXT looks up TXT records for a domain
+// Returns list of records with TXT data, or empty if not found
+func (m *Manager) LookupTXT(domain string) []*LocalRecord {
+	domain = normalizeDomain(domain)
+
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	result := make([]*LocalRecord, 0)
+
+	// Check exact matches first
+	if records, exists := m.records[domain]; exists {
+		for _, r := range records {
+			if r.Type == RecordTypeTXT && r.Enabled {
+				result = append(result, r)
+			}
+		}
+	}
+
+	// Check wildcard matches
+	for _, wc := range m.wildcards {
+		if wc.Type == RecordTypeTXT && wc.Enabled && matchesWildcard(domain, wc.Domain) {
+			result = append(result, wc)
+		}
+	}
+
+	return result
+}
+
+// LookupMX looks up MX records for a domain
+// Returns list of records sorted by priority (lower priority = higher preference)
+func (m *Manager) LookupMX(domain string) []*LocalRecord {
+	domain = normalizeDomain(domain)
+
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	result := make([]*LocalRecord, 0)
+
+	// Check exact matches first
+	if records, exists := m.records[domain]; exists {
+		for _, r := range records {
+			if r.Type == RecordTypeMX && r.Enabled {
+				result = append(result, r)
+			}
+		}
+	}
+
+	// Check wildcard matches
+	for _, wc := range m.wildcards {
+		if wc.Type == RecordTypeMX && wc.Enabled && matchesWildcard(domain, wc.Domain) {
+			result = append(result, wc)
+		}
+	}
+
+	// Sort by priority (lower priority number = higher preference per RFC 5321)
+	// If priorities are equal, maintain insertion order
+	for i := 0; i < len(result); i++ {
+		for j := i + 1; j < len(result); j++ {
+			if result[i].Priority > result[j].Priority {
+				result[i], result[j] = result[j], result[i]
+			}
+		}
+	}
+
+	return result
+}
+
+// LookupPTR looks up PTR records for a domain (reverse DNS)
+// Returns list of records with pointer targets
+func (m *Manager) LookupPTR(domain string) []*LocalRecord {
+	domain = normalizeDomain(domain)
+
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	result := make([]*LocalRecord, 0)
+
+	// Check exact matches first
+	if records, exists := m.records[domain]; exists {
+		for _, r := range records {
+			if r.Type == RecordTypePTR && r.Enabled {
+				result = append(result, r)
+			}
+		}
+	}
+
+	// Check wildcard matches
+	for _, wc := range m.wildcards {
+		if wc.Type == RecordTypePTR && wc.Enabled && matchesWildcard(domain, wc.Domain) {
+			result = append(result, wc)
+		}
+	}
+
+	return result
+}
+
+// LookupSRV looks up SRV records for a domain (service discovery)
+// Returns list of records sorted by priority, then weight (RFC 2782)
+func (m *Manager) LookupSRV(domain string) []*LocalRecord {
+	domain = normalizeDomain(domain)
+
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	result := make([]*LocalRecord, 0)
+
+	// Check exact matches first
+	if records, exists := m.records[domain]; exists {
+		for _, r := range records {
+			if r.Type == RecordTypeSRV && r.Enabled {
+				result = append(result, r)
+			}
+		}
+	}
+
+	// Check wildcard matches
+	for _, wc := range m.wildcards {
+		if wc.Type == RecordTypeSRV && wc.Enabled && matchesWildcard(domain, wc.Domain) {
+			result = append(result, wc)
+		}
+	}
+
+	// Sort by priority (lower first), then by weight (higher first) per RFC 2782
+	// Priority ordering: servers with lower priority values are contacted first
+	// Weight ordering: within same priority, higher weight = more likely to be selected
+	for i := 0; i < len(result); i++ {
+		for j := i + 1; j < len(result); j++ {
+			// Primary sort: priority (ascending)
+			if result[i].Priority > result[j].Priority {
+				result[i], result[j] = result[j], result[i]
+			} else if result[i].Priority == result[j].Priority {
+				// Secondary sort: weight (descending)
+				if result[i].Weight < result[j].Weight {
+					result[i], result[j] = result[j], result[i]
+				}
+			}
+		}
+	}
+
+	return result
+}
+
+// LookupNS looks up NS records for a domain (nameserver records)
+// Returns list of records with nameserver targets
+func (m *Manager) LookupNS(domain string) []*LocalRecord {
+	domain = normalizeDomain(domain)
+
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	result := make([]*LocalRecord, 0)
+
+	// Check exact matches first
+	if records, exists := m.records[domain]; exists {
+		for _, r := range records {
+			if r.Type == RecordTypeNS && r.Enabled {
+				result = append(result, r)
+			}
+		}
+	}
+
+	// Check wildcard matches
+	for _, wc := range m.wildcards {
+		if wc.Type == RecordTypeNS && wc.Enabled && matchesWildcard(domain, wc.Domain) {
+			result = append(result, wc)
+		}
+	}
+
+	return result
+}
+
+// LookupSOA looks up SOA record for a domain (Start of Authority)
+// Returns list of records (typically only one SOA per zone)
+func (m *Manager) LookupSOA(domain string) []*LocalRecord {
+	domain = normalizeDomain(domain)
+
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	result := make([]*LocalRecord, 0)
+
+	// Check exact matches first
+	if records, exists := m.records[domain]; exists {
+		for _, r := range records {
+			if r.Type == RecordTypeSOA && r.Enabled {
+				result = append(result, r)
+			}
+		}
+	}
+
+	// Check wildcard matches
+	for _, wc := range m.wildcards {
+		if wc.Type == RecordTypeSOA && wc.Enabled && matchesWildcard(domain, wc.Domain) {
+			result = append(result, wc)
+		}
+	}
+
+	return result
 }
 
 // ResolveCNAME follows CNAME chains and returns the final A/AAAA records
@@ -349,6 +564,58 @@ func NewCNAMERecord(domain, target string) *LocalRecord {
 	return r
 }
 
+// NewTXTRecord creates a new TXT record
+func NewTXTRecord(domain string, txtRecords []string) *LocalRecord {
+	r := NewLocalRecord(domain, RecordTypeTXT)
+	r.TxtRecords = txtRecords
+	return r
+}
+
+// NewMXRecord creates a new MX record
+func NewMXRecord(domain, target string, priority uint16) *LocalRecord {
+	r := NewLocalRecord(domain, RecordTypeMX)
+	r.Target = normalizeDomain(target)
+	r.Priority = priority
+	return r
+}
+
+// NewPTRRecord creates a new PTR record
+func NewPTRRecord(domain, target string) *LocalRecord {
+	r := NewLocalRecord(domain, RecordTypePTR)
+	r.Target = normalizeDomain(target)
+	return r
+}
+
+// NewSRVRecord creates a new SRV record
+func NewSRVRecord(domain, target string, priority, weight, port uint16) *LocalRecord {
+	r := NewLocalRecord(domain, RecordTypeSRV)
+	r.Target = normalizeDomain(target)
+	r.Priority = priority
+	r.Weight = weight
+	r.Port = port
+	return r
+}
+
+// NewNSRecord creates a new NS record
+func NewNSRecord(domain, target string) *LocalRecord {
+	r := NewLocalRecord(domain, RecordTypeNS)
+	r.Target = normalizeDomain(target)
+	return r
+}
+
+// NewSOARecord creates a new SOA record
+func NewSOARecord(domain, ns, mbox string, serial, refresh, retry, expire, minttl uint32) *LocalRecord {
+	r := NewLocalRecord(domain, RecordTypeSOA)
+	r.Ns = normalizeDomain(ns)
+	r.Mbox = mbox // Email format, not normalized as domain
+	r.Serial = serial
+	r.Refresh = refresh
+	r.Retry = retry
+	r.Expire = expire
+	r.Minttl = minttl
+	return r
+}
+
 // Clone creates a deep copy of the record
 func (r *LocalRecord) Clone() *LocalRecord {
 	clone := &LocalRecord{
@@ -361,11 +628,23 @@ func (r *LocalRecord) Clone() *LocalRecord {
 		Target:   r.Target,
 		Wildcard: r.Wildcard,
 		Enabled:  r.Enabled,
+		Ns:       r.Ns,
+		Mbox:     r.Mbox,
+		Serial:   r.Serial,
+		Refresh:  r.Refresh,
+		Retry:    r.Retry,
+		Expire:   r.Expire,
+		Minttl:   r.Minttl,
 	}
 
 	if len(r.IPs) > 0 {
 		clone.IPs = make([]net.IP, len(r.IPs))
 		copy(clone.IPs, r.IPs)
+	}
+
+	if len(r.TxtRecords) > 0 {
+		clone.TxtRecords = make([]string, len(r.TxtRecords))
+		copy(clone.TxtRecords, r.TxtRecords)
 	}
 
 	return clone

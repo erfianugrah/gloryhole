@@ -54,12 +54,24 @@ type LocalRecordsConfig struct {
 
 // LocalRecordEntry represents a single local DNS record in the config
 type LocalRecordEntry struct {
-	Domain   string   `yaml:"domain"`
-	Type     string   `yaml:"type"`
-	Target   string   `yaml:"target"`
-	IPs      []string `yaml:"ips"`
-	TTL      uint32   `yaml:"ttl"`
-	Wildcard bool     `yaml:"wildcard"`
+	Domain     string   `yaml:"domain"`
+	Type       string   `yaml:"type"`
+	Target     string   `yaml:"target"`
+	IPs        []string `yaml:"ips"`
+	TTL        uint32   `yaml:"ttl"`
+	Wildcard   bool     `yaml:"wildcard"`
+	TxtRecords []string `yaml:"txt,omitempty"`      // TXT record data (multiple strings)
+	Priority   *uint16  `yaml:"priority,omitempty"` // MX, SRV priority (pointer for omitempty)
+	Weight     *uint16  `yaml:"weight,omitempty"`   // SRV weight
+	Port       *uint16  `yaml:"port,omitempty"`     // SRV port
+	// SOA record fields
+	Ns      string  `yaml:"ns,omitempty"`      // SOA: Primary nameserver
+	Mbox    string  `yaml:"mbox,omitempty"`    // SOA: Responsible person email
+	Serial  *uint32 `yaml:"serial,omitempty"`  // SOA: Zone serial number
+	Refresh *uint32 `yaml:"refresh,omitempty"` // SOA: Refresh interval (seconds)
+	Retry   *uint32 `yaml:"retry,omitempty"`   // SOA: Retry interval (seconds)
+	Expire  *uint32 `yaml:"expire,omitempty"`  // SOA: Expiration time (seconds)
+	Minttl  *uint32 `yaml:"minttl,omitempty"`  // SOA: Minimum TTL (seconds)
 }
 
 // PolicyConfig holds policy engine configuration

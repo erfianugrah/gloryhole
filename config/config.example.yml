@@ -65,6 +65,59 @@ local_records:
       ips:
         - "192.168.1.200"
 
+    # TXT record (SPF, DKIM, domain verification)
+    - domain: "example.local"
+      type: "TXT"
+      txt:
+        - "v=spf1 include:_spf.example.com ~all"
+        - "google-site-verification=abc123def456"
+      ttl: 300
+
+    # MX record (mail exchange with priority)
+    - domain: "example.local"
+      type: "MX"
+      target: "mail.example.local"
+      priority: 10
+      ttl: 300
+
+    - domain: "example.local"
+      type: "MX"
+      target: "backup-mail.example.local"
+      priority: 20
+
+    # PTR record (reverse DNS)
+    - domain: "100.1.168.192.in-addr.arpa"
+      type: "PTR"
+      target: "nas.local"
+      ttl: 300
+
+    # SRV record (service discovery)
+    - domain: "_ldap._tcp.example.local"
+      type: "SRV"
+      target: "dc1.example.local"
+      priority: 0
+      weight: 100
+      port: 389
+      ttl: 300
+
+    # NS record (nameserver delegation)
+    - domain: "subdomain.example.local"
+      type: "NS"
+      target: "ns1.example.local"
+      ttl: 86400
+
+    # SOA record (Start of Authority)
+    - domain: "example.local"
+      type: "SOA"
+      ns: "ns1.example.local"
+      mbox: "admin.example.local"
+      serial: 2023010101
+      refresh: 3600
+      retry: 600
+      expire: 86400
+      minttl: 300
+      ttl: 86400
+
 # Database (Query Logging & Statistics)
 database:
   enabled: true
