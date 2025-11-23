@@ -32,6 +32,7 @@ func testCacheConfig() *config.CacheConfig {
 		MinTTL:      1 * time.Second,
 		MaxTTL:      1 * time.Hour,
 		NegativeTTL: 5 * time.Minute,
+		BlockedTTL:  1 * time.Second,
 	}
 }
 
@@ -602,5 +603,223 @@ func TestCache_ConcurrentAccess(t *testing.T) {
 	stats := cache.Stats()
 	if stats.Entries < 0 {
 		t.Error("Cache entries count is negative (race condition)")
+	}
+}
+
+// TestSetBlocked_Basic tests basic SetBlocked functionality
+func TestSetBlocked_Basic(t *testing.T) {
+	logger := testLogger(t)
+	cfg := testCacheConfig()
+
+	cache, err := New(cfg, logger, nil)
+	if err != nil {
+		t.Fatalf("New() failed: %v", err)
+	}
+	defer func() { _ = cache.Close() }()
+
+	ctx := context.Background()
+	query := testQuery("blocked.example.com", dns.TypeA)
+
+	// Create NXDOMAIN response (blocked)
+	resp := new(dns.Msg)
+	resp.SetRcode(query, dns.RcodeNameError)
+
+	// Cache the blocked response
+	cache.SetBlocked(ctx, query, resp)
+
+	// Verify it's cached
+	cached := cache.Get(ctx, query)
+	if cached == nil {
+		t.Fatal("SetBlocked() did not cache the response")
+	}
+
+	if cached.Rcode != dns.RcodeNameError {
+		t.Errorf("Expected Rcode NXDOMAIN, got %d", cached.Rcode)
+	}
+
+	// Verify stats
+	stats := cache.Stats()
+	if stats.Entries != 1 {
+		t.Errorf("Expected 1 entry, got %d", stats.Entries)
+	}
+	if stats.Sets != 1 {
+		t.Errorf("Expected 1 set, got %d", stats.Sets)
+	}
+}
+
+// TestSetBlocked_TTL tests that BlockedTTL is respected
+func TestSetBlocked_TTL(t *testing.T) {
+	logger := testLogger(t)
+	cfg := testCacheConfig()
+	cfg.BlockedTTL = 100 * time.Millisecond // Short TTL for testing
+
+	cache, err := New(cfg, logger, nil)
+	if err != nil {
+		t.Fatalf("New() failed: %v", err)
+	}
+	defer func() { _ = cache.Close() }()
+
+	ctx := context.Background()
+	query := testQuery("blocked.example.com", dns.TypeA)
+
+	// Create blocked response
+	resp := new(dns.Msg)
+	resp.SetRcode(query, dns.RcodeNameError)
+
+	// Cache it
+	cache.SetBlocked(ctx, query, resp)
+
+	// Should be cached immediately
+	cached := cache.Get(ctx, query)
+	if cached == nil {
+		t.Fatal("Response not cached immediately after SetBlocked")
+	}
+
+	// Wait for TTL to expire
+	time.Sleep(150 * time.Millisecond)
+
+	// Should be expired now
+	cached = cache.Get(ctx, query)
+	if cached != nil {
+		t.Error("Response should have expired but is still cached")
+	}
+}
+
+// TestSetBlocked_Disabled tests that caching is skipped when disabled
+func TestSetBlocked_Disabled(t *testing.T) {
+	logger := testLogger(t)
+	cfg := testCacheConfig()
+	cfg.Enabled = false
+
+	cache, err := New(cfg, logger, nil)
+	if err != nil {
+		t.Fatalf("New() failed: %v", err)
+	}
+	defer func() { _ = cache.Close() }()
+
+	ctx := context.Background()
+	query := testQuery("blocked.example.com", dns.TypeA)
+
+	resp := new(dns.Msg)
+	resp.SetRcode(query, dns.RcodeNameError)
+
+	cache.SetBlocked(ctx, query, resp)
+
+	// Should not be cached
+	cached := cache.Get(ctx, query)
+	if cached != nil {
+		t.Error("SetBlocked() cached when cache is disabled")
+	}
+}
+
+// TestSetBlocked_ZeroTTL tests that zero BlockedTTL prevents caching
+func TestSetBlocked_ZeroTTL(t *testing.T) {
+	logger := testLogger(t)
+	cfg := testCacheConfig()
+	cfg.BlockedTTL = 0
+
+	cache, err := New(cfg, logger, nil)
+	if err != nil {
+		t.Fatalf("New() failed: %v", err)
+	}
+	defer func() { _ = cache.Close() }()
+
+	ctx := context.Background()
+	query := testQuery("blocked.example.com", dns.TypeA)
+
+	resp := new(dns.Msg)
+	resp.SetRcode(query, dns.RcodeNameError)
+
+	cache.SetBlocked(ctx, query, resp)
+
+	// Should not be cached with zero TTL
+	cached := cache.Get(ctx, query)
+	if cached != nil {
+		t.Error("SetBlocked() cached with zero TTL")
+	}
+}
+
+// TestSetBlocked_MultipleQueries tests caching of multiple blocked domains
+func TestSetBlocked_MultipleQueries(t *testing.T) {
+	logger := testLogger(t)
+	cfg := testCacheConfig()
+
+	cache, err := New(cfg, logger, nil)
+	if err != nil {
+		t.Fatalf("New() failed: %v", err)
+	}
+	defer func() { _ = cache.Close() }()
+
+	ctx := context.Background()
+
+	// Cache multiple blocked domains
+	domains := []string{"ads.example.com", "tracker.example.com", "malware.example.com"}
+	for _, domain := range domains {
+		query := testQuery(domain, dns.TypeA)
+		resp := new(dns.Msg)
+		resp.SetRcode(query, dns.RcodeNameError)
+		cache.SetBlocked(ctx, query, resp)
+	}
+
+	// Verify all are cached
+	for _, domain := range domains {
+		query := testQuery(domain, dns.TypeA)
+		cached := cache.Get(ctx, query)
+		if cached == nil {
+			t.Errorf("Domain %s not cached", domain)
+		}
+		if cached.Rcode != dns.RcodeNameError {
+			t.Errorf("Domain %s: Expected NXDOMAIN, got %d", domain, cached.Rcode)
+		}
+	}
+
+	// Verify stats
+	stats := cache.Stats()
+	if stats.Entries != 3 {
+		t.Errorf("Expected 3 entries, got %d", stats.Entries)
+	}
+}
+
+// TestSetBlocked_DifferentQueryTypes tests caching with different query types
+func TestSetBlocked_DifferentQueryTypes(t *testing.T) {
+	logger := testLogger(t)
+	cfg := testCacheConfig()
+
+	cache, err := New(cfg, logger, nil)
+	if err != nil {
+		t.Fatalf("New() failed: %v", err)
+	}
+	defer func() { _ = cache.Close() }()
+
+	ctx := context.Background()
+	domain := "blocked.example.com"
+
+	// Cache A record
+	queryA := testQuery(domain, dns.TypeA)
+	respA := new(dns.Msg)
+	respA.SetRcode(queryA, dns.RcodeNameError)
+	cache.SetBlocked(ctx, queryA, respA)
+
+	// Cache AAAA record
+	queryAAAA := testQuery(domain, dns.TypeAAAA)
+	respAAAA := new(dns.Msg)
+	respAAAA.SetRcode(queryAAAA, dns.RcodeNameError)
+	cache.SetBlocked(ctx, queryAAAA, respAAAA)
+
+	// Both should be cached separately
+	cachedA := cache.Get(ctx, queryA)
+	cachedAAAA := cache.Get(ctx, queryAAAA)
+
+	if cachedA == nil {
+		t.Error("A record not cached")
+	}
+	if cachedAAAA == nil {
+		t.Error("AAAA record not cached")
+	}
+
+	// Verify 2 separate entries
+	stats := cache.Stats()
+	if stats.Entries != 2 {
+		t.Errorf("Expected 2 entries (A and AAAA), got %d", stats.Entries)
 	}
 }

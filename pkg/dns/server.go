@@ -571,6 +571,11 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 						"client_ip", clientIP)
 				}
 
+				// Cache blocked response to avoid repeated policy evaluation
+				if h.Cache != nil {
+					h.Cache.SetBlocked(ctx, r, msg)
+				}
+
 				h.writeMsg(w, msg)
 				return
 
@@ -816,6 +821,11 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 				h.Metrics.DNSBlockedQueries.Add(ctx, 1)
 			}
 
+			// Cache blocked response to avoid repeated blocklist lookups
+			if h.Cache != nil {
+				h.Cache.SetBlocked(ctx, r, msg)
+			}
+
 			h.writeMsg(w, msg)
 			return
 		}
@@ -914,6 +924,11 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 			// Record blocked query metric
 			if h.Metrics != nil {
 				h.Metrics.DNSBlockedQueries.Add(ctx, 1)
+			}
+
+			// Cache blocked response to avoid repeated blocklist lookups
+			if h.Cache != nil {
+				h.Cache.SetBlocked(ctx, r, msg)
 			}
 
 			h.writeMsg(w, msg)

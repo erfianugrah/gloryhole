@@ -43,7 +43,8 @@ type CacheConfig struct {
 	MaxEntries  int           `yaml:"max_entries"`
 	MinTTL      time.Duration `yaml:"min_ttl"`
 	MaxTTL      time.Duration `yaml:"max_ttl"`
-	NegativeTTL time.Duration `yaml:"negative_ttl"`
+	NegativeTTL time.Duration `yaml:"negative_ttl"` // TTL for upstream NXDOMAIN responses
+	BlockedTTL  time.Duration `yaml:"blocked_ttl"`  // TTL for blocked domain responses
 }
 
 // LocalRecordsConfig holds local DNS records configuration
@@ -249,6 +250,9 @@ func (c *Config) applyDefaults() {
 	}
 	if c.Cache.NegativeTTL == 0 {
 		c.Cache.NegativeTTL = 5 * time.Minute
+	}
+	if c.Cache.BlockedTTL == 0 {
+		c.Cache.BlockedTTL = 1 * time.Second
 	}
 
 	// Logging defaults

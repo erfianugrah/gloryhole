@@ -204,6 +204,66 @@ func (c *Cache) Set(ctx context.Context, r *dns.Msg, resp *dns.Msg) {
 	c.mu.Lock()
 }
 
+// SetBlocked stores a blocked domain response in the cache with BlockedTTL
+// This is used for domains blocked by policy engine or blocklist to avoid
+// repeating the blocking logic on every query
+func (c *Cache) SetBlocked(ctx context.Context, r *dns.Msg, resp *dns.Msg) {
+	if !c.cfg.Enabled {
+		return
+	}
+
+	if len(r.Question) == 0 {
+		return
+	}
+
+	question := r.Question[0]
+	key := c.makeKey(question.Name, question.Qtype)
+
+	// Use configured blocked TTL
+	ttl := c.cfg.BlockedTTL
+	if ttl <= 0 {
+		// Don't cache if BlockedTTL is disabled
+		return
+	}
+
+	now := time.Now()
+	entry := &cacheEntry{
+		msg:        resp.Copy(), // Deep copy to prevent mutations
+		expiresAt:  now.Add(ttl),
+		lastAccess: now,
+		size:       resp.Len(),
+	}
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	// Check if we need to evict entries (LRU)
+	if len(c.entries) >= c.maxEntries {
+		c.evictLRU()
+	}
+
+	// Check if this is a new entry or replacement
+	_, exists := c.entries[key]
+
+	c.entries[key] = entry
+	c.stats.entries = len(c.entries)
+	c.stats.sets++
+
+	// Record cache size change to Prometheus metrics if available
+	// Only increment if this is a new entry (not a replacement)
+	if c.metrics != nil && !exists {
+		c.metrics.CacheSize.Add(ctx, 1)
+	}
+
+	c.mu.Unlock()
+	c.logger.Debug("Cached blocked domain response",
+		"domain", question.Name,
+		"qtype", dns.TypeToString[question.Qtype],
+		"ttl", ttl,
+		"size", entry.size)
+	c.mu.Lock()
+}
+
 // makeKey creates a cache key from domain and query type
 func (c *Cache) makeKey(domain string, qtype uint16) string {
 	// Format: domain:qtype
