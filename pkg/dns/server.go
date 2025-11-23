@@ -151,9 +151,16 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 					Upstream:       upstream,
 				}
 
-				// Silently fail - don't let logging errors affect DNS service
-				// In production, this would go to a separate error log
-				_ = h.Storage.LogQuery(logCtx, queryLog)
+				// Log query to storage (fire and forget, but log errors)
+				if err := h.Storage.LogQuery(logCtx, queryLog); err != nil {
+					// Don't let logging errors affect DNS service, but log them
+					if h.Logger != nil {
+						h.Logger.Error("Failed to log query to storage",
+							"domain", domain,
+							"client_ip", clientIP,
+							"error", err)
+					}
+				}
 			}()
 		}
 	}()
@@ -917,10 +924,25 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 		)
 
 		if len(upstreams) > 0 {
+			// Log conditional forwarding match
+			if h.Logger != nil {
+				h.Logger.Debug("Conditional forwarding rule matched",
+					"domain", domain,
+					"client_ip", clientIP,
+					"upstreams", upstreams,
+					"query_type", dns.TypeToString[qtype])
+			}
+
 			// Rule matched - forward to conditional upstreams
 			resp, err := h.Forwarder.ForwardWithUpstreams(ctx, r, upstreams)
 			if err != nil {
 				// Forwarding failed, return SERVFAIL
+				if h.Logger != nil {
+					h.Logger.Error("Conditional forwarding failed",
+						"domain", domain,
+						"upstreams", upstreams,
+						"error", err)
+				}
 				responseCode = dns.RcodeServerFailure
 				msg.SetRcode(r, dns.RcodeServerFailure)
 				h.writeMsg(w, msg)

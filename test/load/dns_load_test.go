@@ -587,7 +587,7 @@ func setupTestHandler(t *testing.T, cfg LoadTestConfig) *dns.Handler {
 			MinTTL:      5 * time.Second,
 			MaxTTL:      1 * time.Hour,
 			NegativeTTL: 5 * time.Second,
-		}, logger)
+		}, logger, nil)
 		if err != nil {
 			t.Fatalf("Failed to create cache: %v", err)
 		}

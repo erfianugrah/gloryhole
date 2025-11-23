@@ -122,21 +122,37 @@ func (m *Manager) Update(ctx context.Context) error {
 	}
 
 	newSize := len(blocklist)
+	delta := newSize - oldSize
 
 	// Atomically update current blocklist (zero-copy read for all DNS queries)
 	m.current.Store(&blocklist)
 
 	// Record blocklist size change to Prometheus metrics if available
 	if m.metrics != nil {
-		delta := int64(newSize - oldSize)
-		m.metrics.BlocklistSize.Add(ctx, delta)
+		m.metrics.BlocklistSize.Add(ctx, int64(delta))
 	}
 
 	elapsed := time.Since(startTime)
-	m.logger.Info("Blocklists updated",
-		"domains", newSize,
-		"duration", elapsed,
-		"domains_per_second", float64(newSize)/elapsed.Seconds())
+
+	// Log update results with delta information
+	if delta > 0 {
+		m.logger.Info("Blocklists updated - domains increased",
+			"total_domains", newSize,
+			"added", delta,
+			"duration", elapsed,
+			"domains_per_second", float64(newSize)/elapsed.Seconds())
+	} else if delta < 0 {
+		m.logger.Info("Blocklists updated - domains decreased",
+			"total_domains", newSize,
+			"removed", -delta,
+			"duration", elapsed,
+			"domains_per_second", float64(newSize)/elapsed.Seconds())
+	} else {
+		m.logger.Info("Blocklists updated - no changes",
+			"total_domains", newSize,
+			"duration", elapsed,
+			"domains_per_second", float64(newSize)/elapsed.Seconds())
+	}
 
 	return nil
 }

@@ -207,9 +207,16 @@ type wrappedHandler struct {
 // - DNSQueriesTotal: Counter of total queries
 // - DNSQueriesByType: Counter per query type (A, AAAA, MX, etc.)
 // - DNSQueryDuration: Histogram of query latencies
+// - ActiveClients: Gauge of concurrent queries being processed
 func (w *wrappedHandler) serveDNS(rw dns.ResponseWriter, r *dns.Msg) {
 	startTime := time.Now()
 	ctx := context.Background()
+
+	// Track active clients (concurrent queries)
+	if w.metrics != nil {
+		w.metrics.ActiveClients.Add(ctx, 1)
+		defer w.metrics.ActiveClients.Add(ctx, -1)
+	}
 
 	// Extract query information
 	var domain string

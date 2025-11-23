@@ -242,7 +242,7 @@ func BenchmarkCache_Set(b *testing.B) {
 	dnsCache, _ := cache.New(&config.CacheConfig{
 		Enabled:    true,
 		MaxEntries: 10000,
-	}, logger)
+	}, logger, nil)
 
 	msg := new(dnslib.Msg)
 	msg.SetQuestion("test.example.com.", dnslib.TypeA)
@@ -279,7 +279,7 @@ func BenchmarkCache_Get(b *testing.B) {
 	dnsCache, _ := cache.New(&config.CacheConfig{
 		Enabled:    true,
 		MaxEntries: 10000,
-	}, logger)
+	}, logger, nil)
 
 	msg := new(dnslib.Msg)
 	msg.SetQuestion("test.example.com.", dnslib.TypeA)
@@ -317,7 +317,7 @@ func BenchmarkCache_Mixed(b *testing.B) {
 	dnsCache, _ := cache.New(&config.CacheConfig{
 		Enabled:    true,
 		MaxEntries: 1000,
-	}, logger)
+	}, logger, nil)
 
 	ctx := context.Background()
 
@@ -572,7 +572,7 @@ func setupBenchmarkHandler(b *testing.B, blocklistSize int, enableCache, enableP
 		dnsCache, _ := cache.New(&config.CacheConfig{
 			Enabled:    true,
 			MaxEntries: 10000,
-		}, logger)
+		}, logger, nil)
 		handler.SetCache(dnsCache)
 	}
 

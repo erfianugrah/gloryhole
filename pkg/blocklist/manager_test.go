@@ -18,7 +18,7 @@ func TestNewManager(t *testing.T) {
 	}
 	logger := logging.NewDefault()
 
-	m := NewManager(cfg, logger)
+	m := NewManager(cfg, logger, nil)
 
 	if m == nil {
 		t.Fatal("Expected manager, got nil")
@@ -58,7 +58,7 @@ func TestManager_Update(t *testing.T) {
 		Blocklists: []string{server.URL},
 	}
 	logger := logging.NewDefault()
-	m := NewManager(cfg, logger)
+	m := NewManager(cfg, logger, nil)
 
 	ctx := context.Background()
 	err := m.Update(ctx)
@@ -91,7 +91,7 @@ func TestManager_Update_NoBlocklists(t *testing.T) {
 		Blocklists: []string{},
 	}
 	logger := logging.NewDefault()
-	m := NewManager(cfg, logger)
+	m := NewManager(cfg, logger, nil)
 
 	ctx := context.Background()
 	err := m.Update(ctx)
@@ -127,7 +127,7 @@ func TestManager_Update_AtomicReplacement(t *testing.T) {
 		Blocklists: []string{server.URL},
 	}
 	logger := logging.NewDefault()
-	m := NewManager(cfg, logger)
+	m := NewManager(cfg, logger, nil)
 
 	ctx := context.Background()
 
@@ -178,7 +178,7 @@ func TestManager_Get(t *testing.T) {
 		Blocklists: []string{server.URL},
 	}
 	logger := logging.NewDefault()
-	m := NewManager(cfg, logger)
+	m := NewManager(cfg, logger, nil)
 
 	ctx := context.Background()
 	_ = m.Update(ctx)
@@ -214,7 +214,7 @@ func TestManager_IsBlocked(t *testing.T) {
 		Blocklists: []string{server.URL},
 	}
 	logger := logging.NewDefault()
-	m := NewManager(cfg, logger)
+	m := NewManager(cfg, logger, nil)
 
 	ctx := context.Background()
 	_ = m.Update(ctx)
@@ -257,7 +257,7 @@ func TestManager_Size(t *testing.T) {
 		Blocklists: []string{server.URL},
 	}
 	logger := logging.NewDefault()
-	m := NewManager(cfg, logger)
+	m := NewManager(cfg, logger, nil)
 
 	// Before update
 	if m.Size() != 0 {
@@ -286,7 +286,7 @@ func TestManager_StartStop(t *testing.T) {
 		AutoUpdateBlocklists: false, // Disable auto-update for this test
 	}
 	logger := logging.NewDefault()
-	m := NewManager(cfg, logger)
+	m := NewManager(cfg, logger, nil)
 
 	ctx := context.Background()
 
@@ -333,7 +333,7 @@ func TestManager_AutoUpdate(t *testing.T) {
 		UpdateInterval:       500 * time.Millisecond, // Short interval for testing
 	}
 	logger := logging.NewDefault()
-	m := NewManager(cfg, logger)
+	m := NewManager(cfg, logger, nil)
 
 	ctx := context.Background()
 
@@ -371,7 +371,7 @@ func TestManager_ConcurrentAccess(t *testing.T) {
 		Blocklists: []string{server.URL},
 	}
 	logger := logging.NewDefault()
-	m := NewManager(cfg, logger)
+	m := NewManager(cfg, logger, nil)
 
 	ctx := context.Background()
 	_ = m.Update(ctx)
