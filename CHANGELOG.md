@@ -7,7 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added - Extended DNS Record Type Support (v0.7.2)
+### Phase 3 - Advanced Features (Future)
+- DoH/DoT support (DNS over HTTPS/TLS)
+- DNSSEC validation
+- Advanced analytics dashboard
+- Multi-user authentication
+- Query filtering by client groups
+- Integration with external threat feeds
+
+---
+
+## [0.7.2] - 2025-11-23
+
+### Added - Extended DNS Record Type Support
 
 **Major Feature**: Comprehensive DNS record type support for full-featured local DNS resolution!
 
@@ -30,15 +42,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Multi-string support for TXT records (RFC 1035 compliant, 255 char limit per string)
 - Wildcard support for all new record types
 - Hot-reload configuration support
-- Comprehensive test coverage (41 new tests, 100% passing)
-
-### Phase 3 - Advanced Features (Future)
-- DoH/DoT support (DNS over HTTPS/TLS)
-- DNSSEC validation
-- Advanced analytics dashboard
-- Multi-user authentication
-- Query filtering by client groups
-- Integration with external threat feeds
+- Comprehensive test coverage (60 new tests, 100% passing)
 
 ---
 
