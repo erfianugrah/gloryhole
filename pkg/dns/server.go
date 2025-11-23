@@ -14,6 +14,7 @@ import (
 	"glory-hole/pkg/localrecords"
 	"glory-hole/pkg/policy"
 	"glory-hole/pkg/storage"
+	"glory-hole/pkg/telemetry"
 
 	"github.com/miekg/dns"
 )
@@ -39,6 +40,7 @@ type Handler struct {
 	Forwarder        *forwarder.Forwarder
 	Cache            *cache.Cache
 	ConfigWatcher    *config.Watcher // For kill-switch feature (hot-reload config access)
+	Metrics          *telemetry.Metrics
 	lookupMu         sync.RWMutex
 }
 
@@ -80,6 +82,11 @@ func (h *Handler) SetLocalRecords(l *localrecords.Manager) {
 // SetPolicyEngine sets the policy engine
 func (h *Handler) SetPolicyEngine(e *policy.Engine) {
 	h.PolicyEngine = e
+}
+
+// SetMetrics sets the metrics collector
+func (h *Handler) SetMetrics(m *telemetry.Metrics) {
+	h.Metrics = m
 }
 
 // writeMsg writes a DNS message to the response writer with error handling
@@ -499,6 +506,12 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 				blocked = true
 				responseCode = dns.RcodeNameError
 				msg.SetRcode(r, dns.RcodeNameError)
+
+				// Record blocked query metric
+				if h.Metrics != nil {
+					h.Metrics.DNSBlockedQueries.Add(ctx, 1)
+				}
+
 				h.writeMsg(w, msg)
 				return
 
@@ -511,6 +524,11 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 						msg.SetRcode(r, dns.RcodeServerFailure)
 						h.writeMsg(w, msg)
 						return
+					}
+
+					// Record forwarded query metric
+					if h.Metrics != nil {
+						h.Metrics.DNSForwardedQueries.Add(ctx, 1)
 					}
 
 					// Track upstream server
@@ -605,6 +623,11 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 					return
 				}
 
+				// Record forwarded query metric
+				if h.Metrics != nil {
+					h.Metrics.DNSForwardedQueries.Add(ctx, 1)
+				}
+
 				// Track upstream server
 				if len(upstreams) > 0 {
 					upstream = upstreams[0]
@@ -661,6 +684,12 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 		if blocked {
 			responseCode = dns.RcodeNameError
 			msg.SetRcode(r, dns.RcodeNameError)
+
+			// Record blocked query metric
+			if h.Metrics != nil {
+				h.Metrics.DNSBlockedQueries.Add(ctx, 1)
+			}
+
 			h.writeMsg(w, msg)
 			return
 		}
@@ -742,6 +771,12 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 		if blocked {
 			responseCode = dns.RcodeNameError
 			msg.SetRcode(r, dns.RcodeNameError)
+
+			// Record blocked query metric
+			if h.Metrics != nil {
+				h.Metrics.DNSBlockedQueries.Add(ctx, 1)
+			}
+
 			h.writeMsg(w, msg)
 			return
 		}
@@ -812,6 +847,11 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 				return
 			}
 
+			// Record forwarded query metric
+			if h.Metrics != nil {
+				h.Metrics.DNSForwardedQueries.Add(ctx, 1)
+			}
+
 			// Track upstream server
 			if len(upstreams) > 0 {
 				upstream = upstreams[0]
@@ -837,6 +877,11 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 			msg.SetRcode(r, dns.RcodeServerFailure)
 			h.writeMsg(w, msg)
 			return
+		}
+
+		// Record forwarded query metric
+		if h.Metrics != nil {
+			h.Metrics.DNSForwardedQueries.Add(ctx, 1)
 		}
 
 		// Track upstream server used (approximation - before the query)

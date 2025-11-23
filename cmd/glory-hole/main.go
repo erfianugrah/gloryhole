@@ -424,6 +424,9 @@ func main() {
 		}
 	}
 
+	// Set metrics collector for Prometheus metrics recording
+	handler.SetMetrics(metrics)
+
 	// Create DNS server
 	server := dns.NewServer(cfg, handler, logger, metrics)
 
