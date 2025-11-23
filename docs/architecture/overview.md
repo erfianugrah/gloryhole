@@ -73,6 +73,7 @@ Glory-Hole is a next-generation DNS server that combines the simplicity of Pi-ho
 ### High-Level Architecture
 
 ```mermaid
+%%{init: {'theme':'base', 'themeVariables': { 'primaryColor':'#e1f5ff','primaryTextColor':'#000','primaryBorderColor':'#4a90e2','lineColor':'#4a90e2','secondaryColor':'#f0f0f0','tertiaryColor':'#fff'}}}%%
 graph TB
     Clients["Clients<br/>(Phones, Laptops, IoT Devices, Servers)"]
 
@@ -102,11 +103,11 @@ graph TB
     Handler --> Conditional
     WebUI -.-> Handler
 
-    style GloryHole fill:#e1f5ff
-    style Management fill:#f0f0f0
-    style Handler fill:#d4edda
-    style Storage fill:#fff3cd
-    style WebUI fill:#d1ecf1
+    style GloryHole fill:#e1f5ff,stroke:#4a90e2,stroke-width:2px,color:#000
+    style Management fill:#f0f0f0,stroke:#666,stroke-width:2px,color:#000
+    style Handler fill:#d4edda,stroke:#28a745,stroke-width:2px,color:#000
+    style Storage fill:#fff3cd,stroke:#ffc107,stroke-width:2px,color:#000
+    style WebUI fill:#d1ecf1,stroke:#17a2b8,stroke-width:2px,color:#000
 ```
 
 ### Technology Stack
@@ -211,6 +212,7 @@ type ClientManager interface {
 ### Layered Architecture
 
 ```mermaid
+%%{init: {'theme':'base', 'themeVariables': { 'primaryColor':'#e1f5ff','primaryTextColor':'#000','primaryBorderColor':'#4a90e2','lineColor':'#4a90e2','secondaryColor':'#f0f0f0','tertiaryColor':'#fff'}}}%%
 graph TB
     subgraph Presentation["Presentation Layer"]
         RESTAPI["REST API<br/>(HTTP/JSON)"]
@@ -252,10 +254,10 @@ graph TB
     Service --> Domain
     Domain --> Infrastructure
 
-    style Presentation fill:#d1ecf1
-    style Service fill:#d4edda
-    style Domain fill:#fff3cd
-    style Infrastructure fill:#f8d7da
+    style Presentation fill:#d1ecf1,stroke:#17a2b8,stroke-width:2px,color:#000
+    style Service fill:#d4edda,stroke:#28a745,stroke-width:2px,color:#000
+    style Domain fill:#fff3cd,stroke:#ffc107,stroke-width:2px,color:#000
+    style Infrastructure fill:#f8d7da,stroke:#dc3545,stroke-width:2px,color:#000
 ```
 
 ### Package Structure

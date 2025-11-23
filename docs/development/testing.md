@@ -1,8 +1,8 @@
 # Glory-Hole Testing Documentation
 
 **Last Updated**: 2025-11-23
-**Version**: 0.7.7
-**Test Coverage**: 82.5% average across all packages
+**Version**: 0.7.8
+**Test Coverage**: 82.4% average across all packages
 **Test Lines**: 9,209 lines of test code
 
 This document describes the testing strategy, test coverage, and how to run tests for Glory-Hole DNS server.
@@ -47,19 +47,21 @@ Glory-Hole uses a comprehensive testing strategy:
 
 | Package | Coverage | Tests | Test Lines |
 |---------|----------|-------|------------|
-| `pkg/policy` | 97.0% | 50 | 1,800+ |
-| `pkg/localrecords` | 89.9% | 18 | 518 |
-| `pkg/blocklist` | 89.8% | 9 | 478 |
-| `pkg/config` | 88.5% | 10 | 504 |
-| `pkg/cache` | 85.2% | 14 | 605 |
-| `pkg/storage` | 77.4% | 13 | 689 |
-| `pkg/api` | 75.9% | 42 | 2,073 |
-| `pkg/logging` | 72.7% | 9 | 316 |
-| `pkg/forwarder` | 72.9% | 5 | 202 |
-| `pkg/telemetry` | 70.8% | 7 | 318 |
-| `pkg/dns` | 69.8% | 24 | 2,062 |
+| `pkg/policy` | 95.2% | 50 | 1,800+ |
+| `pkg/pattern` | 94.1% | 8 | 400+ |
+| `pkg/localrecords` | 92.9% | 18 | 518 |
+| `pkg/resolver` | 87.9% | 6 | 250+ |
+| `pkg/forwarder` | 87.1% | 5 | 202 |
+| `pkg/config` | 82.7% | 10 | 504 |
+| `pkg/cache` | 82.4% | 14 | 605 |
+| `pkg/dns` | 82.0% | 24 | 2,062 |
+| `pkg/storage` | 78.1% | 13 | 689 |
+| `pkg/blocklist` | 77.1% | 9 | 478 |
+| `pkg/telemetry` | 76.7% | 7 | 318 |
+| `pkg/logging` | 75.0% | 9 | 316 |
+| `pkg/api` | 63.3% | 42 | 2,073 |
 | `test` (integration) | N/A | 7 | 644 |
-| **Total** | **82.5%** | **208** | **9,209** |
+| **Total** | **82.4%** | **242** | **9,209** |
 
 ### Coverage Goals
 

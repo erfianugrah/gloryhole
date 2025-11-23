@@ -1,7 +1,7 @@
 # Glory-Hole Component Architecture
 
 **Last Updated:** 2025-11-23
-**Version:** 0.7.7
+**Version:** 0.7.8
 **Status:** Production
 
 This document provides detailed documentation for each component in the Glory-Hole DNS server, including their purpose, key interfaces, thread-safety patterns, and performance characteristics.
@@ -40,6 +40,7 @@ Glory-Hole is built using a modular architecture with clear separation of concer
 ### Component Hierarchy
 
 ```mermaid
+%%{init: {'theme':'base', 'themeVariables': { 'primaryColor':'#e1f5ff','primaryTextColor':'#000','primaryBorderColor':'#4a90e2','lineColor':'#4a90e2','secondaryColor':'#f0f0f0','tertiaryColor':'#fff'}}}%%
 graph TB
     API["API Server<br/>(REST API + Web UI)"]
     Handler["DNS Handler<br/>(Request Processing & Coordination)"]
@@ -61,15 +62,15 @@ graph TB
     Handler --> Storage
     Handler --> Telemetry
 
-    style API fill:#d1ecf1
-    style Handler fill:#d4edda
-    style Blocklist fill:#fff3cd
-    style Cache fill:#fff3cd
-    style LocalRecords fill:#fff3cd
-    style PolicyEngine fill:#fff3cd
-    style Forwarder fill:#e7f3ff
-    style Storage fill:#f8d7da
-    style Telemetry fill:#f8d7da
+    style API fill:#d1ecf1,stroke:#17a2b8,stroke-width:2px,color:#000
+    style Handler fill:#d4edda,stroke:#28a745,stroke-width:2px,color:#000
+    style Blocklist fill:#fff3cd,stroke:#ffc107,stroke-width:2px,color:#000
+    style Cache fill:#fff3cd,stroke:#ffc107,stroke-width:2px,color:#000
+    style LocalRecords fill:#fff3cd,stroke:#ffc107,stroke-width:2px,color:#000
+    style PolicyEngine fill:#fff3cd,stroke:#ffc107,stroke-width:2px,color:#000
+    style Forwarder fill:#e7f3ff,stroke:#4a90e2,stroke-width:2px,color:#000
+    style Storage fill:#f8d7da,stroke:#dc3545,stroke-width:2px,color:#000
+    style Telemetry fill:#f8d7da,stroke:#dc3545,stroke-width:2px,color:#000
 ```
 
 ---
@@ -175,6 +176,7 @@ type Handler interface {
 ### Data Flow
 
 ```mermaid
+%%{init: {'theme':'base', 'themeVariables': { 'primaryColor':'#e1f5ff','primaryTextColor':'#000','primaryBorderColor':'#4a90e2','lineColor':'#4a90e2','secondaryColor':'#f0f0f0','tertiaryColor':'#fff'}}}%%
 flowchart TD
     A[Client Query] --> B[UDP/TCP Listener]
     B --> C[Handler]
@@ -192,11 +194,11 @@ flowchart TD
     M --> K
     N --> K
 
-    style D fill:#fff3cd
-    style E fill:#d4edda
-    style F fill:#e7f3ff
-    style G fill:#ffcccc
-    style H fill:#d1ecf1
+    style D fill:#fff3cd,stroke:#ffc107,stroke-width:2px,color:#000
+    style E fill:#d4edda,stroke:#28a745,stroke-width:2px,color:#000
+    style F fill:#e7f3ff,stroke:#4a90e2,stroke-width:2px,color:#000
+    style G fill:#ffcccc,stroke:#dc3545,stroke-width:2px,color:#000
+    style H fill:#d1ecf1,stroke:#17a2b8,stroke-width:2px,color:#000
 ```
 
 ### Performance Characteristics

@@ -1,7 +1,7 @@
 # Architecture Decision Records (ADRs)
 
 **Last Updated:** 2025-11-23
-**Version:** 0.7.7
+**Version:** 0.7.8
 
 This document records major architectural and design decisions made in the Glory-Hole DNS server project, including context, options considered, and rationale.
 

@@ -83,6 +83,6 @@ All Glory-Hole documentation follows these principles:
 
 ---
 
-**Version:** 0.7.7
+**Version:** 0.7.8
 **Last Updated:** 2025-11-23
 **Status:** Production Ready

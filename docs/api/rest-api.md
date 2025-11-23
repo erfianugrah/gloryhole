@@ -43,7 +43,7 @@ curl http://localhost:8080/api/health
 {
   "status": "ok",
   "uptime": "2h15m30s",
-  "version": "0.7.7"
+  "version": "0.7.8"
 }
 ```
 

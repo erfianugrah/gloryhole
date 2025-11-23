@@ -1,7 +1,7 @@
 # Pattern Matching Guide
 
 **Last Updated**: 2025-11-23
-**Version**: 0.7.7
+**Version**: 0.7.8
 
 This guide explains Glory-Hole's multi-tier pattern matching system for blocklists and whitelists, including exact matching, wildcard patterns, and regular expressions.
 

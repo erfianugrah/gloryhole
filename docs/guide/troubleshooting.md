@@ -11,6 +11,7 @@ This guide helps you diagnose and resolve common issues with Glory-Hole DNS Serv
 - [Policy Not Working](#policy-not-working)
 - [Blocklist Issues](#blocklist-issues)
 - [Database Problems](#database-problems)
+- [Container Deployment Issues](#container-deployment-issues)
 - [Web UI Issues](#web-ui-issues)
 - [Logs and Debugging](#logs-and-debugging)
 
@@ -567,6 +568,105 @@ $ ls -lh glory-hole.db
    database:
      enabled: false
    ```
+
+## Container Deployment Issues
+
+### Problem: Storage initialization fails with "out of memory (14)"
+
+**Symptoms:**
+```
+ERROR Failed to initialize storage error="connection failed: unable to open database file: out of memory (14)"
+```
+- API endpoint `/api/stats` returns 503 "Storage not available"
+- Logs show "Storage initialized successfully" but API reports storage as nil
+
+**Root Cause:**
+SQLite error code 14 (`SQLITE_CANTOPEN`) is **misleadingly reported** as "out of memory". The actual issue is **filesystem permissions** - the container cannot write to the mounted directory.
+
+**Solution:**
+```bash
+# Fix directory ownership to match container user (UID 1000)
+sudo chown -R 1000:1000 /path/to/mounted/data
+sudo chmod -R 755 /path/to/mounted/data
+
+# Restart container
+docker restart glory-hole
+# or
+podman restart glory-hole
+```
+
+**Prevention:**
+```bash
+# Pre-create directories with correct ownership before first run
+mkdir -p /path/to/data /path/to/logs
+chown -R 1000:1000 /path/to/data /path/to/logs
+chmod -R 755 /path/to/data /path/to/logs
+```
+
+### Problem: Config changes not taking effect
+
+**Symptoms:**
+- Updated config but behavior unchanged
+- Local records not loading despite being in config
+- Log level not changing (stays at INFO despite DEBUG in config)
+
+**Root Cause:**
+Config file on host is out of sync with repository version, or conflicting volume mounts in Docker configuration.
+
+**Diagnostic:**
+```bash
+# Check what config container is actually using
+docker exec glory-hole cat /etc/glory-hole/config.yml | head -20
+
+# Compare with your local config
+diff <(docker exec glory-hole cat /etc/glory-hole/config.yml) config/config.yml
+
+# Check logs for what was initialized
+docker logs glory-hole | grep -E "Initializing|initialized"
+```
+
+**Solution:**
+```bash
+# Copy updated config to container host
+scp config/config.personal.yml user@host:/path/to/config.yml
+
+# Restart container to load new config
+docker restart glory-hole
+
+# Verify config loaded
+docker logs glory-hole --tail 50 | grep "level=DEBUG"
+```
+
+**Prevention:**
+- Use single mount strategy (directory OR file, not both)
+- Version control production configs
+- Implement config validation before deployment
+- Use configuration management tools (Ansible, Terraform)
+
+### Problem: DNSSEC queries taking 2-4 seconds
+
+**Symptoms:**
+- Normal DNS queries fast (<10ms)
+- Queries to DNSSEC-signed domains with validation failures take 2000-4000ms
+- No errors in logs but significant user-facing latency
+
+**Root Cause:**
+DNS forwarder treating SERVFAIL responses as network errors and retrying with backup upstreams (fixed in v0.7.8).
+
+**Verification:**
+```bash
+# Test DNSSEC failure response time
+time dig @localhost sigfail.verteiltesysteme.net +dnssec
+
+# Should complete in < 500ms (v0.7.8+)
+# If > 2000ms, upgrade to v0.7.8 or later
+```
+
+**Solution:**
+Upgrade to v0.7.8 or later which includes the SERVFAIL pass-through fix.
+
+**Technical Details:**
+SERVFAIL is a valid DNS response (indicating DNSSEC validation failure, server misconfiguration, etc.) and should be passed through immediately to the client. Only actual network errors (timeout, connection refused) should trigger retry logic.
 
 ## Web UI Issues
 

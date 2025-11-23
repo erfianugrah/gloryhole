@@ -1,7 +1,7 @@
 # Glory-Hole DNS Server - Development Roadmap
 
 **Last Updated**: 2025-11-23
-**Current Version**: v0.7.7
+**Current Version**: v0.7.8
 **Next Releases**: v0.8.0 (Functional UI), v0.9.0 (Advanced Features)
 
 ---
@@ -29,9 +29,9 @@
 - UI Code: 1,673 lines (841 HTML + 832 CSS/JS)
 - Total: 16,717 lines
 
-**Test Coverage**: 71.6%
-- Best: localrecords (89.9%), config (88.5%), cache (85.2%)
-- Needs Work: dns (67.6%), api (68.6%), policy (70.5%)
+**Test Coverage**: 82.4%
+- Best: policy (95.2%), pattern (94.1%), localrecords (92.9%)
+- Good: forwarder (87.1%), resolver (87.9%), config (82.7%)
 
 **Dependencies**: 11 direct dependencies (minimal)
 
@@ -43,7 +43,7 @@
 
 ### Strengths ✓
 
-1. **Excellent Test Coverage**: 242 tests, 71.6% coverage
+1. **Excellent Test Coverage**: 242 tests, 82.4% coverage
 2. **Clean Architecture**: DDD principles, well-separated concerns
 3. **Lock-Free Blocklist**: 8ns lookup, 372M QPS capability
 4. **Comprehensive Metrics**: OpenTelemetry + Prometheus

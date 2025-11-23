@@ -1,7 +1,7 @@
 # Pi-hole Migration Guide
 
 **Last Updated**: 2025-11-23
-**Version**: 0.7.7
+**Version**: 0.7.8
 
 This guide helps you migrate from Pi-hole to Glory-Hole DNS Server, including importing your existing configuration, blocklists, and local DNS records.
 
@@ -24,7 +24,7 @@ This guide helps you migrate from Pi-hole to Glory-Hole DNS Server, including im
 
 ### Prerequisites
 
-- Glory-Hole v0.7.6 or later
+- Glory-Hole v0.7.8 or later
 - Access to Pi-hole's `gravity.db` file
 - Basic familiarity with command-line tools
 

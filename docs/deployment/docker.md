@@ -41,9 +41,9 @@ docker build -t glory-hole:latest .
 
 # Or with build args
 docker build \
-  --build-arg VERSION=0.7.7 \
+  --build-arg VERSION=0.7.8 \
   --build-arg BUILD_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ") \
-  -t glory-hole:0.7.7 \
+  -t glory-hole:0.7.8 \
   .
 ```
 
@@ -579,7 +579,7 @@ docker run -d --name glory-hole erfianugrah/gloryhole:0.5.0
 # Production deployment script
 
 # Configuration
-IMAGE="erfianugrah/gloryhole:0.7.7"
+IMAGE="erfianugrah/gloryhole:0.7.8"
 CONTAINER_NAME="glory-hole"
 CONFIG_PATH="/opt/glory-hole/config.yml"
 DATA_PATH="/opt/glory-hole/data"
