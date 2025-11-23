@@ -8,6 +8,7 @@ import (
 
 	"glory-hole/pkg/config"
 	"glory-hole/pkg/logging"
+	"glory-hole/pkg/telemetry"
 
 	"github.com/miekg/dns"
 )
@@ -16,6 +17,7 @@ import (
 type Cache struct {
 	cfg         *config.CacheConfig
 	logger      *logging.Logger
+	metrics     *telemetry.Metrics
 	entries     map[string]*cacheEntry
 	stopCleanup chan struct{}
 	cleanupDone chan struct{}
@@ -59,7 +61,7 @@ type Stats struct {
 }
 
 // New creates a new DNS cache with the given configuration
-func New(cfg *config.CacheConfig, logger *logging.Logger) (*Cache, error) {
+func New(cfg *config.CacheConfig, logger *logging.Logger, metrics *telemetry.Metrics) (*Cache, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("cache config cannot be nil")
 	}
@@ -74,6 +76,7 @@ func New(cfg *config.CacheConfig, logger *logging.Logger) (*Cache, error) {
 	c := &Cache{
 		cfg:         cfg,
 		logger:      logger,
+		metrics:     metrics,
 		entries:     make(map[string]*cacheEntry, cfg.MaxEntries),
 		maxEntries:  cfg.MaxEntries,
 		stopCleanup: make(chan struct{}),
@@ -122,6 +125,12 @@ func (c *Cache) Get(ctx context.Context, r *dns.Msg) *dns.Msg {
 		c.mu.Lock()
 		delete(c.entries, key)
 		c.stats.entries--
+
+		// Record cache size decrease to Prometheus metrics if available
+		if c.metrics != nil {
+			c.metrics.CacheSize.Add(ctx, -1)
+		}
+
 		c.mu.Unlock()
 		return nil
 	}
@@ -173,9 +182,18 @@ func (c *Cache) Set(ctx context.Context, r *dns.Msg, resp *dns.Msg) {
 		c.evictLRU()
 	}
 
+	// Check if this is a new entry or replacement
+	_, exists := c.entries[key]
+
 	c.entries[key] = entry
 	c.stats.entries = len(c.entries)
 	c.stats.sets++
+
+	// Record cache size change to Prometheus metrics if available
+	// Only increment if this is a new entry (not a replacement)
+	if c.metrics != nil && !exists {
+		c.metrics.CacheSize.Add(ctx, 1)
+	}
 
 	c.mu.Unlock()
 	c.logger.Debug("Cached DNS response",
@@ -244,6 +262,12 @@ func (c *Cache) evictLRU() {
 	if oldestKey != "" {
 		delete(c.entries, oldestKey)
 		c.stats.evictions++
+
+		// Record cache size decrease to Prometheus metrics if available
+		if c.metrics != nil {
+			c.metrics.CacheSize.Add(context.Background(), -1)
+		}
+
 		c.logger.Debug("Evicted LRU cache entry", "key", oldestKey)
 	}
 }
@@ -313,8 +337,16 @@ func (c *Cache) Clear() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	oldSize := len(c.entries)
+
 	c.entries = make(map[string]*cacheEntry, c.maxEntries)
 	c.stats.entries = 0
+
+	// Record cache size decrease to Prometheus metrics if available
+	if c.metrics != nil && oldSize > 0 {
+		c.metrics.CacheSize.Add(context.Background(), int64(-oldSize))
+	}
+
 	c.logger.Info("Cache cleared")
 }
 
@@ -336,6 +368,11 @@ func (c *Cache) recordHit() {
 	c.mu.Lock()
 	c.stats.hits++
 	c.mu.Unlock()
+
+	// Record to Prometheus metrics if available
+	if c.metrics != nil {
+		c.metrics.DNSCacheHits.Add(context.Background(), 1)
+	}
 }
 
 // recordMiss atomically increments the miss counter
@@ -343,4 +380,9 @@ func (c *Cache) recordMiss() {
 	c.mu.Lock()
 	c.stats.misses++
 	c.mu.Unlock()
+
+	// Record to Prometheus metrics if available
+	if c.metrics != nil {
+		c.metrics.DNSCacheMisses.Add(context.Background(), 1)
+	}
 }

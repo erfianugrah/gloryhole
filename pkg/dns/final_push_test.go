@@ -410,7 +410,7 @@ func TestServeDNS_PolicyEngineAllowWithCache(t *testing.T) {
 		MinTTL:      1 * time.Second,
 		MaxTTL:      3600 * time.Second,
 		NegativeTTL: 300 * time.Second,
-	}, logger)
+	}, logger, nil)
 	handler.SetCache(dnsCache)
 
 	cfg := &config.Config{

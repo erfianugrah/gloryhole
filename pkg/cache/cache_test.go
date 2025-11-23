@@ -77,7 +77,7 @@ func TestNew(t *testing.T) {
 	logger := testLogger(t)
 	cfg := testCacheConfig()
 
-	cache, err := New(cfg, logger)
+	cache, err := New(cfg, logger, nil)
 	if err != nil {
 		t.Fatalf("New() failed: %v", err)
 	}
@@ -126,7 +126,7 @@ func TestNew_InvalidConfig(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cache, err := New(tt.cfg, logger)
+			cache, err := New(tt.cfg, logger, nil)
 			if tt.wantErr && err == nil {
 				t.Error("New() should have returned error")
 			}
@@ -143,7 +143,7 @@ func TestNew_InvalidConfig(t *testing.T) {
 func TestCache_SetAndGet(t *testing.T) {
 	logger := testLogger(t)
 	cfg := testCacheConfig()
-	cache, err := New(cfg, logger)
+	cache, err := New(cfg, logger, nil)
 	if err != nil {
 		t.Fatalf("New() failed: %v", err)
 	}
@@ -185,7 +185,7 @@ func TestCache_SetAndGet(t *testing.T) {
 func TestCache_Miss(t *testing.T) {
 	logger := testLogger(t)
 	cfg := testCacheConfig()
-	cache, err := New(cfg, logger)
+	cache, err := New(cfg, logger, nil)
 	if err != nil {
 		t.Fatalf("New() failed: %v", err)
 	}
@@ -214,7 +214,7 @@ func TestCache_TTLExpiration(t *testing.T) {
 	logger := testLogger(t)
 	cfg := testCacheConfig()
 	cfg.MinTTL = 100 * time.Millisecond
-	cache, err := New(cfg, logger)
+	cache, err := New(cfg, logger, nil)
 	if err != nil {
 		t.Fatalf("New() failed: %v", err)
 	}
@@ -255,7 +255,7 @@ func TestCache_MinTTL(t *testing.T) {
 	logger := testLogger(t)
 	cfg := testCacheConfig()
 	cfg.MinTTL = 60 * time.Second
-	cache, err := New(cfg, logger)
+	cache, err := New(cfg, logger, nil)
 	if err != nil {
 		t.Fatalf("New() failed: %v", err)
 	}
@@ -288,7 +288,7 @@ func TestCache_MaxTTL(t *testing.T) {
 	logger := testLogger(t)
 	cfg := testCacheConfig()
 	cfg.MaxTTL = 10 * time.Second
-	cache, err := New(cfg, logger)
+	cache, err := New(cfg, logger, nil)
 	if err != nil {
 		t.Fatalf("New() failed: %v", err)
 	}
@@ -321,7 +321,7 @@ func TestCache_NegativeResponse(t *testing.T) {
 	logger := testLogger(t)
 	cfg := testCacheConfig()
 	cfg.NegativeTTL = 5 * time.Minute
-	cache, err := New(cfg, logger)
+	cache, err := New(cfg, logger, nil)
 	if err != nil {
 		t.Fatalf("New() failed: %v", err)
 	}
@@ -359,7 +359,7 @@ func TestCache_LRUEviction(t *testing.T) {
 	logger := testLogger(t)
 	cfg := testCacheConfig()
 	cfg.MaxEntries = 3 // Small cache for testing
-	cache, err := New(cfg, logger)
+	cache, err := New(cfg, logger, nil)
 	if err != nil {
 		t.Fatalf("New() failed: %v", err)
 	}
@@ -424,7 +424,7 @@ func TestCache_LRUEviction(t *testing.T) {
 func TestCache_DifferentQueryTypes(t *testing.T) {
 	logger := testLogger(t)
 	cfg := testCacheConfig()
-	cache, err := New(cfg, logger)
+	cache, err := New(cfg, logger, nil)
 	if err != nil {
 		t.Fatalf("New() failed: %v", err)
 	}
@@ -463,7 +463,7 @@ func TestCache_DifferentQueryTypes(t *testing.T) {
 func TestCache_Clear(t *testing.T) {
 	logger := testLogger(t)
 	cfg := testCacheConfig()
-	cache, err := New(cfg, logger)
+	cache, err := New(cfg, logger, nil)
 	if err != nil {
 		t.Fatalf("New() failed: %v", err)
 	}
@@ -504,7 +504,7 @@ func TestCache_Disabled(t *testing.T) {
 	logger := testLogger(t)
 	cfg := testCacheConfig()
 	cfg.Enabled = false // Disable cache
-	cache, err := New(cfg, logger)
+	cache, err := New(cfg, logger, nil)
 	if err != nil {
 		t.Fatalf("New() failed: %v", err)
 	}
@@ -533,7 +533,7 @@ func TestCache_Disabled(t *testing.T) {
 func TestCache_HitRate(t *testing.T) {
 	logger := testLogger(t)
 	cfg := testCacheConfig()
-	cache, err := New(cfg, logger)
+	cache, err := New(cfg, logger, nil)
 	if err != nil {
 		t.Fatalf("New() failed: %v", err)
 	}
@@ -566,7 +566,7 @@ func TestCache_ConcurrentAccess(t *testing.T) {
 	logger := testLogger(t)
 	cfg := testCacheConfig()
 	cfg.MaxEntries = 1000
-	cache, err := New(cfg, logger)
+	cache, err := New(cfg, logger, nil)
 	if err != nil {
 		t.Fatalf("New() failed: %v", err)
 	}

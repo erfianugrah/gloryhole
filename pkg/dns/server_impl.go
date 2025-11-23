@@ -32,7 +32,7 @@ type Server struct {
 func NewServer(cfg *config.Config, handler *Handler, logger *logging.Logger, metrics *telemetry.Metrics) *Server {
 	// Initialize cache if enabled
 	if cfg.Cache.Enabled {
-		dnsCache, err := cache.New(&cfg.Cache, logger)
+		dnsCache, err := cache.New(&cfg.Cache, logger, metrics)
 		if err != nil {
 			logger.Error("Failed to initialize cache, continuing without cache", "error", err)
 		} else {

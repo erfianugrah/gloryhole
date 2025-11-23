@@ -30,7 +30,7 @@ func TestServeDNS_BlocklistManagerPath(t *testing.T) {
 	}
 
 	// Set up blocklist manager (fast path)
-	mgr := blocklist.NewManager(cfg, logger)
+	mgr := blocklist.NewManager(cfg, logger, nil)
 	handler.SetBlocklistManager(mgr)
 
 	// Also add to legacy map to test override
@@ -68,7 +68,7 @@ func TestServeDNS_BlocklistManagerWithOverride(t *testing.T) {
 		Blocklists: []string{},
 	}
 
-	mgr := blocklist.NewManager(cfg, logger)
+	mgr := blocklist.NewManager(cfg, logger, nil)
 	handler.SetBlocklistManager(mgr)
 
 	// Add override for A record
@@ -116,7 +116,7 @@ func TestServeDNS_BlocklistManagerWithCNAMEOverride(t *testing.T) {
 		Blocklists: []string{},
 	}
 
-	mgr := blocklist.NewManager(cfg, logger)
+	mgr := blocklist.NewManager(cfg, logger, nil)
 	handler.SetBlocklistManager(mgr)
 
 	// Add CNAME override

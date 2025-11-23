@@ -123,7 +123,7 @@ func BenchmarkHandler_CacheHit(b *testing.B) {
 	dnsCache, _ := cache.New(&config.CacheConfig{
 		Enabled:    true,
 		MaxEntries: 1000,
-	}, logger)
+	}, logger, nil)
 	handler.SetCache(dnsCache)
 
 	// Create and cache a response
@@ -168,7 +168,7 @@ func BenchmarkHandler_FullStack(b *testing.B) {
 	dnsCache, _ := cache.New(&config.CacheConfig{
 		Enabled:    true,
 		MaxEntries: 1000,
-	}, logger)
+	}, logger, nil)
 	handler.SetCache(dnsCache)
 
 	// Local records

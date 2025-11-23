@@ -29,7 +29,7 @@ func TestHandler_SetCache(t *testing.T) {
 	dnsCache, _ := cache.New(&config.CacheConfig{
 		Enabled:    true,
 		MaxEntries: 1000,
-	}, logger)
+	}, logger, nil)
 
 	handler.SetCache(dnsCache)
 
@@ -48,7 +48,7 @@ func TestHandler_SetBlocklistManager(t *testing.T) {
 	cfg := &config.Config{
 		Blocklists: []string{},
 	}
-	mgr := blocklist.NewManager(cfg, logger)
+	mgr := blocklist.NewManager(cfg, logger, nil)
 
 	handler.SetBlocklistManager(mgr)
 
@@ -136,7 +136,7 @@ func TestServeDNS_CacheHit(t *testing.T) {
 		MinTTL:      1 * time.Second,
 		MaxTTL:      3600 * time.Second,
 		NegativeTTL: 300 * time.Second,
-	}, logger)
+	}, logger, nil)
 	handler.SetCache(dnsCache)
 
 	// Create and cache a response
@@ -712,7 +712,7 @@ func TestServeDNS_CacheBlockedResponse(t *testing.T) {
 		MinTTL:      1 * time.Second,
 		MaxTTL:      3600 * time.Second,
 		NegativeTTL: 300 * time.Second,
-	}, logger)
+	}, logger, nil)
 	handler.SetCache(dnsCache)
 
 	// Setup blocklist

@@ -8,6 +8,7 @@ import (
 
 	"glory-hole/pkg/config"
 	"glory-hole/pkg/logging"
+	"glory-hole/pkg/telemetry"
 )
 
 // Manager manages blocklist downloads and automatic updates
@@ -15,6 +16,7 @@ type Manager struct {
 	cfg        *config.Config
 	downloader *Downloader
 	logger     *logging.Logger
+	metrics    *telemetry.Metrics
 
 	// Current blocklist (atomic pointer for zero-copy reads)
 	current atomic.Pointer[map[string]struct{}]
@@ -27,11 +29,12 @@ type Manager struct {
 }
 
 // NewManager creates a new blocklist manager
-func NewManager(cfg *config.Config, logger *logging.Logger) *Manager {
+func NewManager(cfg *config.Config, logger *logging.Logger, metrics *telemetry.Metrics) *Manager {
 	m := &Manager{
 		cfg:        cfg,
 		downloader: NewDownloader(logger),
 		logger:     logger,
+		metrics:    metrics,
 		stopChan:   make(chan struct{}),
 	}
 
@@ -105,20 +108,35 @@ func (m *Manager) Update(ctx context.Context) error {
 	m.logger.Info("Updating blocklists", "sources", len(m.cfg.Blocklists))
 	startTime := time.Now()
 
+	// Get old size for metrics delta
+	oldBlocklist := m.current.Load()
+	oldSize := 0
+	if oldBlocklist != nil {
+		oldSize = len(*oldBlocklist)
+	}
+
 	// Download all blocklists
 	blocklist, err := m.downloader.DownloadAll(ctx, m.cfg.Blocklists)
 	if err != nil {
 		return err
 	}
 
+	newSize := len(blocklist)
+
 	// Atomically update current blocklist (zero-copy read for all DNS queries)
 	m.current.Store(&blocklist)
 
+	// Record blocklist size change to Prometheus metrics if available
+	if m.metrics != nil {
+		delta := int64(newSize - oldSize)
+		m.metrics.BlocklistSize.Add(ctx, delta)
+	}
+
 	elapsed := time.Since(startTime)
 	m.logger.Info("Blocklists updated",
-		"domains", len(blocklist),
+		"domains", newSize,
 		"duration", elapsed,
-		"domains_per_second", float64(len(blocklist))/elapsed.Seconds())
+		"domains_per_second", float64(newSize)/elapsed.Seconds())
 
 	return nil
 }

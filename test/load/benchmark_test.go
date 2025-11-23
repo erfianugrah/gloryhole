@@ -200,7 +200,7 @@ func benchmarkBlocklistLookup(b *testing.B, size int) {
 		Blocklists:           []string{},
 		AutoUpdateBlocklists: false,
 	}
-	blocklistMgr := blocklist.NewManager(testCfg, logger)
+	blocklistMgr := blocklist.NewManager(testCfg, logger, nil)
 
 	// Build blocklist data
 	blocklistData := make(map[string]struct{}, size)
@@ -557,7 +557,7 @@ func setupBenchmarkHandler(b *testing.B, blocklistSize int, enableCache, enableP
 			Blocklists:           []string{},
 			AutoUpdateBlocklists: false,
 		}
-		blocklistMgr := blocklist.NewManager(testCfg, logger)
+		blocklistMgr := blocklist.NewManager(testCfg, logger, nil)
 		handler.SetBlocklistManager(blocklistMgr)
 
 		// Add to legacy blocklist for testing

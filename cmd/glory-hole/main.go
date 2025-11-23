@@ -125,7 +125,7 @@ func main() {
 	var blocklistMgr *blocklist.Manager
 	if len(cfg.Blocklists) > 0 {
 		logger.Info("Initializing blocklist manager", "sources", len(cfg.Blocklists))
-		blocklistMgr = blocklist.NewManager(cfg, logger)
+		blocklistMgr = blocklist.NewManager(cfg, logger, metrics)
 
 		// Start blocklist manager (downloads lists and starts auto-update)
 		err = blocklistMgr.Start(ctx)

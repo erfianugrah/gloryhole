@@ -51,7 +51,7 @@ func TestIntegration_DNSWithCache(t *testing.T) {
 	handler.SetForwarder(fwd)
 
 	// Setup cache
-	dnsCache, _ := cache.New(&cfg.Cache, logger)
+	dnsCache, _ := cache.New(&cfg.Cache, logger, nil)
 	handler.SetCache(dnsCache)
 
 	// Create and start server
@@ -396,7 +396,7 @@ func TestIntegration_LocalRecordsWithCache(t *testing.T) {
 	handler.SetLocalRecords(localMgr)
 
 	// Setup cache
-	dnsCache, _ := cache.New(&cfg.Cache, logger)
+	dnsCache, _ := cache.New(&cfg.Cache, logger, nil)
 	handler.SetCache(dnsCache)
 
 	// Create and start server
