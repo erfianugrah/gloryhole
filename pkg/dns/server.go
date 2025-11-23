@@ -12,6 +12,7 @@ import (
 	"glory-hole/pkg/config"
 	"glory-hole/pkg/forwarder"
 	"glory-hole/pkg/localrecords"
+	"glory-hole/pkg/logging"
 	"glory-hole/pkg/policy"
 	"glory-hole/pkg/storage"
 	"glory-hole/pkg/telemetry"
@@ -41,6 +42,7 @@ type Handler struct {
 	Cache            *cache.Cache
 	ConfigWatcher    *config.Watcher // For kill-switch feature (hot-reload config access)
 	Metrics          *telemetry.Metrics
+	Logger           *logging.Logger
 	lookupMu         sync.RWMutex
 }
 
@@ -87,6 +89,11 @@ func (h *Handler) SetPolicyEngine(e *policy.Engine) {
 // SetMetrics sets the metrics collector
 func (h *Handler) SetMetrics(m *telemetry.Metrics) {
 	h.Metrics = m
+}
+
+// SetLogger sets the logger
+func (h *Handler) SetLogger(l *logging.Logger) {
+	h.Logger = l
 }
 
 // writeMsg writes a DNS message to the response writer with error handling
@@ -500,6 +507,16 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 		// Evaluate rules
 		matched, rule := h.PolicyEngine.Evaluate(policyCtx)
 		if matched && rule != nil {
+			// Log policy match
+			if h.Logger != nil {
+				h.Logger.Info("Policy rule matched",
+					"rule", rule.Name,
+					"action", rule.Action,
+					"domain", domain,
+					"client_ip", clientIP,
+					"query_type", dns.TypeToString[qtype])
+			}
+
 			switch rule.Action {
 			case policy.ActionBlock:
 				// Block the request
@@ -512,14 +529,37 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 					h.Metrics.DNSBlockedQueries.Add(ctx, 1)
 				}
 
+				// Log block action
+				if h.Logger != nil {
+					h.Logger.Debug("Policy blocked query",
+						"rule", rule.Name,
+						"domain", domain,
+						"client_ip", clientIP)
+				}
+
 				h.writeMsg(w, msg)
 				return
 
 			case policy.ActionAllow:
 				// Allow the request - skip blocklist check and forward directly
 				if h.Forwarder != nil {
+					// Log allow action
+					if h.Logger != nil {
+						h.Logger.Debug("Policy allowed query, forwarding to upstream",
+							"rule", rule.Name,
+							"domain", domain,
+							"client_ip", clientIP)
+					}
+
 					resp, err := h.Forwarder.Forward(ctx, r)
 					if err != nil {
+						// Log forward error
+						if h.Logger != nil {
+							h.Logger.Error("Failed to forward allowed query",
+								"rule", rule.Name,
+								"domain", domain,
+								"error", err)
+						}
 						responseCode = dns.RcodeServerFailure
 						msg.SetRcode(r, dns.RcodeServerFailure)
 						h.writeMsg(w, msg)
@@ -547,6 +587,11 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 					return
 				}
 				// No forwarder, return NXDOMAIN
+				if h.Logger != nil {
+					h.Logger.Warn("Policy allow action but no forwarder configured",
+						"rule", rule.Name,
+						"domain", domain)
+				}
 				responseCode = dns.RcodeNameError
 				msg.SetRcode(r, dns.RcodeNameError)
 				h.writeMsg(w, msg)
@@ -557,10 +602,25 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 				redirectIP := net.ParseIP(rule.ActionData)
 				if redirectIP == nil {
 					// Invalid redirect IP, log and treat as block
+					if h.Logger != nil {
+						h.Logger.Error("Policy redirect has invalid IP address",
+							"rule", rule.Name,
+							"domain", domain,
+							"action_data", rule.ActionData)
+					}
 					responseCode = dns.RcodeNameError
 					msg.SetRcode(r, dns.RcodeNameError)
 					h.writeMsg(w, msg)
 					return
+				}
+
+				// Log redirect action
+				if h.Logger != nil {
+					h.Logger.Debug("Policy redirecting query",
+						"rule", rule.Name,
+						"domain", domain,
+						"redirect_ip", redirectIP.String(),
+						"query_type", dns.TypeToString[qtype])
 				}
 
 				// Create response based on query type and IP version
@@ -608,15 +668,35 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 				upstreams := rule.GetUpstreams()
 				if len(upstreams) == 0 || h.Forwarder == nil {
 					// No upstreams configured or no forwarder available
+					if h.Logger != nil {
+						h.Logger.Error("Policy forward action has no upstreams configured",
+							"rule", rule.Name,
+							"domain", domain)
+					}
 					responseCode = dns.RcodeServerFailure
 					msg.SetRcode(r, dns.RcodeServerFailure)
 					h.writeMsg(w, msg)
 					return
 				}
 
+				// Log forward action
+				if h.Logger != nil {
+					h.Logger.Debug("Policy forwarding query to specific upstreams",
+						"rule", rule.Name,
+						"domain", domain,
+						"upstreams", upstreams)
+				}
+
 				// Forward to conditional upstreams
 				resp, err := h.Forwarder.ForwardWithUpstreams(ctx, r, upstreams)
 				if err != nil {
+					if h.Logger != nil {
+						h.Logger.Error("Failed to forward query to policy upstreams",
+							"rule", rule.Name,
+							"domain", domain,
+							"upstreams", upstreams,
+							"error", err)
+					}
 					responseCode = dns.RcodeServerFailure
 					msg.SetRcode(r, dns.RcodeServerFailure)
 					h.writeMsg(w, msg)
