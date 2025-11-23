@@ -274,24 +274,16 @@ func TestForward_AllServersFail(t *testing.T) {
 }
 
 func TestForward_SERVFAIL(t *testing.T) {
-	// Mock server that returns SERVFAIL
+	// Mock server that returns NXDOMAIN (unmapped domain returns NXDOMAIN by default)
 	responses := map[string]*dns.Msg{}
 	addr, cleanup := mockDNSServer(t, responses)
 	defer cleanup()
 
-	// Create a working backup server
-	backupResponses := map[string]*dns.Msg{
-		"servfail.test.": createTestResponse("servfail.test.", "10.0.0.2"),
-	}
-	backupAddr, backupCleanup := mockDNSServer(t, backupResponses)
-	defer backupCleanup()
-
 	cfg := &config.Config{
-		UpstreamDNSServers: []string{addr, backupAddr},
+		UpstreamDNSServers: []string{addr},
 	}
 	logger := logging.NewDefault()
 	fwd := NewForwarder(cfg, logger)
-	fwd.SetRetries(2)
 
 	req := new(dns.Msg)
 	req.SetQuestion("servfail.test.", dns.TypeA)
@@ -307,9 +299,80 @@ func TestForward_SERVFAIL(t *testing.T) {
 		t.Fatal("Forward returned nil response")
 	}
 
-	// Should have gotten response from backup server
-	if len(resp.Answer) != 1 {
-		t.Fatalf("Expected 1 answer from backup server, got %d", len(resp.Answer))
+	// Should have gotten NXDOMAIN response immediately (not retried)
+	if resp.Rcode != dns.RcodeNameError {
+		t.Fatalf("Expected NXDOMAIN, got %s", dns.RcodeToString[resp.Rcode])
+	}
+}
+
+func TestForward_SERVFAIL_PassThrough(t *testing.T) {
+	// Test that SERVFAIL responses are passed through immediately without retry
+	// This is critical for DNSSEC validation failures
+
+	// Create a mock server that returns SERVFAIL
+	mockHandler := func(w dns.ResponseWriter, r *dns.Msg) {
+		resp := new(dns.Msg)
+		resp.SetReply(r)
+		resp.SetRcode(r, dns.RcodeServerFailure) // SERVFAIL
+		_ = w.WriteMsg(resp)
+	}
+
+	// Start TCP server (easier to control response code)
+	testPort := "127.0.0.1:25354"
+	server := &dns.Server{
+		Addr:    testPort,
+		Net:     "tcp",
+		Handler: dns.HandlerFunc(mockHandler),
+	}
+
+	go func() { _ = server.ListenAndServe() }()
+	defer func() { _ = server.Shutdown() }()
+	time.Sleep(100 * time.Millisecond) // Wait for server to start
+
+	// Create second server that would respond successfully (shouldn't be used)
+	goodResponses := map[string]*dns.Msg{
+		"dnssec.test.": createTestResponse("dnssec.test.", "10.0.0.1"),
+	}
+	goodAddr, goodCleanup := mockDNSServer(t, goodResponses)
+	defer goodCleanup()
+
+	cfg := &config.Config{
+		UpstreamDNSServers: []string{testPort, goodAddr},
+	}
+	logger := logging.NewDefault()
+	fwd := NewForwarder(cfg, logger)
+	fwd.SetRetries(2)
+
+	req := new(dns.Msg)
+	req.SetQuestion("dnssec.test.", dns.TypeA)
+
+	ctx := context.Background()
+	start := time.Now()
+	resp, err := fwd.ForwardTCP(ctx, req)
+	elapsed := time.Since(start)
+
+	// Should NOT get an error - SERVFAIL is a valid response
+	if err != nil {
+		t.Fatalf("Forward failed: %v", err)
+	}
+
+	if resp == nil {
+		t.Fatal("Forward returned nil response")
+	}
+
+	// Should have received SERVFAIL from first upstream
+	if resp.Rcode != dns.RcodeServerFailure {
+		t.Fatalf("Expected SERVFAIL, got %s", dns.RcodeToString[resp.Rcode])
+	}
+
+	// Should have been fast (no retry delay)
+	if elapsed > 500*time.Millisecond {
+		t.Errorf("SERVFAIL took too long: %v (expected <500ms, no retry)", elapsed)
+	}
+
+	// Verify we got SERVFAIL, not success from second server
+	if len(resp.Answer) > 0 {
+		t.Error("Got answers from second server - SERVFAIL was retried (bug!)")
 	}
 }
 

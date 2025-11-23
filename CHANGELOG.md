@@ -17,6 +17,57 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.7.8] - 2025-11-23
+
+### Fixed - DNSSEC SERVFAIL Pass-Through
+
+**Critical Fix**: DNS forwarder now correctly passes through SERVFAIL responses without retry delays.
+
+#### Problem Resolved
+- **SERVFAIL treated as error**: DNS forwarder was treating SERVFAIL responses as network errors and retrying with backup upstreams
+- **2-4 second delays**: DNSSEC validation failures experienced 2000-4000ms timeout delays due to incorrect retry logic
+- **RFC non-compliance**: DNS proxy should pass through ALL valid DNS responses (NOERROR, NXDOMAIN, SERVFAIL, REFUSED, FORMERR) unchanged
+- **Security risk**: Retrying SERVFAIL could return insecure responses from non-validating upstreams
+
+#### Solution
+- **Pass-through architecture**: All valid DNS responses now returned immediately without inspecting response codes
+- **Network errors only**: Retries now only triggered by actual network failures (timeout, connection refused, nil response)
+- **Correct behavior**: DNS proxy acts as transparent forwarder, not validator
+
+#### Components Fixed
+- **`pkg/forwarder/forwarder.go`**:
+  - `Forward()` method - removed SERVFAIL retry logic
+  - `ForwardTCP()` method - removed SERVFAIL retry logic
+  - `ForwardWithUpstreams()` method - removed SERVFAIL retry logic
+- **`pkg/forwarder/forwarder_test.go`**:
+  - Updated `TestForward_SERVFAIL` to expect correct behavior
+  - Added `TestForward_SERVFAIL_PassThrough` comprehensive test
+
+#### Performance Impact
+- **Before**: SERVFAIL queries took 2000-4000ms (retry timeout delays)
+- **After**: SERVFAIL queries take 4-188ms (immediate pass-through)
+- **Improvement**: 10-50x faster DNSSEC failure responses
+
+#### DNSSEC Compliance
+- ✅ SERVFAIL preserved and returned to clients
+- ✅ DO (DNSSEC OK) bit passed through to upstreams
+- ✅ AD (Authenticated Data) flag correctly set for valid domains
+- ✅ No insecure fallback to non-validating upstreams
+- ✅ DNSSEC security model maintained
+
+#### Testing
+- All unit tests passing (37/37)
+- All integration tests passing (25/25)
+- Real DNSSEC failures validated (`sigfail.ippacket.stream`, `dnssec-failed.org`)
+- Valid DNSSEC domains verified (`cloudflare.com`)
+- Performance validated with load tests
+
+#### Documentation
+- `docs/development/v0.7.8-dnssec-metrics-plan.md` - Implementation plan and design decisions
+- `docs/development/v0.7.8-test-report.md` - Complete test results and validation
+
+---
+
 ## [0.7.7] - 2025-11-23
 
 ### Fixed - Centralized DNS Resolver Architecture

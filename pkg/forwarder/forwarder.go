@@ -110,19 +110,13 @@ func (f *Forwarder) Forward(ctx context.Context, r *dns.Msg) (*dns.Msg, error) {
 			continue
 		}
 
-		if resp.Rcode == dns.RcodeServerFailure {
-			f.logger.Warn("Upstream returned SERVFAIL",
-				"upstream", upstream,
-				"domain", r.Question[0].Name,
-			)
-			lastErr = fmt.Errorf("upstream %s returned SERVFAIL", upstream)
-			continue
-		}
-
-		// Success!
+		// ANY valid DNS response should be returned immediately
+		// Don't treat SERVFAIL/NXDOMAIN as errors - they're valid DNS responses!
+		// Only network errors should trigger retries.
 		f.logger.Debug("Upstream query succeeded",
 			"upstream", upstream,
 			"domain", r.Question[0].Name,
+			"rcode", dns.RcodeToString[resp.Rcode],
 			"rtt", rtt,
 			"answers", len(resp.Answer),
 		)
@@ -177,13 +171,12 @@ func (f *Forwarder) ForwardTCP(ctx context.Context, r *dns.Msg) (*dns.Msg, error
 			continue
 		}
 
-		if resp.Rcode == dns.RcodeServerFailure {
-			lastErr = fmt.Errorf("upstream %s returned SERVFAIL", upstream)
-			continue
-		}
-
+		// ANY valid DNS response should be returned immediately
+		// Don't treat SERVFAIL/NXDOMAIN as errors - they're valid DNS responses!
 		f.logger.Debug("TCP upstream query succeeded",
 			"upstream", upstream,
+			"domain", r.Question[0].Name,
+			"rcode", dns.RcodeToString[resp.Rcode],
 			"rtt", rtt,
 		)
 
@@ -242,19 +235,12 @@ func (f *Forwarder) ForwardWithUpstreams(ctx context.Context, r *dns.Msg, upstre
 			continue
 		}
 
-		if resp.Rcode == dns.RcodeServerFailure {
-			f.logger.Warn("Conditional upstream returned SERVFAIL",
-				"upstream", upstream,
-				"domain", r.Question[0].Name,
-			)
-			lastErr = fmt.Errorf("upstream %s returned SERVFAIL", upstream)
-			continue
-		}
-
-		// Success!
+		// ANY valid DNS response should be returned immediately
+		// Don't treat SERVFAIL/NXDOMAIN as errors - they're valid DNS responses!
 		f.logger.Debug("Conditional upstream query succeeded",
 			"upstream", upstream,
 			"domain", r.Question[0].Name,
+			"rcode", dns.RcodeToString[resp.Rcode],
 			"rtt", rtt,
 			"answers", len(resp.Answer),
 		)
