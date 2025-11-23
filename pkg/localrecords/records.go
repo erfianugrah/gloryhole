@@ -23,28 +23,24 @@ const (
 
 // LocalRecord represents a single local DNS record
 type LocalRecord struct {
-	Domain   string
-	Type     RecordType
-	Target   string
-	IPs      []net.IP
-	TTL      uint32
-	Priority uint16
-	Weight   uint16
-	Port     uint16
-	Wildcard bool
-	Enabled  bool
-
-	// TXT record data (multiple strings per record)
+	Domain     string
+	Type       RecordType
+	Target     string
+	Ns         string
+	Mbox       string
+	IPs        []net.IP
 	TxtRecords []string
-
-	// SOA record data (Start of Authority)
-	Ns      string // SOA: Primary nameserver
-	Mbox    string // SOA: Responsible person email
-	Serial  uint32 // SOA: Zone serial number
-	Refresh uint32 // SOA: Refresh interval (seconds)
-	Retry   uint32 // SOA: Retry interval (seconds)
-	Expire  uint32 // SOA: Expiration time (seconds)
-	Minttl  uint32 // SOA: Minimum TTL (seconds)
+	Serial     uint32
+	TTL        uint32
+	Refresh    uint32
+	Retry      uint32
+	Expire     uint32
+	Minttl     uint32
+	Priority   uint16
+	Weight     uint16
+	Port       uint16
+	Wildcard   bool
+	Enabled    bool
 }
 
 // Manager manages local DNS records with efficient lookups

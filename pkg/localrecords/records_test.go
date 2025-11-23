@@ -1539,14 +1539,14 @@ func TestSRVRecord_PriorityWeightSorting(t *testing.T) {
 	// Priority 10 records should come first, sorted by weight (descending)
 	// Order: priority=10 weight=100, priority=10 weight=50, priority=10 weight=20, priority=20 weight=30
 	expectedOrder := []struct {
+		target   string
 		priority uint16
 		weight   uint16
-		target   string
 	}{
-		{10, 100, "sip3.example.local."},
-		{10, 50, "sip2.example.local."},
-		{10, 20, "sip4.example.local."},
-		{20, 30, "sip1.example.local."},
+		{"sip3.example.local.", 10, 100},
+		{"sip2.example.local.", 10, 50},
+		{"sip4.example.local.", 10, 20},
+		{"sip1.example.local.", 20, 30},
 	}
 
 	for i, expected := range expectedOrder {

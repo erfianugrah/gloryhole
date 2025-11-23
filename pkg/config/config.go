@@ -12,19 +12,19 @@ import (
 
 // Config holds the application configuration
 type Config struct {
-	Telemetry            TelemetryConfig             `yaml:"telemetry"`
-	Server               ServerConfig                `yaml:"server"`
-	Policy               PolicyConfig                `yaml:"policy"`
-	LocalRecords         LocalRecordsConfig          `yaml:"local_records"`
+	Telemetry             TelemetryConfig             `yaml:"telemetry"`
+	Server                ServerConfig                `yaml:"server"`
+	Policy                PolicyConfig                `yaml:"policy"`
+	LocalRecords          LocalRecordsConfig          `yaml:"local_records"`
 	ConditionalForwarding ConditionalForwardingConfig `yaml:"conditional_forwarding"`
-	UpstreamDNSServers   []string                    `yaml:"upstream_dns_servers"`
-	Blocklists           []string                    `yaml:"blocklists"`
-	Whitelist            []string                    `yaml:"whitelist"`
-	Logging              LoggingConfig               `yaml:"logging"`
-	Database             storage.Config              `yaml:"database"`
-	Cache                CacheConfig                 `yaml:"cache"`
-	UpdateInterval       time.Duration               `yaml:"update_interval"`
-	AutoUpdateBlocklists bool                        `yaml:"auto_update_blocklists"`
+	UpstreamDNSServers    []string                    `yaml:"upstream_dns_servers"`
+	Blocklists            []string                    `yaml:"blocklists"`
+	Whitelist             []string                    `yaml:"whitelist"`
+	Logging               LoggingConfig               `yaml:"logging"`
+	Database              storage.Config              `yaml:"database"`
+	Cache                 CacheConfig                 `yaml:"cache"`
+	UpdateInterval        time.Duration               `yaml:"update_interval"`
+	AutoUpdateBlocklists  bool                        `yaml:"auto_update_blocklists"`
 }
 
 // ServerConfig holds server-specific settings
@@ -54,24 +54,23 @@ type LocalRecordsConfig struct {
 
 // LocalRecordEntry represents a single local DNS record in the config
 type LocalRecordEntry struct {
-	Domain     string   `yaml:"domain"`
-	Type       string   `yaml:"type"`
+	Priority   *uint16  `yaml:"priority,omitempty"`
+	Weight     *uint16  `yaml:"weight,omitempty"`
+	Port       *uint16  `yaml:"port,omitempty"`
+	Expire     *uint32  `yaml:"expire,omitempty"`
+	Minttl     *uint32  `yaml:"minttl,omitempty"`
+	Refresh    *uint32  `yaml:"refresh,omitempty"`
+	Retry      *uint32  `yaml:"retry,omitempty"`
+	Serial     *uint32  `yaml:"serial,omitempty"`
+	Mbox       string   `yaml:"mbox,omitempty"`
+	Ns         string   `yaml:"ns,omitempty"`
 	Target     string   `yaml:"target"`
+	Type       string   `yaml:"type"`
+	Domain     string   `yaml:"domain"`
+	TxtRecords []string `yaml:"txt,omitempty"`
 	IPs        []string `yaml:"ips"`
 	TTL        uint32   `yaml:"ttl"`
 	Wildcard   bool     `yaml:"wildcard"`
-	TxtRecords []string `yaml:"txt,omitempty"`      // TXT record data (multiple strings)
-	Priority   *uint16  `yaml:"priority,omitempty"` // MX, SRV priority (pointer for omitempty)
-	Weight     *uint16  `yaml:"weight,omitempty"`   // SRV weight
-	Port       *uint16  `yaml:"port,omitempty"`     // SRV port
-	// SOA record fields
-	Ns      string  `yaml:"ns,omitempty"`      // SOA: Primary nameserver
-	Mbox    string  `yaml:"mbox,omitempty"`    // SOA: Responsible person email
-	Serial  *uint32 `yaml:"serial,omitempty"`  // SOA: Zone serial number
-	Refresh *uint32 `yaml:"refresh,omitempty"` // SOA: Refresh interval (seconds)
-	Retry   *uint32 `yaml:"retry,omitempty"`   // SOA: Retry interval (seconds)
-	Expire  *uint32 `yaml:"expire,omitempty"`  // SOA: Expiration time (seconds)
-	Minttl  *uint32 `yaml:"minttl,omitempty"`  // SOA: Minimum TTL (seconds)
 }
 
 // PolicyConfig holds policy engine configuration
