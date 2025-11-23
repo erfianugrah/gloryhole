@@ -137,7 +137,7 @@ A high-performance DNS server written in Go, designed as a modern, extensible re
   - Statistics aggregation
 
 - **REST API**
-  - Health check endpoints (/healthz, /readyz)
+  - Health check endpoints (/health, /ready, /api/health)
   - Query statistics with time periods
   - Recent queries with pagination
   - Top domains (allowed and blocked)

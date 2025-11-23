@@ -28,9 +28,9 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	s.writeJSON(w, http.StatusOK, response)
 }
 
-// handleHealthz handles GET /healthz (Kubernetes liveness probe)
+// handleLiveness handles GET /health
 // This endpoint indicates if the application is running and should be restarted if not responding
-func (s *Server) handleHealthz(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleLiveness(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		s.writeError(w, http.StatusMethodNotAllowed, "Method not allowed")
 		return
@@ -44,9 +44,9 @@ func (s *Server) handleHealthz(w http.ResponseWriter, r *http.Request) {
 	s.writeJSON(w, http.StatusOK, response)
 }
 
-// handleReadyz handles GET /readyz (Kubernetes readiness probe)
+// handleReadiness handles GET /ready
 // This endpoint indicates if the application is ready to accept traffic
-func (s *Server) handleReadyz(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleReadiness(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		s.writeError(w, http.StatusMethodNotAllowed, "Method not allowed")
 		return

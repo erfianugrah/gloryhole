@@ -9,6 +9,7 @@ import (
 	"glory-hole/pkg/config"
 	"glory-hole/pkg/logging"
 
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/prometheus"
 	"go.opentelemetry.io/otel/metric"
@@ -22,11 +23,12 @@ import (
 
 // Telemetry holds telemetry providers and exporters
 type Telemetry struct {
-	cfg              *config.TelemetryConfig
-	meterProvider    metric.MeterProvider
-	tracerProvider   trace.TracerProvider
-	prometheusServer *http.Server
-	logger           *logging.Logger
+	cfg                *config.TelemetryConfig
+	meterProvider      metric.MeterProvider
+	tracerProvider     trace.TracerProvider
+	prometheusExporter *prometheus.Exporter
+	prometheusServer   *http.Server
+	logger             *logging.Logger
 }
 
 // Metrics holds all application metrics
@@ -111,6 +113,9 @@ func (t *Telemetry) setupMetrics(ctx context.Context, res *resource.Resource) er
 			return fmt.Errorf("failed to create prometheus exporter: %w", err)
 		}
 
+		// Store the exporter for use in HTTP handler
+		t.prometheusExporter = exporter
+
 		// Create meter provider
 		provider := sdkmetric.NewMeterProvider(
 			sdkmetric.WithResource(res),
@@ -147,10 +152,10 @@ func (t *Telemetry) setupTracing(ctx context.Context, res *resource.Resource) er
 // startPrometheusServer starts the Prometheus metrics HTTP server
 func (t *Telemetry) startPrometheusServer() error {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/metrics", func(w http.ResponseWriter, r *http.Request) {
-		// The prometheus exporter handles the /metrics endpoint automatically
-		// through the global otel meter provider
-	})
+
+	// Use promhttp.Handler() to serve Prometheus metrics
+	// This works with the OpenTelemetry Prometheus exporter
+	mux.Handle("/metrics", promhttp.Handler())
 
 	t.prometheusServer = &http.Server{
 		Addr:              fmt.Sprintf(":%d", t.cfg.PrometheusPort),

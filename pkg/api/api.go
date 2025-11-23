@@ -69,9 +69,9 @@ func New(cfg *Config) *Server {
 	mux := http.NewServeMux()
 
 	// Health checks
-	mux.HandleFunc("/api/health", s.handleHealth)
-	mux.HandleFunc("/healthz", s.handleHealthz) // Kubernetes liveness probe
-	mux.HandleFunc("/readyz", s.handleReadyz)   // Kubernetes readiness probe
+	mux.HandleFunc("/api/health", s.handleHealth)  // Detailed health with uptime/version
+	mux.HandleFunc("/health", s.handleLiveness)    // Simple liveness check
+	mux.HandleFunc("/ready", s.handleReadiness)    // Readiness check with components
 
 	// Statistics
 	mux.HandleFunc("/api/stats", s.handleStats)

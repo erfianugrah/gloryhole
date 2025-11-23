@@ -765,8 +765,8 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 		// Lock-free atomic pointer read - blazing fast!
 		blocked = h.BlocklistManager.IsBlocked(domain)
 
-		// Still need to check whitelist/overrides with lock (for now)
-		// TODO: Move whitelist to atomic pointer for full lock-free operation
+		// Check whitelist/overrides with read lock
+		// Note: Could be optimized with atomic pointer in future if needed
 		h.lookupMu.RLock()
 		_, whitelisted = h.Whitelist[domain]
 

@@ -68,16 +68,16 @@ func (m *mockStorageForHealth) Ping(ctx context.Context) error {
 	return nil
 }
 
-// TestHandleHealthz tests the Kubernetes liveness probe endpoint
-func TestHandleHealthz(t *testing.T) {
+// TestHandleLiveness tests the liveness probe endpoint
+func TestHandleLiveness(t *testing.T) {
 	server := New(&Config{
 		ListenAddress: ":8080",
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+	req := httptest.NewRequest(http.MethodGet, "/health", nil)
 	w := httptest.NewRecorder()
 
-	server.handleHealthz(w, req)
+	server.handleLiveness(w, req)
 
 	if w.Code != http.StatusOK {
 		t.Errorf("expected status 200, got %d", w.Code)
@@ -93,18 +93,18 @@ func TestHandleHealthz(t *testing.T) {
 	}
 }
 
-// TestHandleHealthz_MethodNotAllowed tests that non-GET methods are rejected
-func TestHandleHealthz_MethodNotAllowed(t *testing.T) {
+// TestHandleLiveness_MethodNotAllowed tests that non-GET methods are rejected
+func TestHandleLiveness_MethodNotAllowed(t *testing.T) {
 	server := New(&Config{
 		ListenAddress: ":8080",
 	})
 
 	methods := []string{http.MethodPost, http.MethodPut, http.MethodDelete, http.MethodPatch}
 	for _, method := range methods {
-		req := httptest.NewRequest(method, "/healthz", nil)
+		req := httptest.NewRequest(method, "/health", nil)
 		w := httptest.NewRecorder()
 
-		server.handleHealthz(w, req)
+		server.handleLiveness(w, req)
 
 		if w.Code != http.StatusMethodNotAllowed {
 			t.Errorf("%s: expected status 405, got %d", method, w.Code)
@@ -112,8 +112,8 @@ func TestHandleHealthz_MethodNotAllowed(t *testing.T) {
 	}
 }
 
-// TestHandleReadyz tests the Kubernetes readiness probe endpoint
-func TestHandleReadyz(t *testing.T) {
+// TestHandleReadiness tests the readiness probe endpoint
+func TestHandleReadiness(t *testing.T) {
 	mock := &mockStorageForHealth{shouldFail: false}
 	policyEngine := policy.NewEngine()
 
@@ -123,10 +123,10 @@ func TestHandleReadyz(t *testing.T) {
 		PolicyEngine:  policyEngine,
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "/readyz", nil)
+	req := httptest.NewRequest(http.MethodGet, "/ready", nil)
 	w := httptest.NewRecorder()
 
-	server.handleReadyz(w, req)
+	server.handleReadiness(w, req)
 
 	if w.Code != http.StatusOK {
 		t.Errorf("expected status 200, got %d", w.Code)
@@ -166,8 +166,8 @@ func TestHandleReadyz(t *testing.T) {
 	}
 }
 
-// TestHandleReadyz_StorageDegraded tests readiness when storage is degraded
-func TestHandleReadyz_StorageDegraded(t *testing.T) {
+// TestHandleReadiness_StorageDegraded tests readiness when storage is degraded
+func TestHandleReadiness_StorageDegraded(t *testing.T) {
 	mock := &mockStorageForHealth{shouldFail: true}
 
 	server := New(&Config{
@@ -175,10 +175,10 @@ func TestHandleReadyz_StorageDegraded(t *testing.T) {
 		Storage:       mock,
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "/readyz", nil)
+	req := httptest.NewRequest(http.MethodGet, "/ready", nil)
 	w := httptest.NewRecorder()
 
-	server.handleReadyz(w, req)
+	server.handleReadiness(w, req)
 
 	// Should still be ready (degraded storage is acceptable)
 	if w.Code != http.StatusOK {
@@ -200,17 +200,17 @@ func TestHandleReadyz_StorageDegraded(t *testing.T) {
 	}
 }
 
-// TestHandleReadyz_NoStorage tests readiness when storage is not configured
-func TestHandleReadyz_NoStorage(t *testing.T) {
+// TestHandleReadiness_NoStorage tests readiness when storage is not configured
+func TestHandleReadiness_NoStorage(t *testing.T) {
 	server := New(&Config{
 		ListenAddress: ":8080",
 		Storage:       nil,
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "/readyz", nil)
+	req := httptest.NewRequest(http.MethodGet, "/ready", nil)
 	w := httptest.NewRecorder()
 
-	server.handleReadyz(w, req)
+	server.handleReadiness(w, req)
 
 	if w.Code != http.StatusOK {
 		t.Errorf("expected status 200, got %d", w.Code)
@@ -231,17 +231,17 @@ func TestHandleReadyz_NoStorage(t *testing.T) {
 	}
 }
 
-// TestHandleReadyz_NoBlocklist tests readiness when blocklist is not configured
-func TestHandleReadyz_NoBlocklist(t *testing.T) {
+// TestHandleReadiness_NoBlocklist tests readiness when blocklist is not configured
+func TestHandleReadiness_NoBlocklist(t *testing.T) {
 	server := New(&Config{
 		ListenAddress:    ":8080",
 		BlocklistManager: nil,
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "/readyz", nil)
+	req := httptest.NewRequest(http.MethodGet, "/ready", nil)
 	w := httptest.NewRecorder()
 
-	server.handleReadyz(w, req)
+	server.handleReadiness(w, req)
 
 	if w.Code != http.StatusOK {
 		t.Errorf("expected status 200, got %d", w.Code)
@@ -263,16 +263,16 @@ func TestHandleReadyz_NoBlocklist(t *testing.T) {
 	}
 }
 
-// TestHandleReadyz_NoComponents tests readiness when no optional components configured
-func TestHandleReadyz_NoComponents(t *testing.T) {
+// TestHandleReadiness_NoComponents tests readiness when no optional components configured
+func TestHandleReadiness_NoComponents(t *testing.T) {
 	server := New(&Config{
 		ListenAddress: ":8080",
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "/readyz", nil)
+	req := httptest.NewRequest(http.MethodGet, "/ready", nil)
 	w := httptest.NewRecorder()
 
-	server.handleReadyz(w, req)
+	server.handleReadiness(w, req)
 
 	if w.Code != http.StatusOK {
 		t.Errorf("expected status 200, got %d", w.Code)
@@ -299,18 +299,18 @@ func TestHandleReadyz_NoComponents(t *testing.T) {
 	}
 }
 
-// TestHandleReadyz_MethodNotAllowed tests that non-GET methods are rejected
-func TestHandleReadyz_MethodNotAllowed(t *testing.T) {
+// TestHandleReadiness_MethodNotAllowed tests that non-GET methods are rejected
+func TestHandleReadiness_MethodNotAllowed(t *testing.T) {
 	server := New(&Config{
 		ListenAddress: ":8080",
 	})
 
 	methods := []string{http.MethodPost, http.MethodPut, http.MethodDelete, http.MethodPatch}
 	for _, method := range methods {
-		req := httptest.NewRequest(method, "/readyz", nil)
+		req := httptest.NewRequest(method, "/ready", nil)
 		w := httptest.NewRecorder()
 
-		server.handleReadyz(w, req)
+		server.handleReadiness(w, req)
 
 		if w.Code != http.StatusMethodNotAllowed {
 			t.Errorf("%s: expected status 405, got %d", method, w.Code)

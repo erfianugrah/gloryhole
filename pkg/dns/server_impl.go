@@ -229,7 +229,7 @@ func (w *wrappedHandler) serveDNS(rw dns.ResponseWriter, r *dns.Msg) {
 	clientIP := getClientIP(rw)
 
 	// Log the query
-	w.logger.Debug("DNS query received",
+	w.logger.Info("DNS query received",
 		"domain", domain,
 		"type", dns.TypeToString[qtype],
 		"client", clientIP,
@@ -250,7 +250,7 @@ func (w *wrappedHandler) serveDNS(rw dns.ResponseWriter, r *dns.Msg) {
 		w.metrics.DNSQueryDuration.Record(ctx, float64(duration.Milliseconds()))
 	}
 
-	w.logger.Debug("DNS query processed",
+	w.logger.Info("DNS query processed",
 		"domain", domain,
 		"duration_ms", duration.Milliseconds(),
 	)

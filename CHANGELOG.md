@@ -467,8 +467,8 @@ The `local_records` feature provides more capabilities:
   - Resource exhaustion (memory, file descriptors)
   - Query rate anomalies
 - **Enhanced health endpoints**
-  - `/healthz`: Basic liveness check
-  - `/readyz`: Readiness check with dependency validation
+  - `/health`: Basic liveness check
+  - `/ready`: Readiness check with dependency validation
   - `/api/health`: Detailed health with uptime and version
 - **Monitoring deployment guide**
   - Prometheus setup instructions
