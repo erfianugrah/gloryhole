@@ -140,7 +140,7 @@ func TestNewServer_CacheInitFailure(t *testing.T) {
 	server := NewServer(cfg, handler, logger, metrics)
 
 	if server == nil {
-		t.Error("Expected NewServer to return non-nil server even on cache error")
+		t.Fatal("Expected NewServer to return non-nil server even on cache error")
 	}
 
 	// Server should still work without cache

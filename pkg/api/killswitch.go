@@ -14,16 +14,11 @@ import (
 // This is separate from the permanent enable/disable flags in the config.
 // Temporary disables take precedence over permanent enables.
 type KillSwitchManager struct {
-	mu sync.RWMutex
-
-	// Temporary disable state (in-memory, not persisted)
+	logger *slog.Logger
+	stopChan chan struct{}
 	blocklistDisabledUntil time.Time
 	policiesDisabledUntil  time.Time
-
-	logger *slog.Logger
-
-	// Lifecycle management
-	stopChan chan struct{}
+	mu sync.RWMutex
 	wg       sync.WaitGroup
 }
 
@@ -144,7 +139,7 @@ func (k *KillSwitchManager) EnableBlocklist() {
 	k.blocklistDisabledUntil = time.Time{} // Zero value = not disabled
 
 	if wasDisabled {
-		k.logger.Info("Blocklist re-enabled (temporary disable cancelled)")
+		k.logger.Info("Blocklist re-enabled (temporary disable canceled)")
 	}
 }
 
@@ -157,7 +152,7 @@ func (k *KillSwitchManager) EnablePolicies() {
 	k.policiesDisabledUntil = time.Time{} // Zero value = not disabled
 
 	if wasDisabled {
-		k.logger.Info("Policies re-enabled (temporary disable cancelled)")
+		k.logger.Info("Policies re-enabled (temporary disable canceled)")
 	}
 }
 

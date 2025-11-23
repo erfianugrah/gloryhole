@@ -16,30 +16,30 @@ import (
 
 // Server represents the API server
 type Server struct {
-	startTime        time.Time
 	handler          http.Handler
 	storage          storage.Storage
 	httpServer       *http.Server
 	logger           *slog.Logger
 	blocklistManager *blocklist.Manager
 	policyEngine     *policy.Engine
-	version          string
 	configWatcher    *config.Watcher      // For kill-switch feature
-	configPath       string               // Path to config file for persistence
 	killSwitch       *KillSwitchManager   // For duration-based temporary disabling
+	startTime        time.Time
+	version          string
+	configPath       string               // Path to config file for persistence
 }
 
 // Config holds API server configuration
 type Config struct {
-	ListenAddress    string
 	Storage          storage.Storage
 	BlocklistManager *blocklist.Manager
 	PolicyEngine     *policy.Engine
 	Logger           *slog.Logger
-	Version          string
 	ConfigWatcher    *config.Watcher      // For kill-switch feature
-	ConfigPath       string               // Path to config file
 	KillSwitch       *KillSwitchManager   // For duration-based temporary disabling
+	ListenAddress    string
+	Version          string
+	ConfigPath       string               // Path to config file
 }
 
 // New creates a new API server

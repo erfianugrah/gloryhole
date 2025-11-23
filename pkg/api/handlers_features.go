@@ -16,13 +16,13 @@ type FeaturesRequest struct {
 
 // FeaturesResponse represents the current state of feature kill-switches
 type FeaturesResponse struct {
+	BlocklistDisabledUntil   *time.Time `json:"blocklist_disabled_until,omitempty"` // When it will auto-re-enable
+	PoliciesDisabledUntil    *time.Time `json:"policies_disabled_until,omitempty"`  // When it will auto-re-enable
 	UpdatedAt                time.Time  `json:"updated_at"`
 	BlocklistEnabled         bool       `json:"blocklist_enabled"`          // Permanent setting from config
 	PoliciesEnabled          bool       `json:"policies_enabled"`           // Permanent setting from config
 	BlocklistTemporarilyDisabled bool   `json:"blocklist_temp_disabled"`    // Temporary disable state
-	BlocklistDisabledUntil   *time.Time `json:"blocklist_disabled_until,omitempty"` // When it will auto-re-enable
 	PoliciesTemporarilyDisabled  bool   `json:"policies_temp_disabled"`     // Temporary disable state
-	PoliciesDisabledUntil    *time.Time `json:"policies_disabled_until,omitempty"`  // When it will auto-re-enable
 }
 
 // DisableRequest represents a request to temporarily disable a feature
