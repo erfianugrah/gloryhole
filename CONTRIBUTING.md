@@ -164,13 +164,16 @@ go mod download
 5. **Verify setup:**
 ```bash
 # Run tests
-go test ./...
+make test
 
-# Build binary
-go build -o glory-hole ./cmd/glory-hole
+# Build binary (includes version info)
+make build
 
 # Run linter
-golangci-lint run
+make lint
+
+# See all available commands
+make help
 ```
 
 ### Project Structure
@@ -896,14 +899,14 @@ git checkout -b release/v0.6.0
 
 4. **Final testing:**
 ```bash
-# Run all tests
-go test -v -race ./...
+# Run all tests with race detector
+make test-race
 
-# Build for all platforms
-GOOS=linux GOARCH=amd64 go build -o glory-hole-linux-amd64 ./cmd/glory-hole
-GOOS=linux GOARCH=arm64 go build -o glory-hole-linux-arm64 ./cmd/glory-hole
-GOOS=darwin GOARCH=amd64 go build -o glory-hole-darwin-amd64 ./cmd/glory-hole
-GOOS=windows GOARCH=amd64 go build -o glory-hole-windows-amd64.exe ./cmd/glory-hole
+# Build for all platforms (Linux, macOS, Windows, multiple architectures)
+make build-all
+
+# Run linter
+make lint
 ```
 
 5. **Tag release:**

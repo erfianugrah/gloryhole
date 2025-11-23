@@ -115,16 +115,21 @@ Build from source if you want the latest development version:
 
 # Clone the repository
 git clone https://github.com/erfianugrah/gloryhole.git
-cd glory-hole
+cd gloryhole
 
-# Build the binary
-go build -o glory-hole ./cmd/glory-hole
+# Build the binary (recommended - includes version info)
+make build
 
 # Optionally, install system-wide
-sudo mv glory-hole /usr/local/bin/
+sudo mv bin/glory-hole /usr/local/bin/
 
 # Verify installation
 glory-hole --version
+
+# Other useful make commands:
+# make test          - Run all tests
+# make lint          - Run linter
+# make help          - See all available commands
 ```
 
 ## Quick Start

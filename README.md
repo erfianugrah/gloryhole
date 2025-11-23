@@ -270,14 +270,37 @@ See [Kubernetes Deployment Guide](deploy/kubernetes/README.md) for detailed inst
 ```bash
 # Clone repository
 git clone https://github.com/erfianugrah/gloryhole.git
-cd glory-hole
+cd gloryhole
 
-# Build
-go build -o glory-hole ./cmd/glory-hole
+# Build with Makefile (recommended - includes version info)
+make build
+
+# Or build manually
+go build -ldflags "-X main.version=$(git describe --tags --always --dirty) -X main.buildTime=$(date -u +%Y-%m-%dT%H:%M:%SZ) -X main.gitCommit=$(git rev-parse --short HEAD)" -o bin/glory-hole ./cmd/glory-hole
 
 # Install (optional)
-sudo mv glory-hole /usr/local/bin/
+sudo mv bin/glory-hole /usr/local/bin/
+
+# Run tests
+make test
+
+# Run linter
+make lint
+
+# See all available commands
+make help
 ```
+
+**Available Make Commands:**
+- `make build` - Build binary for current platform with version info
+- `make build-all` - Build for all platforms (Linux, macOS, Windows)
+- `make test` - Run all tests
+- `make test-race` - Run tests with race detector
+- `make test-coverage` - Generate coverage report
+- `make lint` - Run golangci-lint
+- `make clean` - Remove build artifacts
+- `make run` - Build and run the server
+- `make version` - Display version information
 
 Requirements: Go 1.24 or later
 

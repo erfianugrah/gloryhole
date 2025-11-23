@@ -58,8 +58,11 @@ jobs:
             OUTPUT_NAME="${OUTPUT_NAME}.exe"
           fi
 
+          BUILD_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          GIT_COMMIT=$(git rev-parse --short HEAD)
+
           go build -v \
-            -ldflags="-s -w -X main.Version=${{ steps.version.outputs.version }} -X main.BuildTime=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            -ldflags="-s -w -X main.version=${{ steps.version.outputs.version }} -X main.buildTime=${BUILD_TIME} -X main.gitCommit=${GIT_COMMIT}" \
             -o "${OUTPUT_NAME}" \
             ./cmd/glory-hole
 

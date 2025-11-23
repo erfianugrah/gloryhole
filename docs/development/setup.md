@@ -231,97 +231,114 @@ telemetry:
 
 ## Building the Project
 
-### Basic Build
+Glory-Hole uses a Makefile for streamlined building with automatic version injection from git tags.
 
-**Build binary:**
+### Quick Build
+
+**Build binary for current platform:**
 ```bash
-go build -o glory-hole ./cmd/glory-hole
+make build
 ```
+
+This builds the binary in `./bin/glory-hole` with:
+- Version from git tags (e.g., `v0.7.2`)
+- Build timestamp
+- Git commit hash
+- Optimized binary size (stripped symbols)
 
 **Run the binary:**
 ```bash
-./glory-hole
+./bin/glory-hole --version
 ```
 
-### Development Build (with race detector)
+### Available Make Targets
 
-**Build with race detection:**
+**View all commands:**
 ```bash
-go build -race -o glory-hole-race ./cmd/glory-hole
+make help
 ```
 
-**Run with race detector:**
-```bash
-./glory-hole-race
-```
-
-### Optimized Release Build
-
-**Build with optimizations:**
-```bash
-go build -ldflags="-s -w" -o glory-hole ./cmd/glory-hole
-```
-
-Flags:
-- `-s`: Strip symbol table
-- `-w`: Strip DWARF debug info
-- Result: Smaller binary
+**Common targets:**
+- `make build` - Build for current platform with version info
+- `make build-all` - Build for all platforms (Linux, macOS, Windows × amd64, arm64)
+- `make test` - Run all tests
+- `make test-race` - Run tests with race detector
+- `make test-coverage` - Generate coverage report (creates coverage.html)
+- `make lint` - Run golangci-lint
+- `make fmt` - Format Go code
+- `make vet` - Run go vet
+- `make run` - Build and run server
+- `make dev` - Run directly with go run (no build)
+- `make clean` - Remove build artifacts
+- `make version` - Display version information
 
 ### Cross-Platform Build
 
-**Build for Linux:**
+**Build for all supported platforms:**
 ```bash
-GOOS=linux GOARCH=amd64 go build -o glory-hole-linux-amd64 ./cmd/glory-hole
+make build-all
 ```
 
-**Build for macOS:**
+This creates binaries in `./bin/` for:
+- Linux: amd64, arm64
+- macOS: amd64 (Intel), arm64 (Apple Silicon)
+- Windows: amd64
+
+All binaries include proper version information.
+
+### Manual Build (Advanced)
+
+If you need manual control over the build:
+
+**Basic build without version info:**
 ```bash
-GOOS=darwin GOARCH=amd64 go build -o glory-hole-darwin-amd64 ./cmd/glory-hole
-GOOS=darwin GOARCH=arm64 go build -o glory-hole-darwin-arm64 ./cmd/glory-hole
+go build -o bin/glory-hole ./cmd/glory-hole
 ```
 
-**Build for Windows:**
+**Build with version info:**
 ```bash
-GOOS=windows GOARCH=amd64 go build -o glory-hole-windows-amd64.exe ./cmd/glory-hole
+VERSION=$(git describe --tags --always --dirty)
+BUILD_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+GIT_COMMIT=$(git rev-parse --short HEAD)
+
+go build \
+  -ldflags "-s -w -X main.version=${VERSION} -X main.buildTime=${BUILD_TIME} -X main.gitCommit=${GIT_COMMIT}" \
+  -o bin/glory-hole \
+  ./cmd/glory-hole
 ```
 
-### Build All Platforms
-
-**Script for building all platforms:**
+**Cross-compile manually:**
 ```bash
-#!/bin/bash
-# scripts/build-all.sh
+GOOS=linux GOARCH=arm64 go build \
+  -ldflags "-s -w -X main.version=${VERSION}" \
+  -o bin/glory-hole-linux-arm64 \
+  ./cmd/glory-hole
+```
 
-set -e
+### Version Information
 
-VERSION=${1:-dev}
-OUTPUT_DIR="./dist"
+The Makefile automatically injects version information:
 
-mkdir -p $OUTPUT_DIR
+**How versioning works:**
+1. Version from git tags: `git describe --tags --always --dirty`
+   - Example: `v0.7.2` (clean tag), `v0.7.2-3-gf83f09c-dirty` (3 commits after tag, uncommitted changes)
+2. Build time: ISO 8601 format UTC
+3. Git commit: Short commit hash
 
-platforms=(
-    "linux/amd64"
-    "linux/arm64"
-    "darwin/amd64"
-    "darwin/arm64"
-    "windows/amd64"
-)
+**Check version info:**
+```bash
+make version
+```
 
-for platform in "${platforms[@]}"; do
-    IFS='/' read -r GOOS GOARCH <<< "$platform"
-    output="$OUTPUT_DIR/glory-hole-$VERSION-$GOOS-$GOARCH"
-
-    if [ "$GOOS" = "windows" ]; then
-        output="${output}.exe"
-    fi
-
-    echo "Building for $GOOS/$GOARCH..."
-    GOOS=$GOOS GOARCH=$GOARCH go build -ldflags="-s -w" -o "$output" ./cmd/glory-hole
-
-    echo "✓ Built: $output"
-done
-
-echo "All builds complete!"
+**Runtime version check:**
+```bash
+./bin/glory-hole --version
+# Output:
+# Glory-Hole DNS Server
+# Version:     v0.7.2
+# Git Commit:  f83f09c
+# Build Time:  2025-11-23T09:05:33Z
+# Go Version:  go1.25.4
 ```
 
 ---

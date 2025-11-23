@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"runtime"
 	"strings"
 	"syscall"
 	"time"
@@ -29,8 +30,12 @@ var (
 	showVersion = flag.Bool("version", false, "Show version information and exit")
 	healthCheck = flag.Bool("health-check", false, "Perform health check and exit (for Docker HEALTHCHECK)")
 	apiAddress  = flag.String("api-address", "", "Override API address for health check (default: from config)")
-	version     = "0.7.0"
-	buildTime   = "unknown"
+
+	// Build-time variables set via ldflags
+	// Example: go build -ldflags "-X main.version=0.7.2 -X main.buildTime=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+	version   = "dev"     // Set via -ldflags "-X main.version=x.y.z"
+	buildTime = "unknown" // Set via -ldflags "-X main.buildTime=$(date)"
+	gitCommit = "unknown" // Set via -ldflags "-X main.gitCommit=$(git rev-parse --short HEAD)"
 )
 
 func main() {
@@ -39,9 +44,10 @@ func main() {
 	// Handle --version flag
 	if *showVersion {
 		fmt.Printf("Glory-Hole DNS Server\n")
-		fmt.Printf("Version:    %s\n", version)
-		fmt.Printf("Build Time: %s\n", buildTime)
-		fmt.Printf("Go Version: %s\n", os.Getenv("GOVERSION"))
+		fmt.Printf("Version:     %s\n", version)
+		fmt.Printf("Git Commit:  %s\n", gitCommit)
+		fmt.Printf("Build Time:  %s\n", buildTime)
+		fmt.Printf("Go Version:  %s\n", runtime.Version())
 		os.Exit(0)
 	}
 
