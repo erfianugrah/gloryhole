@@ -46,6 +46,82 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Hot-reload configuration support
 - Comprehensive test coverage (74 new tests, 100% passing)
 
+### Added - Build System & Versioning
+
+#### Dynamic Version Injection
+- **Git-based versioning**: Version automatically sourced from git tags (`git describe --tags`)
+- **Build-time metadata**: Includes build timestamp (ISO 8601 UTC) and git commit hash
+- **Runtime version info**: `glory-hole --version` shows complete build information
+- **Default fallback**: Uses "dev" when built without ldflags
+
+#### Makefile Build System
+- **Streamlined workflow**: Single command builds with all metadata (`make build`)
+- **Cross-compilation**: Build for all platforms with `make build-all`
+  - Linux (amd64, arm64)
+  - macOS (amd64, arm64)
+  - Windows (amd64)
+- **Testing commands**: `make test`, `make test-race`, `make test-coverage`
+- **Quality tools**: `make lint`, `make fmt`, `make vet`
+- **Developer workflow**: `make run`, `make dev`, `make clean`
+- **Help system**: `make help` lists all available commands
+
+#### CI/CD Integration
+- GitHub Actions workflows updated to use Makefile
+- Automatic version injection in CI builds
+- Release workflow creates binaries with full version info
+
+### Changed - Testing & Quality
+
+#### Integration Tests
+- **E2E tests for all record types**: TestE2E_AllRecordTypes validates all 10 DNS record types
+- **Multiple records per domain**: TestE2E_MultipleRecordsSameDomain tests load balancing scenarios
+- **Wildcard support**: All record types tested with wildcard matching
+
+#### Performance Benchmarks
+- **New benchmarks for all record types**: TXT, MX, PTR, SRV, NS, SOA, CAA
+- **Performance validated**: All new record types perform at 200-400 ns/op
+- **No regression**: Comparable to existing A record performance (252.4 ns/op)
+- **Sorting benchmarks**: MX and SRV priority/weight sorting included
+
+#### Test Coverage
+- **LocalRecords package**: 92.9% coverage (up from 89%)
+- **Overall average**: 82.5% across all packages
+- **Total tests**: 74 new tests for v0.7.2 features
+- **All passing**: 13/13 packages, 100% success rate
+
+### Changed - Documentation
+
+#### Updated Documentation
+- **README.md**: Added Makefile commands and build examples
+- **CONTRIBUTING.md**: Updated build/test instructions to use Makefile
+- **Getting Started Guide**: Added Makefile build instructions
+- **Development Setup**: Comprehensive Makefile documentation with versioning explanation
+- **Architecture Overview**: Updated LocalRecord struct with all new fields (NS, SOA, CAA)
+- **Configuration Guide**: Complete examples for all 10 record types
+
+#### Configuration Examples
+- Updated `config.example.yml` with examples for:
+  - TXT records (SPF, DKIM, domain verification)
+  - MX records with multiple priorities
+  - PTR records for reverse DNS
+  - SRV records with priority/weight/port
+  - NS records for delegation
+  - SOA records with all 7 fields
+  - CAA records (issue, issuewild, iodef tags)
+
+### Fixed
+
+#### Memory Optimization
+- **Struct field alignment**: Optimized LocalRecord and config structs
+  - LocalRecord: 168 → 112 bytes (33% improvement)
+  - LocalRecordEntry: 200 → 176 bytes (12% improvement)
+- **Zero allocations**: Hot path remains allocation-free
+
+#### Code Quality
+- **All linting issues resolved**: golangci-lint reports 0 issues
+- **Race detector clean**: No race conditions detected in concurrent tests
+- **Field alignment**: All structs optimized for memory layout
+
 ---
 
 ## [0.7.0] - 2025-11-22
