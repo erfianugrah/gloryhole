@@ -167,9 +167,9 @@ func main() {
 
 		// Load whitelist patterns
 		if len(patterns) > 0 {
-			matcher, err := pattern.NewMatcher(patterns)
-			if err != nil {
-				logger.Error("Failed to parse whitelist patterns", "error", err)
+			matcher, parseErr := pattern.NewMatcher(patterns)
+			if parseErr != nil {
+				logger.Error("Failed to parse whitelist patterns", "error", parseErr)
 			} else {
 				handler.WhitelistPatterns.Store(matcher)
 				stats := matcher.Stats()

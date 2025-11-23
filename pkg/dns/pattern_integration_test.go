@@ -61,10 +61,10 @@ func TestWhitelistPatternIntegration(t *testing.T) {
 	handler.Whitelist["tracker.example.com"] = struct{}{} // Exact match whitelist
 
 	tests := []struct {
-		name          string
-		domain        string
-		shouldBlock   bool
-		blockReason   string
+		name        string
+		domain      string
+		blockReason string
+		shouldBlock bool
 	}{
 		{
 			name:        "blocked domain - no whitelist match",

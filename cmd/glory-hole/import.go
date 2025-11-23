@@ -19,20 +19,15 @@ import (
 
 // PiholeImporter handles importing Pi-hole configurations
 type PiholeImporter struct {
-	// Input options
-	zipPath      string // Path to Pi-hole Teleporter ZIP
-	gravityDB    string // Direct path to gravity.db (alternative to ZIP)
-	piholeConfig string // Direct path to pihole.toml (optional)
-	customList   string // Direct path to custom.list (optional)
-
-	// Output options
-	output   string // Output file path (empty = stdout)
-	dryRun   bool   // Show what would be imported without writing
-	validate bool   // Validate config before writing
-	merge    bool   // Merge with existing config instead of replacing
-
-	// Internal state
-	tempDir string // Extracted ZIP location
+	zipPath      string
+	gravityDB    string
+	piholeConfig string
+	customList   string
+	output       string
+	tempDir      string
+	dryRun       bool
+	validate     bool
+	merge        bool
 }
 
 // NewPiholeImporter creates a new Pi-hole importer
@@ -124,18 +119,18 @@ func (i *PiholeImporter) Import() (*config.Config, error) {
 	// Build Glory-Hole configuration
 	cfg := &config.Config{
 		Server: config.ServerConfig{
-			ListenAddress:  ":53",
-			TCPEnabled:     true,
-			UDPEnabled:     true,
-			WebUIAddress:   ":8080",
-			EnablePolicies: true,
+			ListenAddress:   ":53",
+			TCPEnabled:      true,
+			UDPEnabled:      true,
+			WebUIAddress:    ":8080",
+			EnablePolicies:  true,
 			EnableBlocklist: true,
 		},
-		Blocklists:            blocklists,
-		Whitelist:             whitelist,
-		UpdateInterval:        24 * time.Hour,
-		AutoUpdateBlocklists:  true,
-		UpstreamDNSServers:    upstreams,
+		Blocklists:           blocklists,
+		Whitelist:            whitelist,
+		UpdateInterval:       24 * time.Hour,
+		AutoUpdateBlocklists: true,
+		UpstreamDNSServers:   upstreams,
 		Logging: config.LoggingConfig{
 			Level:  "info",
 			Format: "text",
@@ -203,7 +198,7 @@ func (i *PiholeImporter) extractZip() error {
 	if err != nil {
 		return fmt.Errorf("failed to open ZIP: %w", err)
 	}
-	defer r.Close()
+	defer func() { _ = r.Close() }()
 
 	// Extract all files
 	for _, f := range r.File {
@@ -211,15 +206,22 @@ func (i *PiholeImporter) extractZip() error {
 			return fmt.Errorf("failed to extract %s: %w", f.Name, err)
 		}
 
-		// Auto-detect file paths
+		// Auto-detect file paths (G305: validate path before using)
 		baseName := filepath.Base(f.Name)
+		cleanedPath := filepath.Clean(filepath.Join(tempDir, f.Name))
+		// Verify path is within tempDir
+		if !strings.HasPrefix(cleanedPath, filepath.Clean(tempDir)+string(os.PathSeparator)) &&
+			cleanedPath != filepath.Clean(tempDir) {
+			continue // Skip files with invalid paths
+		}
+
 		switch {
 		case strings.Contains(baseName, "gravity.db"):
-			i.gravityDB = filepath.Join(tempDir, f.Name)
+			i.gravityDB = cleanedPath
 		case strings.Contains(baseName, "pihole.toml"):
-			i.piholeConfig = filepath.Join(tempDir, f.Name)
+			i.piholeConfig = cleanedPath
 		case strings.Contains(baseName, "custom.list"):
-			i.customList = filepath.Join(tempDir, f.Name)
+			i.customList = cleanedPath
 		}
 	}
 
@@ -236,13 +238,20 @@ func (i *PiholeImporter) extractFile(f *zip.File, dest string) error {
 	// Create destination path
 	path := filepath.Join(dest, f.Name)
 
+	// Validate path to prevent directory traversal (G305)
+	cleanPath := filepath.Clean(path)
+	if !strings.HasPrefix(cleanPath, filepath.Clean(dest)+string(os.PathSeparator)) &&
+		cleanPath != filepath.Clean(dest) {
+		return fmt.Errorf("invalid file path: %s", f.Name)
+	}
+
 	// Create directory if needed
 	if f.FileInfo().IsDir() {
-		return os.MkdirAll(path, f.Mode())
+		return os.MkdirAll(cleanPath, f.Mode()&0750) // G301: Restrict directory permissions
 	}
 
 	// Create parent directories
-	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(cleanPath), 0750); err != nil { // G301: Use 0750 instead of 0755
 		return err
 	}
 
@@ -251,24 +260,40 @@ func (i *PiholeImporter) extractFile(f *zip.File, dest string) error {
 	if err != nil {
 		return err
 	}
-	defer rc.Close()
+	defer func() { _ = rc.Close() }()
 
-	// Create destination file
-	outFile, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, f.Mode())
+	// Create destination file with safe permissions (G304)
+	outFile, err := os.OpenFile(cleanPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, f.Mode()&0640)
 	if err != nil {
 		return err
 	}
-	defer outFile.Close()
+	defer func() { _ = outFile.Close() }()
 
-	// Copy contents
-	_, err = io.Copy(outFile, rc)
-	return err
+	// Copy contents with size limit to prevent decompression bombs (G110)
+	// Pi-hole databases are typically <100MB, limit to 500MB for safety
+	const maxSize = 500 * 1024 * 1024 // 500MB
+	limitedReader := io.LimitReader(rc, maxSize)
+	n, err := io.Copy(outFile, limitedReader)
+	if err != nil {
+		return err
+	}
+
+	// Check if we hit the limit
+	if n == maxSize {
+		// Check if there's more data
+		buf := make([]byte, 1)
+		if _, err := rc.Read(buf); err == nil {
+			return fmt.Errorf("file too large (>500MB): %s", f.Name)
+		}
+	}
+
+	return nil
 }
 
 // cleanup removes temporary directory
 func (i *PiholeImporter) cleanup() {
 	if i.tempDir != "" {
-		os.RemoveAll(i.tempDir)
+		_ = os.RemoveAll(i.tempDir)
 	}
 }
 
@@ -278,7 +303,7 @@ func (i *PiholeImporter) importBlocklists() ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	rows, err := db.Query(`
 		SELECT address, enabled
@@ -289,14 +314,14 @@ func (i *PiholeImporter) importBlocklists() ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var blocklists []string
 	for rows.Next() {
 		var address string
 		var enabled int
-		if err := rows.Scan(&address, &enabled); err != nil {
-			return nil, err
+		if scanErr := rows.Scan(&address, &enabled); scanErr != nil {
+			return nil, scanErr
 		}
 		blocklists = append(blocklists, address)
 	}
@@ -324,7 +349,7 @@ func (i *PiholeImporter) importDomainLists() (whitelist []string, blacklist []st
 	if err != nil {
 		return nil, nil, err
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	// Pi-hole domain types:
 	// 0 = whitelist exact
@@ -340,7 +365,7 @@ func (i *PiholeImporter) importDomainLists() (whitelist []string, blacklist []st
 	if err != nil {
 		return nil, nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var exactWhitelist, regexWhitelist int
 	var exactBlacklist, regexBlacklist int
@@ -547,7 +572,8 @@ func (i *PiholeImporter) WriteConfig(cfg *config.Config) error {
 	if i.output == "" || i.output == "-" {
 		fmt.Print(output.String())
 	} else {
-		if err := os.WriteFile(i.output, []byte(output.String()), 0644); err != nil {
+		// G306: Use 0600 for config file (owner read/write only)
+		if err := os.WriteFile(i.output, []byte(output.String()), 0600); err != nil {
 			return err
 		}
 		fmt.Printf("Config written to: %s\n", i.output)

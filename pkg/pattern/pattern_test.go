@@ -331,12 +331,12 @@ func TestMatcherInvalidPattern(t *testing.T) {
 
 func TestPatternTypeString(t *testing.T) {
 	tests := []struct {
-		pt   PatternType
 		want string
+		pt   PatternType
 	}{
-		{PatternTypeExact, "exact"},
-		{PatternTypeWildcard, "wildcard"},
-		{PatternTypeRegex, "regex"},
+		{"exact", PatternTypeExact},
+		{"wildcard", PatternTypeWildcard},
+		{"regex", PatternTypeRegex},
 	}
 
 	for _, tt := range tests {

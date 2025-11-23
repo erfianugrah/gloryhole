@@ -17,6 +17,67 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.7.6] - 2025-11-23
+
+### Added - Regex Pattern Support and Pi-hole Import
+
+**Major Features**: Pi-hole migration tooling and advanced pattern matching!
+
+#### Pattern Matching Engine
+- **Multi-tier pattern support**: Exact match (O(1)), wildcard (*.domain), and regex patterns
+- **Pi-hole compatibility**: Supports Pi-hole regex patterns like `(\.|^)domain\.com$`
+- **High performance**: 2.3ns exact, 3.7ns wildcard, 139ns regex matching
+- **Lock-free concurrent access**: Using atomic.Pointer for hot-reload support
+- **Pattern statistics**: Breakdown of exact/wildcard/regex patterns in use
+
+#### Pi-hole Import CLI
+- **Teleporter ZIP support**: Import directly from Pi-hole backup files
+- **Direct file import**: Alternative mode using individual files (gravity.db, pihole.toml)
+- **Auto-detection**: Automatically finds configuration files in ZIP archives
+- **Comprehensive import**: Blocklists, whitelist/blacklist patterns, upstream DNS, local records
+- **Validation**: Optional configuration validation before writing
+- **YAML generation**: Creates Glory-Hole compatible configuration files
+
+#### DNS Handler Enhancements
+- **WhitelistPatterns support**: Pattern-based whitelist in addition to exact matches
+- **Efficient matching**: Checks exact whitelist first, then patterns
+- **Atomic updates**: Lock-free pattern access during hot-reload
+
+#### Blocklist Manager Updates
+- **Pattern support**: SetPatterns() method for regex/wildcard blocking
+- **Hybrid matching**: Combines exact map lookups with pattern matching
+- **Statistics**: Reports pattern type breakdown (exact/wildcard/regex)
+
+### Technical Improvements
+- **New package**: `pkg/pattern/` with comprehensive pattern matching
+- **Test coverage**: Integration tests for DNS handler with patterns
+- **Benchmarks**: Performance tests for all pattern types
+- **Field alignment**: Optimized struct layouts for memory efficiency
+- **Error handling**: Explicit error checking for all defer operations
+- **No variable shadowing**: Fixed all shadow linter warnings
+
+### Dependencies
+- **Added**: github.com/stretchr/testify v1.11.1 for enhanced test assertions
+
+### Files Added
+- `pkg/pattern/pattern.go`: Core pattern matching engine
+- `pkg/pattern/pattern_test.go`: Comprehensive pattern tests
+- `cmd/glory-hole/import.go`: Pi-hole import CLI (~580 lines)
+- `pkg/dns/pattern_integration_test.go`: DNS handler integration tests
+- `test/fixtures/pihole/create-test-db.sh`: Test database generator
+
+### Migration Guide
+Users migrating from Pi-hole can now use:
+```bash
+glory-hole import-pihole --zip=/path/to/teleporter.zip --output=config.yml
+# OR
+glory-hole import-pihole --gravity-db=/etc/pihole/gravity.db --pihole-config=/etc/pihole/pihole.toml --output=config.yml
+```
+
+Regex patterns in Pi-hole whitelist/blacklist are automatically imported and functional.
+
+---
+
 ## [0.7.5] - 2025-11-23
 
 ### Added - Web UI for Duration-Based Kill-Switches

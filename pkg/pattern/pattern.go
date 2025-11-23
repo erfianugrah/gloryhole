@@ -39,9 +39,9 @@ func (pt PatternType) String() string {
 
 // Pattern represents a domain matching pattern.
 type Pattern struct {
-	Raw      string         // Original pattern string
-	Type     PatternType    // Pattern type
-	Compiled *regexp.Regexp // Compiled regex (only for regex patterns)
+	Compiled *regexp.Regexp
+	Raw      string
+	Type     PatternType
 }
 
 // isRegexPattern detects if a pattern contains regex metacharacters.
