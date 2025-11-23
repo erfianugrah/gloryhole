@@ -19,6 +19,7 @@ const (
 	RecordTypePTR   RecordType = "PTR"
 	RecordTypeNS    RecordType = "NS"
 	RecordTypeSOA   RecordType = "SOA"
+	RecordTypeCAA   RecordType = "CAA"
 )
 
 // LocalRecord represents a single local DNS record
@@ -28,6 +29,8 @@ type LocalRecord struct {
 	Target     string
 	Ns         string
 	Mbox       string
+	CaaTag     string // CAA: Property tag (issue/issuewild/iodef)
+	CaaValue   string // CAA: Property value (CA domain or URL)
 	IPs        []net.IP
 	TxtRecords []string
 	Serial     uint32
@@ -39,6 +42,7 @@ type LocalRecord struct {
 	Priority   uint16
 	Weight     uint16
 	Port       uint16
+	CaaFlag    uint8 // CAA: Flags (usually 0 or 128)
 	Wildcard   bool
 	Enabled    bool
 }
@@ -388,6 +392,35 @@ func (m *Manager) LookupSOA(domain string) []*LocalRecord {
 	return result
 }
 
+// LookupCAA looks up CAA records for a domain (Certificate Authority Authorization)
+// Returns list of records specifying which CAs can issue certificates
+func (m *Manager) LookupCAA(domain string) []*LocalRecord {
+	domain = normalizeDomain(domain)
+
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	result := make([]*LocalRecord, 0)
+
+	// Check exact matches first
+	if records, exists := m.records[domain]; exists {
+		for _, r := range records {
+			if r.Type == RecordTypeCAA && r.Enabled {
+				result = append(result, r)
+			}
+		}
+	}
+
+	// Check wildcard matches
+	for _, wc := range m.wildcards {
+		if wc.Type == RecordTypeCAA && wc.Enabled && matchesWildcard(domain, wc.Domain) {
+			result = append(result, wc)
+		}
+	}
+
+	return result
+}
+
 // ResolveCNAME follows CNAME chains and returns the final A/AAAA records
 // Prevents infinite loops with max depth of 10
 func (m *Manager) ResolveCNAME(domain string, maxDepth int) ([]net.IP, uint32, bool) {
@@ -612,6 +645,15 @@ func NewSOARecord(domain, ns, mbox string, serial, refresh, retry, expire, mintt
 	return r
 }
 
+// NewCAARecord creates a new CAA record
+func NewCAARecord(domain, tag, value string, flag uint8) *LocalRecord {
+	r := NewLocalRecord(domain, RecordTypeCAA)
+	r.CaaTag = tag
+	r.CaaValue = value
+	r.CaaFlag = flag
+	return r
+}
+
 // Clone creates a deep copy of the record
 func (r *LocalRecord) Clone() *LocalRecord {
 	clone := &LocalRecord{
@@ -631,6 +673,9 @@ func (r *LocalRecord) Clone() *LocalRecord {
 		Retry:    r.Retry,
 		Expire:   r.Expire,
 		Minttl:   r.Minttl,
+		CaaTag:   r.CaaTag,
+		CaaValue: r.CaaValue,
+		CaaFlag:  r.CaaFlag,
 	}
 
 	if len(r.IPs) > 0 {

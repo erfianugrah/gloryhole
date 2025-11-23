@@ -38,4 +38,7 @@ var (
 
 	// ErrInvalidSOA is returned when a SOA record is invalid
 	ErrInvalidSOA = errors.New("SOA record must have primary nameserver (ns) and responsible person (mbox)")
+
+	// ErrInvalidCAA is returned when a CAA record is invalid
+	ErrInvalidCAA = errors.New("CAA record must have tag and value")
 )

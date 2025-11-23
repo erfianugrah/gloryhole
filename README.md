@@ -68,6 +68,7 @@ A high-performance DNS server written in Go, designed as a modern, extensible re
   - SRV records (service discovery)
   - NS records (nameserver delegation)
   - SOA records (zone authority)
+  - CAA records (certificate authority authorization)
   - Wildcard domain support (*.local)
   - Multiple IPs per record (round-robin)
   - Custom TTL values per record
@@ -434,6 +435,7 @@ Glory-Hole supports custom DNS records for your local network, perfect for resol
 - **SRV Records**: Service discovery with priority/weight load balancing
 - **NS Records**: Nameserver delegation for subdomains
 - **SOA Records**: Start of Authority for zone management
+- **CAA Records**: Certificate Authority Authorization for SSL/TLS security
 - **Wildcard Domains**: Use `*.dev.local` to match any subdomain (one level only)
 - **Multiple IPs**: Assign multiple IP addresses to a single domain
 - **Custom TTL**: Set custom time-to-live values (default: 300 seconds)
@@ -546,7 +548,7 @@ Glory-Hole processes DNS requests in the following order:
 
 1. **Cache Check**: Return cached response if available and not expired
 2. **Local DNS Records**: Check for custom DNS records (highest priority for authoritative answers)
-   - Supports A, AAAA, CNAME, TXT, MX, PTR, SRV, NS, SOA record types
+   - Supports A, AAAA, CNAME, TXT, MX, PTR, SRV, NS, SOA, CAA record types
    - Exact domain matches and wildcard patterns (*.dev.local)
    - CNAME chain resolution with loop detection
    - EDNS0 support for all responses

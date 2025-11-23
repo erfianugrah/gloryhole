@@ -30,6 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **SRV Records**: Service discovery with priority/weight load balancing
 - **NS Records**: Nameserver delegation for subdomains
 - **SOA Records**: Start of Authority for zone management (all 7 fields)
+- **CAA Records**: Certificate Authority Authorization for SSL/TLS security
 
 #### EDNS0 Support
 - **RFC 6891 Compliant**: Automatic Extended DNS mechanism support
@@ -40,9 +41,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 #### Features
 - Priority-based routing for MX and SRV records
 - Multi-string support for TXT records (RFC 1035 compliant, 255 char limit per string)
+- Tag validation for CAA records (issue/issuewild/iodef)
 - Wildcard support for all new record types
 - Hot-reload configuration support
-- Comprehensive test coverage (60 new tests, 100% passing)
+- Comprehensive test coverage (74 new tests, 100% passing)
 
 ---
 

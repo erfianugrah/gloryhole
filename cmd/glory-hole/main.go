@@ -319,6 +319,18 @@ func main() {
 			}
 			record = localrecords.NewSOARecord(entry.Domain, entry.Ns, entry.Mbox, serial, refresh, retry, expire, minttl)
 
+		case "CAA":
+			// Create CAA record
+			if entry.CaaTag == "" || entry.CaaValue == "" {
+				logger.Error("CAA record requires caa_tag and caa_value fields", "domain", entry.Domain)
+				continue
+			}
+			var flag uint8 = 0 // Default flag is 0 (non-critical)
+			if entry.CaaFlag != nil {
+				flag = *entry.CaaFlag
+			}
+			record = localrecords.NewCAARecord(entry.Domain, entry.CaaTag, entry.CaaValue, flag)
+
 		default:
 			logger.Error("Unsupported record type", "domain", entry.Domain, "type", entry.Type)
 			continue
@@ -588,6 +600,14 @@ func main() {
 							minttl = *entry.Minttl
 						}
 						record = localrecords.NewSOARecord(entry.Domain, entry.Ns, entry.Mbox, serial, refresh, retry, expire, minttl)
+					}
+				case "CAA":
+					if entry.CaaTag != "" && entry.CaaValue != "" {
+						var flag uint8 = 0
+						if entry.CaaFlag != nil {
+							flag = *entry.CaaFlag
+						}
+						record = localrecords.NewCAARecord(entry.Domain, entry.CaaTag, entry.CaaValue, flag)
 					}
 					}
 

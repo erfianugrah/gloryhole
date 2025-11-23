@@ -435,6 +435,29 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 				h.writeMsg(w, msg)
 				return
 			}
+
+		case dns.TypeCAA:
+			// Check for CAA records (Certificate Authority Authorization)
+			records := h.LocalRecords.LookupCAA(domain)
+			if len(records) > 0 {
+				for _, rec := range records {
+					rr := &dns.CAA{
+						Hdr: dns.RR_Header{
+							Name:   domain,
+							Rrtype: dns.TypeCAA,
+							Class:  dns.ClassINET,
+							Ttl:    rec.TTL,
+						},
+						Flag:  rec.CaaFlag,
+						Tag:   rec.CaaTag,
+						Value: rec.CaaValue,
+					}
+					msg.Answer = append(msg.Answer, rr)
+				}
+				responseCode = dns.RcodeSuccess
+				h.writeMsg(w, msg)
+				return
+			}
 		}
 	}
 

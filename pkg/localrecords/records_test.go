@@ -2097,3 +2097,275 @@ func TestAddRecord_SOARecord_CaseInsensitive(t *testing.T) {
 		}
 	}
 }
+
+// ========================
+// CAA Record Tests
+// ========================
+
+func TestAddRecord_CAARecord_Issue(t *testing.T) {
+	mgr := NewManager()
+
+	record := NewCAARecord("example.local", "issue", "letsencrypt.org", 0)
+	if err := mgr.AddRecord(record); err != nil {
+		t.Fatalf("AddRecord() error = %v", err)
+	}
+
+	records := mgr.LookupCAA("example.local")
+	if len(records) == 0 {
+		t.Fatal("CAA record not found")
+	}
+
+	if records[0].CaaTag != "issue" {
+		t.Errorf("expected tag 'issue', got '%s'", records[0].CaaTag)
+	}
+	if records[0].CaaValue != "letsencrypt.org" {
+		t.Errorf("expected value 'letsencrypt.org', got '%s'", records[0].CaaValue)
+	}
+	if records[0].CaaFlag != 0 {
+		t.Errorf("expected flag 0, got %d", records[0].CaaFlag)
+	}
+}
+
+func TestAddRecord_CAARecord_IssueWild(t *testing.T) {
+	mgr := NewManager()
+
+	record := NewCAARecord("example.local", "issuewild", "letsencrypt.org", 0)
+	if err := mgr.AddRecord(record); err != nil {
+		t.Fatalf("AddRecord() error = %v", err)
+	}
+
+	records := mgr.LookupCAA("example.local")
+	if len(records) == 0 {
+		t.Fatal("CAA record not found")
+	}
+
+	if records[0].CaaTag != "issuewild" {
+		t.Errorf("expected tag 'issuewild', got '%s'", records[0].CaaTag)
+	}
+}
+
+func TestAddRecord_CAARecord_Iodef(t *testing.T) {
+	mgr := NewManager()
+
+	record := NewCAARecord("example.local", "iodef", "mailto:security@example.local", 0)
+	if err := mgr.AddRecord(record); err != nil {
+		t.Fatalf("AddRecord() error = %v", err)
+	}
+
+	records := mgr.LookupCAA("example.local")
+	if len(records) == 0 {
+		t.Fatal("CAA record not found")
+	}
+
+	if records[0].CaaTag != "iodef" {
+		t.Errorf("expected tag 'iodef', got '%s'", records[0].CaaTag)
+	}
+	if records[0].CaaValue != "mailto:security@example.local" {
+		t.Errorf("expected value 'mailto:security@example.local', got '%s'", records[0].CaaValue)
+	}
+}
+
+func TestAddRecord_CAARecord_CriticalFlag(t *testing.T) {
+	mgr := NewManager()
+
+	record := NewCAARecord("example.local", "issue", "letsencrypt.org", 128)
+	if err := mgr.AddRecord(record); err != nil {
+		t.Fatalf("AddRecord() error = %v", err)
+	}
+
+	records := mgr.LookupCAA("example.local")
+	if len(records) == 0 {
+		t.Fatal("CAA record not found")
+	}
+
+	if records[0].CaaFlag != 128 {
+		t.Errorf("expected flag 128, got %d", records[0].CaaFlag)
+	}
+}
+
+func TestAddRecord_CAARecord_Multiple(t *testing.T) {
+	mgr := NewManager()
+
+	// Add multiple CAA records for same domain
+	caa1 := NewCAARecord("example.local", "issue", "letsencrypt.org", 0)
+	caa2 := NewCAARecord("example.local", "issue", "digicert.com", 0)
+	caa3 := NewCAARecord("example.local", "iodef", "mailto:security@example.local", 0)
+
+	if err := mgr.AddRecord(caa1); err != nil {
+		t.Fatalf("AddRecord(caa1) error = %v", err)
+	}
+	if err := mgr.AddRecord(caa2); err != nil {
+		t.Fatalf("AddRecord(caa2) error = %v", err)
+	}
+	if err := mgr.AddRecord(caa3); err != nil {
+		t.Fatalf("AddRecord(caa3) error = %v", err)
+	}
+
+	records := mgr.LookupCAA("example.local")
+	if len(records) != 3 {
+		t.Fatalf("expected 3 CAA records, got %d", len(records))
+	}
+}
+
+func TestLookupCAA_NotFound(t *testing.T) {
+	mgr := NewManager()
+
+	records := mgr.LookupCAA("nonexistent.local")
+	if len(records) != 0 {
+		t.Errorf("expected no records, got %d", len(records))
+	}
+}
+
+func TestAddRecord_CAARecord_Wildcard(t *testing.T) {
+	mgr := NewManager()
+
+	record := NewCAARecord("*.example.local", "issue", "letsencrypt.org", 0)
+	record.Wildcard = true
+
+	if err := mgr.AddRecord(record); err != nil {
+		t.Fatalf("AddRecord() error = %v", err)
+	}
+
+	// Test wildcard matching
+	records := mgr.LookupCAA("subdomain.example.local")
+	if len(records) == 0 {
+		t.Fatal("wildcard CAA record not found")
+	}
+
+	if records[0].CaaTag != "issue" {
+		t.Errorf("expected tag 'issue', got '%s'", records[0].CaaTag)
+	}
+
+	// Test non-matching domain
+	records = mgr.LookupCAA("example.local")
+	if len(records) != 0 {
+		t.Error("wildcard should not match parent domain")
+	}
+}
+
+func TestAddRecord_CAARecord_Disabled(t *testing.T) {
+	mgr := NewManager()
+
+	record := NewCAARecord("example.local", "issue", "letsencrypt.org", 0)
+	record.Enabled = false
+
+	if err := mgr.AddRecord(record); err != nil {
+		t.Fatalf("AddRecord() error = %v", err)
+	}
+
+	records := mgr.LookupCAA("example.local")
+	if len(records) != 0 {
+		t.Error("disabled CAA record should not be returned")
+	}
+}
+
+func TestAddRecord_CAARecord_EmptyTag(t *testing.T) {
+	mgr := NewManager()
+
+	record := NewLocalRecord("example.local", RecordTypeCAA)
+	record.CaaTag = ""
+	record.CaaValue = "letsencrypt.org"
+
+	err := mgr.AddRecord(record)
+	if err == nil {
+		t.Error("expected error for CAA record with empty tag")
+	}
+	if err != ErrInvalidCAA {
+		t.Errorf("expected ErrInvalidCAA, got %v", err)
+	}
+}
+
+func TestAddRecord_CAARecord_EmptyValue(t *testing.T) {
+	mgr := NewManager()
+
+	record := NewLocalRecord("example.local", RecordTypeCAA)
+	record.CaaTag = "issue"
+	record.CaaValue = ""
+
+	err := mgr.AddRecord(record)
+	if err == nil {
+		t.Error("expected error for CAA record with empty value")
+	}
+	if err != ErrInvalidCAA {
+		t.Errorf("expected ErrInvalidCAA, got %v", err)
+	}
+}
+
+func TestAddRecord_CAARecord_InvalidTag(t *testing.T) {
+	mgr := NewManager()
+
+	record := NewLocalRecord("example.local", RecordTypeCAA)
+	record.CaaTag = "invalid"
+	record.CaaValue = "letsencrypt.org"
+
+	err := mgr.AddRecord(record)
+	if err == nil {
+		t.Error("expected error for CAA record with invalid tag")
+	}
+	if err != ErrInvalidCAA {
+		t.Errorf("expected ErrInvalidCAA, got %v", err)
+	}
+}
+
+func TestAddRecord_CAARecord_DomainNormalization(t *testing.T) {
+	mgr := NewManager()
+
+	record := NewCAARecord("EXAMPLE.LOCAL", "issue", "letsencrypt.org", 0)
+	if err := mgr.AddRecord(record); err != nil {
+		t.Fatalf("AddRecord() error = %v", err)
+	}
+
+	// Lookup with different case
+	records := mgr.LookupCAA("example.local")
+	if len(records) == 0 {
+		t.Fatal("CAA record not found (case normalization failed)")
+	}
+
+	if records[0].Domain != "example.local." {
+		t.Errorf("expected normalized domain example.local., got %s", records[0].Domain)
+	}
+}
+
+func TestAddRecord_CAARecord_TTL(t *testing.T) {
+	mgr := NewManager()
+
+	record := NewCAARecord("example.local", "issue", "letsencrypt.org", 0)
+	record.TTL = 7200
+
+	if err := mgr.AddRecord(record); err != nil {
+		t.Fatalf("AddRecord() error = %v", err)
+	}
+
+	records := mgr.LookupCAA("example.local")
+	if len(records) == 0 {
+		t.Fatal("CAA record not found")
+	}
+
+	if records[0].TTL != 7200 {
+		t.Errorf("expected TTL 7200, got %d", records[0].TTL)
+	}
+}
+
+func TestAddRecord_CAARecord_CaseInsensitive(t *testing.T) {
+	mgr := NewManager()
+
+	record := NewCAARecord("Example.Local", "issue", "letsencrypt.org", 0)
+	if err := mgr.AddRecord(record); err != nil {
+		t.Fatalf("AddRecord() error = %v", err)
+	}
+
+	// Test lookup with different case combinations
+	testCases := []string{
+		"example.local",
+		"EXAMPLE.LOCAL",
+		"Example.Local",
+		"eXaMpLe.LoCaL",
+	}
+
+	for _, tc := range testCases {
+		records := mgr.LookupCAA(tc)
+		if len(records) == 0 {
+			t.Errorf("CAA record not found for %s", tc)
+		}
+	}
+}

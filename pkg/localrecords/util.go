@@ -128,6 +128,24 @@ func validateRecord(record *LocalRecord) error {
 			return ErrInvalidSOA
 		}
 
+	case RecordTypeCAA:
+		// CAA records must have tag and value
+		if record.CaaTag == "" {
+			return ErrInvalidCAA
+		}
+		if record.CaaValue == "" {
+			return ErrInvalidCAA
+		}
+		// Validate tag (must be issue, issuewild, or iodef)
+		validTags := map[string]bool{
+			"issue":     true,
+			"issuewild": true,
+			"iodef":     true,
+		}
+		if !validTags[record.CaaTag] {
+			return ErrInvalidCAA
+		}
+
 	default:
 		return ErrInvalidRecord
 	}

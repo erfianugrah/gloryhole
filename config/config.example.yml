@@ -118,6 +118,26 @@ local_records:
       minttl: 300
       ttl: 86400
 
+    # CAA record (Certificate Authority Authorization)
+    - domain: "example.com"
+      type: "CAA"
+      caa_tag: "issue"
+      caa_value: "letsencrypt.org"
+      caa_flag: 0
+      ttl: 300
+
+    - domain: "example.com"
+      type: "CAA"
+      caa_tag: "issuewild"
+      caa_value: "letsencrypt.org"
+      caa_flag: 0
+
+    - domain: "example.com"
+      type: "CAA"
+      caa_tag: "iodef"
+      caa_value: "mailto:security@example.com"
+      caa_flag: 0
+
 # Database (Query Logging & Statistics)
 database:
   enabled: true

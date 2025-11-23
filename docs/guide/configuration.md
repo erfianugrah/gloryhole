@@ -626,6 +626,45 @@ Glory-Hole automatically resolves CNAME chains up to 10 levels:
 - Zone authority declaration
 - Zone transfer configuration
 
+#### CAA Records (Certificate Authority Authorization)
+
+```yaml
+- domain: "example.com"
+  type: "CAA"
+  caa_tag: "issue"
+  caa_value: "letsencrypt.org"
+  caa_flag: 0
+  ttl: 300
+
+- domain: "example.com"
+  type: "CAA"
+  caa_tag: "issuewild"
+  caa_value: "letsencrypt.org"
+  caa_flag: 0
+
+- domain: "example.com"
+  type: "CAA"
+  caa_tag: "iodef"
+  caa_value: "mailto:security@example.com"
+  caa_flag: 0
+```
+
+**Fields:**
+- `caa_tag`: Property tag - must be one of:
+  - `issue`: Authorize CA to issue certificates for this domain
+  - `issuewild`: Authorize CA to issue wildcard certificates
+  - `iodef`: URL/email for reporting policy violations
+- `caa_value`: CA domain name (for issue/issuewild) or contact URL (for iodef)
+- `caa_flag`: Flags field (optional, defaults to 0)
+  - `0`: Non-critical (default)
+  - `128`: Critical - CAs must understand this property
+
+**Use cases:**
+- Control which Certificate Authorities can issue SSL/TLS certificates
+- Prevent unauthorized certificate issuance
+- Specify notification contacts for policy violations
+- Enhanced domain security and certificate transparency
+
 ### EDNS0 Support
 
 Glory-Hole automatically handles EDNS0 (Extension Mechanisms for DNS):

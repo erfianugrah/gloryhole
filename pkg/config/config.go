@@ -54,6 +54,7 @@ type LocalRecordsConfig struct {
 
 // LocalRecordEntry represents a single local DNS record in the config
 type LocalRecordEntry struct {
+	CaaFlag    *uint8   `yaml:"caa_flag,omitempty"`    // CAA: Flags (usually 0 or 128)
 	Priority   *uint16  `yaml:"priority,omitempty"`
 	Weight     *uint16  `yaml:"weight,omitempty"`
 	Port       *uint16  `yaml:"port,omitempty"`
@@ -62,6 +63,8 @@ type LocalRecordEntry struct {
 	Refresh    *uint32  `yaml:"refresh,omitempty"`
 	Retry      *uint32  `yaml:"retry,omitempty"`
 	Serial     *uint32  `yaml:"serial,omitempty"`
+	CaaTag     string   `yaml:"caa_tag,omitempty"`     // CAA: Tag (issue/issuewild/iodef)
+	CaaValue   string   `yaml:"caa_value,omitempty"`   // CAA: Value (CA domain or URL)
 	Mbox       string   `yaml:"mbox,omitempty"`
 	Ns         string   `yaml:"ns,omitempty"`
 	Target     string   `yaml:"target"`
