@@ -1,8 +1,8 @@
 # Glory-Hole Testing Documentation
 
-**Last Updated**: 2025-11-21  
-**Version**: 0.5.0-dev  
-**Test Coverage**: 82.5% average across all packages  
+**Last Updated**: 2025-11-23
+**Version**: 0.7.7
+**Test Coverage**: 82.5% average across all packages
 **Test Lines**: 9,209 lines of test code
 
 This document describes the testing strategy, test coverage, and how to run tests for Glory-Hole DNS server.

@@ -1,8 +1,8 @@
 # Glory-Hole DNS Server - Development Roadmap
 
-**Last Updated**: 2025-11-22
-**Current Version**: v0.7.0
-**Next Releases**: v0.7.1 (Technical Excellence), v0.8.0 (Functional UI)
+**Last Updated**: 2025-11-23
+**Current Version**: v0.7.7
+**Next Releases**: v0.8.0 (Functional UI), v0.9.0 (Advanced Features)
 
 ---
 

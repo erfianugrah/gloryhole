@@ -39,37 +39,37 @@ Glory-Hole is built using a modular architecture with clear separation of concer
 
 ### Component Hierarchy
 
-```
-┌─────────────────────────────────────────┐
-│              API Server                  │
-│         (REST API + Web UI)              │
-└─────────────────┬───────────────────────┘
-                  │
-┌─────────────────▼───────────────────────┐
-│            DNS Handler                   │
-│   (Request Processing & Coordination)    │
-└─┬──┬──┬──┬──┬──┬──┬─────────────────────┘
-  │  │  │  │  │  │  │
-  │  │  │  │  │  │  └──────► Telemetry
-  │  │  │  │  │  │              (Metrics)
-  │  │  │  │  │  │
-  │  │  │  │  │  └─────────► Storage
-  │  │  │  │  │                (Query Logging)
-  │  │  │  │  │
-  │  │  │  │  └────────────► Forwarder
-  │  │  │  │                   (Upstream DNS)
-  │  │  │  │
-  │  │  │  └───────────────► Policy Engine
-  │  │  │                      (Rule Evaluation)
-  │  │  │
-  │  │  └──────────────────► Local Records
-  │  │                         (A/AAAA/CNAME)
-  │  │
-  │  └─────────────────────► Cache
-  │                            (Response Caching)
-  │
-  └────────────────────────► Blocklist Manager
-                               (Domain Filtering)
+```mermaid
+graph TB
+    API["API Server<br/>(REST API + Web UI)"]
+    Handler["DNS Handler<br/>(Request Processing & Coordination)"]
+
+    Telemetry["Telemetry<br/>(Metrics)"]
+    Storage["Storage<br/>(Query Logging)"]
+    Forwarder["Forwarder<br/>(Upstream DNS)"]
+    PolicyEngine["Policy Engine<br/>(Rule Evaluation)"]
+    LocalRecords["Local Records<br/>(A/AAAA/CNAME)"]
+    Cache["Cache<br/>(Response Caching)"]
+    Blocklist["Blocklist Manager<br/>(Domain Filtering)"]
+
+    API --> Handler
+    Handler --> Blocklist
+    Handler --> Cache
+    Handler --> LocalRecords
+    Handler --> PolicyEngine
+    Handler --> Forwarder
+    Handler --> Storage
+    Handler --> Telemetry
+
+    style API fill:#d1ecf1
+    style Handler fill:#d4edda
+    style Blocklist fill:#fff3cd
+    style Cache fill:#fff3cd
+    style LocalRecords fill:#fff3cd
+    style PolicyEngine fill:#fff3cd
+    style Forwarder fill:#e7f3ff
+    style Storage fill:#f8d7da
+    style Telemetry fill:#f8d7da
 ```
 
 ---
@@ -174,22 +174,29 @@ type Handler interface {
 
 ### Data Flow
 
-```
-Client Query → UDP/TCP Listener → Handler
-    ↓
-Cache Check (fast path)
-    ↓ (miss)
-Local Records Check
-    ↓ (miss)
-Policy Engine Evaluation
-    ↓
-Blocklist Check (lock-free)
-    ↓ (not blocked)
-Upstream Forward
-    ↓
-Cache Response
-    ↓
-Return to Client
+```mermaid
+flowchart TD
+    A[Client Query] --> B[UDP/TCP Listener]
+    B --> C[Handler]
+    C --> D{Cache Check}
+    D -->|Hit| M[Return Cached Response]
+    D -->|Miss| E{Local Records Check}
+    E -->|Found| M
+    E -->|Miss| F[Policy Engine Evaluation]
+    F --> G{Blocklist Check}
+    G -->|Blocked| N[Return NXDOMAIN]
+    G -->|Not Blocked| H[Upstream Forward]
+    H --> I[Receive Response]
+    I --> J[Cache Response]
+    J --> K[Return to Client]
+    M --> K
+    N --> K
+
+    style D fill:#fff3cd
+    style E fill:#d4edda
+    style F fill:#e7f3ff
+    style G fill:#ffcccc
+    style H fill:#d1ecf1
 ```
 
 ### Performance Characteristics

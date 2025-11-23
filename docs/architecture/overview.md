@@ -72,55 +72,41 @@ Glory-Hole is a next-generation DNS server that combines the simplicity of Pi-ho
 
 ### High-Level Architecture
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                        Clients                               │
-│   (Phones, Laptops, IoT Devices, Servers, etc.)             │
-└────────────────┬────────────────────────────────────────────┘
-                 │ DNS Queries (UDP/TCP Port 53)
-                 v
-┌─────────────────────────────────────────────────────────────┐
-│                   Glory-Hole DNS Server                      │
-│                                                              │
-│  ┌──────────────────────────────────────────────────────┐  │
-│  │              DNS Request Handler                      │  │
-│  │  • Client Identification  • Rate Limiting             │  │
-│  │  • Cache Management       • Policy Evaluation         │  │
-│  └──────────────────────────────────────────────────────┘  │
-│                                                              │
-│  ┌──────────────────────────────────────────────────────┐  │
-│  │              Management Components                    │  │
-│  │  ┌──────────┐ ┌──────────┐ ┌──────────┐             │  │
-│  │  │ Client   │ │  Group   │ │  Local   │             │  │
-│  │  │ Manager  │ │ Manager  │ │  DNS     │             │  │
-│  │  └──────────┘ └──────────┘ └──────────┘             │  │
-│  │  ┌──────────┐ ┌──────────┐ ┌──────────┐             │  │
-│  │  │   Rate   │ │  Policy  │ │ Blocklist│             │  │
-│  │  │ Limiter  │ │  Engine  │ │ Manager  │             │  │
-│  │  └──────────┘ └──────────┘ └──────────┘             │  │
-│  └──────────────────────────────────────────────────────┘  │
-│                                                              │
-│  ┌──────────────────────────────────────────────────────┐  │
-│  │              Storage Layer                            │  │
-│  │  • SQLite Database   • In-Memory Cache                │  │
-│  │  • Query Logs        • Statistics                     │  │
-│  └──────────────────────────────────────────────────────┘  │
-│                                                              │
-│  ┌──────────────────────────────────────────────────────┐  │
-│  │              Web UI & REST API (Port 8080)            │  │
-│  │  • Dashboard         • Configuration                  │  │
-│  │  • Client Management • Group Management               │  │
-│  │  • Query Logs        • Statistics                     │  │
-│  └──────────────────────────────────────────────────────┘  │
-└────────────────┬───────────────────────────┬────────────────┘
-                 │                           │
-                 v                           v
-┌────────────────────────────┐  ┌─────────────────────────┐
-│   Upstream DNS Servers     │  │   Conditional Forward   │
-│   • Cloudflare (1.1.1.1)   │  │   • Corporate DNS       │
-│   • Google (8.8.8.8)       │  │   • Local Router        │
-│   • Custom                 │  │   • Private Networks    │
-└────────────────────────────┘  └─────────────────────────┘
+```mermaid
+graph TB
+    Clients["Clients<br/>(Phones, Laptops, IoT Devices, Servers)"]
+
+    subgraph GloryHole["Glory-Hole DNS Server"]
+        Handler["DNS Request Handler<br/>• Client Identification<br/>• Rate Limiting<br/>• Cache Management<br/>• Policy Evaluation"]
+
+        subgraph Management["Management Components"]
+            ClientMgr["Client Manager"]
+            GroupMgr["Group Manager"]
+            LocalDNS["Local DNS"]
+            RateLimiter["Rate Limiter"]
+            PolicyEngine["Policy Engine"]
+            BlocklistMgr["Blocklist Manager"]
+        end
+
+        Storage["Storage Layer<br/>• SQLite Database<br/>• In-Memory Cache<br/>• Query Logs<br/>• Statistics"]
+        WebUI["Web UI & REST API (Port 8080)<br/>• Dashboard<br/>• Configuration<br/>• Client Management<br/>• Group Management<br/>• Query Logs<br/>• Statistics"]
+    end
+
+    Upstream["Upstream DNS Servers<br/>• Cloudflare (1.1.1.1)<br/>• Google (8.8.8.8)<br/>• Custom"]
+    Conditional["Conditional Forward<br/>• Corporate DNS<br/>• Local Router<br/>• Private Networks"]
+
+    Clients -->|"DNS Queries<br/>(UDP/TCP Port 53)"| Handler
+    Handler --> Management
+    Handler --> Storage
+    Handler --> Upstream
+    Handler --> Conditional
+    WebUI -.-> Handler
+
+    style GloryHole fill:#e1f5ff
+    style Management fill:#f0f0f0
+    style Handler fill:#d4edda
+    style Storage fill:#fff3cd
+    style WebUI fill:#d1ecf1
 ```
 
 ### Technology Stack
@@ -224,54 +210,52 @@ type ClientManager interface {
 
 ### Layered Architecture
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                     Presentation Layer                       │
-│  ┌────────────────┐  ┌────────────────┐  ┌──────────────┐  │
-│  │   REST API     │  │    Web UI      │  │  DNS Server  │  │
-│  │   (HTTP/JSON)  │  │  (Static HTML) │  │  (UDP/TCP)   │  │
-│  └────────────────┘  └────────────────┘  └──────────────┘  │
-└─────────────────────────────────────────────────────────────┘
-                              │
-┌─────────────────────────────────────────────────────────────┐
-│                      Service Layer                           │
-│  ┌────────────┐ ┌────────────┐ ┌────────────┐              │
-│  │   Client   │ │   Group    │ │  Blocklist │              │
-│  │  Service   │ │  Service   │ │  Service   │              │
-│  └────────────┘ └────────────┘ └────────────┘              │
-│  ┌────────────┐ ┌────────────┐ ┌────────────┐              │
-│  │   Query    │ │  Stats     │ │   Policy   │              │
-│  │  Service   │ │  Service   │ │  Service   │              │
-│  └────────────┘ └────────────┘ └────────────┘              │
-└─────────────────────────────────────────────────────────────┘
-                              │
-┌─────────────────────────────────────────────────────────────┐
-│                      Domain Layer                            │
-│  ┌────────────┐ ┌────────────┐ ┌────────────┐              │
-│  │   Client   │ │   Group    │ │   Query    │              │
-│  │   Manager  │ │   Manager  │ │   Context  │              │
-│  └────────────┘ └────────────┘ └────────────┘              │
-│  ┌────────────┐ ┌────────────┐ ┌────────────┐              │
-│  │    Rate    │ │   Policy   │ │   Cache    │              │
-│  │  Limiter   │ │   Engine   │ │   Manager  │              │
-│  └────────────┘ └────────────┘ └────────────┘              │
-│  ┌────────────┐ ┌────────────┐ ┌────────────┐              │
-│  │   Local    │ │   CNAME    │ │Conditional │              │
-│  │   Records  │ │   Manager  │ │ Forwarder  │              │
-│  └────────────┘ └────────────┘ └────────────┘              │
-└─────────────────────────────────────────────────────────────┘
-                              │
-┌─────────────────────────────────────────────────────────────┐
-│                    Infrastructure Layer                      │
-│  ┌────────────┐ ┌────────────┐ ┌────────────┐              │
-│  │   SQLite   │ │  In-Memory │ │    File    │              │
-│  │  Storage   │ │   Cache    │ │   System   │              │
-│  └────────────┘ └────────────┘ └────────────┘              │
-│  ┌────────────┐ ┌────────────┐ ┌────────────┐              │
-│  │  Network   │ │   Logger   │ │  Metrics   │              │
-│  │    I/O     │ │            │ │ Collector  │              │
-│  └────────────┘ └────────────┘ └────────────┘              │
-└─────────────────────────────────────────────────────────────┘
+```mermaid
+graph TB
+    subgraph Presentation["Presentation Layer"]
+        RESTAPI["REST API<br/>(HTTP/JSON)"]
+        WebUI["Web UI<br/>(Static HTML)"]
+        DNSServer["DNS Server<br/>(UDP/TCP)"]
+    end
+
+    subgraph Service["Service Layer"]
+        ClientSvc["Client Service"]
+        GroupSvc["Group Service"]
+        BlocklistSvc["Blocklist Service"]
+        QuerySvc["Query Service"]
+        StatsSvc["Stats Service"]
+        PolicySvc["Policy Service"]
+    end
+
+    subgraph Domain["Domain Layer"]
+        ClientMgr["Client Manager"]
+        GroupMgr["Group Manager"]
+        QueryCtx["Query Context"]
+        RateLimiter["Rate Limiter"]
+        PolicyEngine["Policy Engine"]
+        CacheMgr["Cache Manager"]
+        LocalRecords["Local Records"]
+        CNAMEMgr["CNAME Manager"]
+        ConditionalFwd["Conditional Forwarder"]
+    end
+
+    subgraph Infrastructure["Infrastructure Layer"]
+        SQLite["SQLite Storage"]
+        MemCache["In-Memory Cache"]
+        FileSystem["File System"]
+        NetworkIO["Network I/O"]
+        Logger["Logger"]
+        Metrics["Metrics Collector"]
+    end
+
+    Presentation --> Service
+    Service --> Domain
+    Domain --> Infrastructure
+
+    style Presentation fill:#d1ecf1
+    style Service fill:#d4edda
+    style Domain fill:#fff3cd
+    style Infrastructure fill:#f8d7da
 ```
 
 ### Package Structure

@@ -1,7 +1,7 @@
 # Development Environment Setup
 
-**Last Updated:** 2025-11-22
-**Version:** 0.7.1
+**Last Updated:** 2025-11-23
+**Version:** 0.7.7
 
 Complete guide to setting up a development environment for Glory-Hole DNS server.
 

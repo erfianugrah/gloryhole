@@ -1,7 +1,7 @@
 # Glory-Hole Performance Documentation
 
-**Last Updated**: 2025-11-21  
-**Version**: 0.5.0-dev
+**Last Updated**: 2025-11-23
+**Version**: 0.7.7
 
 This document provides comprehensive performance data, benchmarks, and architectural decisions for the Glory-Hole DNS server.
 
