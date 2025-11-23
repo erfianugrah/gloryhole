@@ -14,8 +14,9 @@ services:
       - "9090:9090"    # Prometheus metrics
 
     volumes:
-      - ./config.yml:/config/config.yml:ro
-      - glory-hole-data:/data
+      - ./config.yml:/etc/glory-hole/config.yml:ro
+      - glory-hole-data:/var/lib/glory-hole
+      - glory-hole-logs:/var/log/glory-hole
 
     environment:
       - TZ=UTC
@@ -27,7 +28,7 @@ services:
       - glory-hole-net
 
     healthcheck:
-      test: ["/app/glory-hole", "-health-check"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
       interval: 30s
       timeout: 3s
       retries: 3
@@ -76,6 +77,7 @@ services:
 
     volumes:
       - ./deploy/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./deploy/grafana/dashboards:/var/lib/grafana/dashboards:ro
       - grafana-data:/var/lib/grafana
 
     environment:
@@ -90,6 +92,7 @@ services:
 
 volumes:
   glory-hole-data:
+  glory-hole-logs:
   prometheus-data:
   grafana-data:
 

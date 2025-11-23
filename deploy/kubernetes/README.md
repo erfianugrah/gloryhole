@@ -77,8 +77,8 @@ kubectl autoscale deployment glory-hole --cpu-percent=70 --min=2 --max=10
 ## Monitoring
 
 The deployment includes:
-- Liveness probe on `/healthz`
-- Readiness probe on `/readyz`
+- Liveness probe on `/health`
+- Readiness probe on `/api/health`
 - Prometheus metrics on port 9090
 
 ## Security

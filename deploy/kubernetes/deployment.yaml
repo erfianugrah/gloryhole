@@ -46,7 +46,7 @@ spec:
 
         livenessProbe:
           httpGet:
-            path: /healthz
+            path: /health
             port: 8080
           initialDelaySeconds: 10
           periodSeconds: 30
@@ -55,7 +55,7 @@ spec:
 
         readinessProbe:
           httpGet:
-            path: /readyz
+            path: /api/health
             port: 8080
           initialDelaySeconds: 5
           periodSeconds: 10
@@ -64,10 +64,10 @@ spec:
 
         volumeMounts:
         - name: config
-          mountPath: /config
+          mountPath: /etc/glory-hole
           readOnly: true
         - name: data
-          mountPath: /data
+          mountPath: /var/lib/glory-hole
 
       volumes:
       - name: config
