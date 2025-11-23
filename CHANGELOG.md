@@ -17,6 +17,88 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.7.5] - 2025-11-23
+
+### Added - Web UI for Duration-Based Kill-Switches
+
+**Major Feature**: Pi-hole style temporary disable controls in the Web UI!
+
+#### Settings Page Enhancements
+- **Duration buttons**: Quick disable for 30s, 5m, 30m, 1h, or indefinitely
+- **Live status badges**: Real-time enabled/disabled state indicators
+- **Countdown timers**: Shows time remaining until auto-re-enable
+- **Instant feedback**: AJAX updates without page reload
+- **Dual controls**: Separate controls for Blocklist and Policy Engine
+
+#### User Experience
+- Confirmation dialogs before disabling features
+- Green "Re-enable" buttons to cancel temporary disable
+- Auto-refresh status every 5 seconds
+- Visual status badges (green=enabled, red=disabled)
+- Formatted duration display (e.g., "4m 32s")
+
+#### Implementation
+- JavaScript-based countdown with 1-second precision
+- Automatic status polling from `/api/features` endpoint
+- Responsive button layout with flex-wrap
+- Color-coded buttons (red=disable, green=enable)
+
+---
+
+## [0.7.4] - 2025-11-23
+
+### Added - Comprehensive Metrics and Logging
+
+**Major Feature**: Complete OpenTelemetry metrics coverage and structured logging!
+
+#### Phase 1: Critical Metrics (P0)
+- **DNSBlockedQueries**: Counter at all block points (policy, blocklist fast path, legacy path)
+- **DNSForwardedQueries**: Counter at all forward points (policy ALLOW/FORWARD, conditional, upstream)
+- **Metrics integration**: Added `Metrics` field to DNS Handler with dependency injection
+
+#### Phase 2: Cache & Blocklist Metrics (P1)
+- **DNSCacheHits/Misses**: Recorded in `recordHit()` and `recordMiss()` functions
+- **CacheSize**: UpDownCounter tracking Set/Get/evict/Clear operations
+- **BlocklistSize**: Delta tracking in manager `Update()` with old vs new size comparison
+- **Signature updates**: Modified `cache.New()` and `blocklist.NewManager()` to accept metrics parameter
+
+#### Phase 3: Enhanced Logging (P2)
+- **Policy decision logging**: INFO level when rules match, DEBUG for action details
+- **Structured logging**: Key-value pairs for domain, client IP, query type, rule name
+- **Logger integration**: Added `Logger` field to DNS Handler
+
+#### Comprehensive Coverage (Beyond Original Plan)
+- **ActiveClients**: Gauge tracking concurrent DNS queries being processed
+- **Storage error logging**: Fire-and-forget pattern with error visibility (replaced silent `_ = Storage.LogQuery()`)
+- **Conditional forwarding logging**: DEBUG on rule match, ERROR on forwarding failure
+- **Blocklist delta logging**: Enhanced Update() to show domains added/removed/unchanged
+
+#### Phase 4: Duration-Based Kill-Switches (P3)
+- **KillSwitchManager**: Thread-safe state manager with RWMutex protection
+- **Background worker**: Monitors expiration times and logs auto-re-enable events
+- **API endpoints**:
+  - `POST /api/features/blocklist/disable {duration: seconds}`
+  - `POST /api/features/blocklist/enable`
+  - `POST /api/features/policies/disable {duration: seconds}`
+  - `POST /api/features/policies/enable`
+  - `GET /api/features` (enhanced with temporary state info)
+- **DNS integration**: Added `KillSwitchChecker` interface for loose coupling
+- **Priority logic**: Temporary disable overrides permanent enable from config
+- **Duration support**: 30 seconds to indefinite (1 year internally)
+
+### Changed - Code Quality Improvements
+- **Linting fixes**: Fixed 8 golangci-lint issues (fieldalignment, misspellings, staticcheck)
+- **Memory optimization**: Struct field reordering saved 48 bytes across 4 structs
+- **Test coverage**: Maintained 81.1% on DNS package despite new features
+- **All tests passing**: 100% test pass rate across 14 packages
+
+### Fixed
+- **Misspellings**: Changed "cancelled" to "canceled" (US English)
+- **Struct alignment**: Optimized Server, Config, FeaturesResponse, KillSwitchManager
+- **Nil pointer checks**: Fixed staticcheck issue in server_errors_test.go with t.Fatal
+
+---
+
 ## [0.7.2] - 2025-11-23
 
 ### Added - Extended DNS Record Type Support
