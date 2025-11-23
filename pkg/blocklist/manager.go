@@ -2,6 +2,7 @@ package blocklist
 
 import (
 	"context"
+	"net/http"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -32,11 +33,13 @@ type Manager struct {
 	started      atomic.Bool
 }
 
-// NewManager creates a new blocklist manager
-func NewManager(cfg *config.Config, logger *logging.Logger, metrics *telemetry.Metrics) *Manager {
+// NewManager creates a new blocklist manager with a custom HTTP client.
+// The HTTP client should use the application's configured DNS resolver (pkg/resolver)
+// to ensure consistent DNS resolution across the application.
+func NewManager(cfg *config.Config, logger *logging.Logger, metrics *telemetry.Metrics, httpClient *http.Client) *Manager {
 	m := &Manager{
 		cfg:        cfg,
-		downloader: NewDownloader(logger),
+		downloader: NewDownloader(logger, httpClient),
 		logger:     logger,
 		metrics:    metrics,
 		stopChan:   make(chan struct{}),

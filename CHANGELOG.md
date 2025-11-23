@@ -17,6 +17,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.7.7] - 2025-11-23
+
+### Fixed - Centralized DNS Resolver Architecture
+
+**Major Improvement**: All HTTP clients now use configured upstream DNS servers!
+
+#### Problem Resolved
+- **Blocklist downloads** were failing because the HTTP client used system default DNS (`/etc/resolv.conf`) instead of configured upstream servers
+- **Inconsistent DNS resolution** across the application - different components used different resolvers
+- **Configuration ignored** for HTTP operations - upstream_dns_servers config was not respected for external HTTP requests
+
+#### New Architecture
+- **`pkg/resolver`**: New centralized DNS resolver component
+- **Consistent resolution**: All HTTP clients now use the same configured upstream DNS servers
+- **Dependency injection**: Resolver and HTTP client created once at startup, injected into all components
+- **Fallback support**: Gracefully falls back to system resolver if no upstreams configured
+
+#### Components Updated
+- **Blocklist downloader**: Now accepts HTTP client with custom DNS resolver
+- **Main initialization**: Creates resolver and HTTP client, injects into blocklist manager
+- **Test suite**: All tests updated and passing with new architecture
+
+#### Benefits
+- ✅ Blocklist downloads now work correctly in containerized environments
+- ✅ Respects `upstream_dns_servers` configuration for all HTTP operations
+- ✅ Consistent DNS behavior across entire application
+- ✅ Foundation for future features (DNS caching, custom resolution logic)
+- ✅ Better control over DNS resolution strategy
+
+#### Technical Details
+- New `resolver.Resolver` type with custom `net.Resolver` using upstream DNS
+- HTTP client factory method: `resolver.NewHTTPClient(timeout)`
+- Compatible with `http.Transport.DialContext` interface
+- Zero breaking changes for existing deployments
+
+### API Changes
+- `blocklist.NewDownloader(logger, httpClient)` - now accepts HTTP client parameter
+- `blocklist.NewManager(cfg, logger, metrics, httpClient)` - now accepts HTTP client parameter
+
+---
+
 ## [0.7.6] - 2025-11-23
 
 ### Added - Regex Pattern Support and Pi-hole Import

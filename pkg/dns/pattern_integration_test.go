@@ -32,7 +32,7 @@ func TestWhitelistPatternIntegration(t *testing.T) {
 	cfg := &config.Config{
 		Blocklists: []string{}, // Empty for this test
 	}
-	manager := blocklist.NewManager(cfg, handler.Logger, nil)
+	manager := blocklist.NewManager(cfg, handler.Logger, nil, nil)
 
 	// Manually add some blocked domains
 	blockedDomains := map[string]struct{}{
@@ -145,7 +145,7 @@ func TestBlocklistManagerPatternIntegration(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	manager := blocklist.NewManager(cfg, logger, nil)
+	manager := blocklist.NewManager(cfg, logger, nil, nil)
 
 	// Set up pattern-based blocklist
 	patterns := []string{

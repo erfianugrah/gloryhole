@@ -206,8 +206,9 @@ func (i *PiholeImporter) extractZip() error {
 			return fmt.Errorf("failed to extract %s: %w", f.Name, err)
 		}
 
-		// Auto-detect file paths (G305: validate path before using)
+		// Auto-detect file paths
 		baseName := filepath.Base(f.Name)
+		// #nosec G305 - Path is validated against tempDir immediately below to prevent traversal
 		cleanedPath := filepath.Clean(filepath.Join(tempDir, f.Name))
 		// Verify path is within tempDir
 		if !strings.HasPrefix(cleanedPath, filepath.Clean(tempDir)+string(os.PathSeparator)) &&
@@ -236,6 +237,7 @@ func (i *PiholeImporter) extractZip() error {
 // extractFile extracts a single file from the ZIP archive
 func (i *PiholeImporter) extractFile(f *zip.File, dest string) error {
 	// Create destination path
+	// #nosec G305 - Path is validated against dest directory immediately below to prevent traversal
 	path := filepath.Join(dest, f.Name)
 
 	// Validate path to prevent directory traversal (G305)

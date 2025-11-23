@@ -27,7 +27,7 @@ func TestServeDNS_OverrideIPv4TypeMismatch(t *testing.T) {
 		Blocklists: []string{},
 	}
 
-	mgr := blocklist.NewManager(cfg, logger, nil)
+	mgr := blocklist.NewManager(cfg, logger, nil, nil)
 	handler.SetBlocklistManager(mgr)
 
 	// Add IPv4 override
@@ -66,7 +66,7 @@ func TestServeDNS_OverrideIPv6TypeMismatch(t *testing.T) {
 		Blocklists: []string{},
 	}
 
-	mgr := blocklist.NewManager(cfg, logger, nil)
+	mgr := blocklist.NewManager(cfg, logger, nil, nil)
 	handler.SetBlocklistManager(mgr)
 
 	// Add IPv6 override
@@ -230,7 +230,7 @@ func TestServeDNS_BlocklistManagerCNAMEForAAAAQuery(t *testing.T) {
 		Blocklists: []string{},
 	}
 
-	mgr := blocklist.NewManager(cfg, logger, nil)
+	mgr := blocklist.NewManager(cfg, logger, nil, nil)
 	handler.SetBlocklistManager(mgr)
 
 	// Add CNAME override

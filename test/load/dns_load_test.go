@@ -568,7 +568,7 @@ func setupTestHandler(t *testing.T, cfg LoadTestConfig) *dns.Handler {
 		Blocklists:           []string{}, // No external blocklists for tests
 		AutoUpdateBlocklists: false,
 	}
-	blocklistMgr := blocklist.NewManager(testCfg, logger, nil)
+	blocklistMgr := blocklist.NewManager(testCfg, logger, nil, nil)
 
 	// Manually populate the blocklist for testing
 	handler.SetBlocklistManager(blocklistMgr)

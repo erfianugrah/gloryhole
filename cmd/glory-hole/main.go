@@ -22,6 +22,7 @@ import (
 	"glory-hole/pkg/logging"
 	"glory-hole/pkg/pattern"
 	"glory-hole/pkg/policy"
+	"glory-hole/pkg/resolver"
 	"glory-hole/pkg/storage"
 	"glory-hole/pkg/telemetry"
 )
@@ -122,6 +123,14 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Initialize DNS resolver with configured upstream servers
+	// This ensures all HTTP clients use consistent DNS resolution
+	dnsResolver := resolver.New(cfg.UpstreamDNSServers, logger)
+
+	// Create HTTP client with custom DNS resolver for blocklist downloads
+	// This prevents blocklist downloads from using system DNS (/etc/resolv.conf)
+	httpClient := dnsResolver.NewHTTPClient(60 * time.Second)
+
 	// Create DNS handler
 	handler := dns.NewHandler()
 
@@ -132,7 +141,7 @@ func main() {
 	var blocklistMgr *blocklist.Manager
 	if len(cfg.Blocklists) > 0 {
 		logger.Info("Initializing blocklist manager", "sources", len(cfg.Blocklists))
-		blocklistMgr = blocklist.NewManager(cfg, logger, metrics)
+		blocklistMgr = blocklist.NewManager(cfg, logger, metrics, httpClient)
 
 		// Start blocklist manager (downloads lists and starts auto-update)
 		err = blocklistMgr.Start(ctx)

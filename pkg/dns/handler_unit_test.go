@@ -48,7 +48,7 @@ func TestHandler_SetBlocklistManager(t *testing.T) {
 	cfg := &config.Config{
 		Blocklists: []string{},
 	}
-	mgr := blocklist.NewManager(cfg, logger, nil)
+	mgr := blocklist.NewManager(cfg, logger, nil, nil)
 
 	handler.SetBlocklistManager(mgr)
 

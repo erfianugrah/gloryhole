@@ -21,12 +21,19 @@ type Downloader struct {
 	timeout time.Duration
 }
 
-// NewDownloader creates a new blocklist downloader
-func NewDownloader(logger *logging.Logger) *Downloader {
-	return &Downloader{
-		client: &http.Client{
+// NewDownloader creates a new blocklist downloader with a custom HTTP client.
+// The HTTP client should be configured with appropriate DNS resolution (e.g., using pkg/resolver).
+// If client is nil, a default HTTP client with 60s timeout will be created.
+func NewDownloader(logger *logging.Logger, client *http.Client) *Downloader {
+	if client == nil {
+		logger.Warn("No HTTP client provided, using default client with system DNS resolver")
+		client = &http.Client{
 			Timeout: 60 * time.Second, // Long timeout for large files
-		},
+		}
+	}
+
+	return &Downloader{
+		client:  client,
 		logger:  logger,
 		timeout: 60 * time.Second,
 	}

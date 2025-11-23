@@ -9,7 +9,7 @@ A high-performance DNS server written in Go, designed as a modern, extensible re
 
 ## Project Status
 
-**Version**: 0.7.1
+**Version**: 0.7.7
 **Test Coverage**: 71.6% (242 tests, 0 race conditions)
 **CI Status**: All checks passing
 **Stability**: Production Ready

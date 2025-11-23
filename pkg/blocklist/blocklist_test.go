@@ -13,7 +13,7 @@ import (
 
 func TestNewDownloader(t *testing.T) {
 	logger := logging.NewDefault()
-	d := NewDownloader(logger)
+	d := NewDownloader(logger, nil)
 
 	if d == nil {
 		t.Fatal("Expected downloader, got nil")
@@ -47,7 +47,7 @@ func TestDownload_HostsFormat(t *testing.T) {
 	defer server.Close()
 
 	logger := logging.NewDefault()
-	d := NewDownloader(logger)
+	d := NewDownloader(logger, nil)
 
 	ctx := context.Background()
 	domains, err := d.Download(ctx, server.URL)
@@ -90,7 +90,7 @@ func TestDownload_AdblockFormat(t *testing.T) {
 	defer server.Close()
 
 	logger := logging.NewDefault()
-	d := NewDownloader(logger)
+	d := NewDownloader(logger, nil)
 
 	ctx := context.Background()
 	domains, err := d.Download(ctx, server.URL)
@@ -128,7 +128,7 @@ malware.example.com
 	defer server.Close()
 
 	logger := logging.NewDefault()
-	d := NewDownloader(logger)
+	d := NewDownloader(logger, nil)
 
 	ctx := context.Background()
 	domains, err := d.Download(ctx, server.URL)
@@ -157,7 +157,7 @@ ads3.example.com
 	defer server.Close()
 
 	logger := logging.NewDefault()
-	d := NewDownloader(logger)
+	d := NewDownloader(logger, nil)
 
 	ctx := context.Background()
 	domains, err := d.Download(ctx, server.URL)
@@ -187,7 +187,7 @@ func TestDownload_HTTPError(t *testing.T) {
 	defer server.Close()
 
 	logger := logging.NewDefault()
-	d := NewDownloader(logger)
+	d := NewDownloader(logger, nil)
 
 	ctx := context.Background()
 	_, err := d.Download(ctx, server.URL)
@@ -203,7 +203,7 @@ func TestDownload_HTTPError(t *testing.T) {
 
 func TestDownload_InvalidURL(t *testing.T) {
 	logger := logging.NewDefault()
-	d := NewDownloader(logger)
+	d := NewDownloader(logger, nil)
 
 	ctx := context.Background()
 	_, err := d.Download(ctx, "not-a-valid-url://example.com")
@@ -222,7 +222,7 @@ func TestDownload_ContextCancellation(t *testing.T) {
 	defer server.Close()
 
 	logger := logging.NewDefault()
-	d := NewDownloader(logger)
+	d := NewDownloader(logger, nil)
 
 	// Create context with short timeout
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
@@ -251,7 +251,7 @@ func TestDownloadAll_MultipleSources(t *testing.T) {
 	defer server2.Close()
 
 	logger := logging.NewDefault()
-	d := NewDownloader(logger)
+	d := NewDownloader(logger, nil)
 
 	ctx := context.Background()
 	urls := []string{server1.URL, server2.URL}
@@ -289,7 +289,7 @@ func TestDownloadAll_DuplicateDomains(t *testing.T) {
 	defer server2.Close()
 
 	logger := logging.NewDefault()
-	d := NewDownloader(logger)
+	d := NewDownloader(logger, nil)
 
 	ctx := context.Background()
 	urls := []string{server1.URL, server2.URL}
@@ -333,7 +333,7 @@ func TestDownloadAll_OneSourceFails(t *testing.T) {
 	defer server2.Close()
 
 	logger := logging.NewDefault()
-	d := NewDownloader(logger)
+	d := NewDownloader(logger, nil)
 
 	ctx := context.Background()
 	urls := []string{server1.URL, server2.URL}
@@ -356,7 +356,7 @@ func TestDownloadAll_OneSourceFails(t *testing.T) {
 
 func TestDownloadAll_EmptyList(t *testing.T) {
 	logger := logging.NewDefault()
-	d := NewDownloader(logger)
+	d := NewDownloader(logger, nil)
 
 	ctx := context.Background()
 	domains, err := d.DownloadAll(ctx, []string{})
@@ -372,7 +372,7 @@ func TestDownloadAll_EmptyList(t *testing.T) {
 
 func TestExtractDomain_VariousFormats(t *testing.T) {
 	logger := logging.NewDefault()
-	d := NewDownloader(logger)
+	d := NewDownloader(logger, nil)
 
 	tests := []struct {
 		name     string

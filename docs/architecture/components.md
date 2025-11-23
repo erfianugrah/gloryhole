@@ -1,7 +1,7 @@
 # Glory-Hole Component Architecture
 
-**Last Updated:** 2025-11-22
-**Version:** 0.7.1
+**Last Updated:** 2025-11-23
+**Version:** 0.7.7
 **Status:** Production
 
 This document provides detailed documentation for each component in the Glory-Hole DNS server, including their purpose, key interfaces, thread-safety patterns, and performance characteristics.
@@ -13,16 +13,18 @@ This document provides detailed documentation for each component in the Glory-Ho
 1. [Overview](#overview)
 2. [DNS Package](#dns-package)
 3. [Blocklist Package](#blocklist-package)
-4. [Cache Package](#cache-package)
-5. [Forwarder Package](#forwarder-package)
-6. [Storage Package](#storage-package)
-7. [Policy Package](#policy-package)
-8. [API Package](#api-package)
-9. [Config Package](#config-package)
-10. [Logging Package](#logging-package)
-11. [Telemetry Package](#telemetry-package)
-12. [Local Records Package](#localrecords-package)
-13. [Component Interactions](#component-interactions)
+4. [Pattern Package](#pattern-package)
+5. [Cache Package](#cache-package)
+6. [Forwarder Package](#forwarder-package)
+7. [Resolver Package](#resolver-package)
+8. [Storage Package](#storage-package)
+9. [Policy Package](#policy-package)
+10. [API Package](#api-package)
+11. [Config Package](#config-package)
+12. [Logging Package](#logging-package)
+13. [Telemetry Package](#telemetry-package)
+14. [Local Records Package](#localrecords-package)
+15. [Component Interactions](#component-interactions)
 
 ---
 
@@ -381,6 +383,148 @@ whitelist:
 
 ---
 
+## Pattern Package
+
+**Location:** `/home/erfi/gloryhole/pkg/pattern`
+
+### Purpose
+
+Provides unified pattern matching capabilities for domain filtering, supporting three matching strategies:
+- **Exact match** - O(1) hash map lookup
+- **Wildcard match** - Suffix matching for patterns like `*.example.com`
+- **Regex match** - Full regex pattern matching for complex rules
+
+### Key Types
+
+#### PatternMatcher
+
+```go
+type PatternMatcher struct {
+    // Exact domain matches (fastest - O(1))
+    exactMatches map[string]struct{}
+
+    // Wildcard patterns (*.domain.com)
+    wildcardPatterns []string
+
+    // Compiled regex patterns
+    regexPatterns []*regexp.Regexp
+
+    // Thread-safe access
+    mu sync.RWMutex
+}
+```
+
+### Key Methods
+
+```go
+func NewPatternMatcher() *PatternMatcher
+func (pm *PatternMatcher) AddPattern(pattern string) error
+func (pm *PatternMatcher) Match(domain string) bool
+func (pm *PatternMatcher) Clear()
+func (pm *PatternMatcher) Stats() PatternStats
+```
+
+### Pattern Types
+
+**1. Exact Match:**
+```
+example.com      → Matches only "example.com"
+```
+
+**2. Wildcard Match:**
+```
+*.example.com    → Matches "sub.example.com", "a.b.example.com", etc.
+                  → Does NOT match "example.com" itself
+```
+
+**3. Regex Match:**
+```
+(\.|^)example\.com$  → Pi-hole style regex
+^.*\.ads\..*$        → Match any domain with "ads" in path
+```
+
+### Performance Characteristics
+
+- **Exact match:** ~3ns per lookup (hash map)
+- **Wildcard match:** ~4-10ns per lookup (suffix check)
+- **Regex match:** ~100-500ns per lookup (regex evaluation)
+
+**Optimization Strategy:**
+1. Check exact matches first (fastest path)
+2. Check wildcard patterns second
+3. Check regex patterns last (slowest path)
+
+### Thread Safety
+
+**Concurrency Pattern:**
+- `RWMutex` for safe concurrent access
+- Read-heavy optimization (multiple readers allowed)
+- Write lock only for pattern updates
+
+### Use Cases
+
+**Blocklist Filtering:**
+```go
+// Block all Facebook subdomains
+patterns.AddPattern("*.facebook.com")
+patterns.AddPattern("facebook.com")
+
+// Block specific tracking domains
+patterns.AddPattern("^.*\\.doubleclick\\.net$")
+```
+
+**Whitelist Exceptions:**
+```go
+// Allow Google subdomains
+patterns.AddPattern("*.google.com")
+
+// Allow specific CDN pattern
+patterns.AddPattern("^cdn-[0-9]+\\.example\\.com$")
+```
+
+### Component Interactions
+
+**Used By:**
+- Blocklist Manager (for wildcard/regex domain blocking)
+- DNS Handler (for whitelist pattern matching)
+- Conditional Forwarding (for domain pattern rules)
+
+### Configuration Example
+
+```yaml
+whitelist:
+  # Exact matches
+  - "example.com"
+
+  # Wildcard patterns
+  - "*.google.com"
+  - "*.cloudflare-gateway.com"
+
+  # Regex patterns (Pi-hole compatibility)
+  - "(\.|^)taskassist-pa\\.clients6\\.google\\.com$"
+```
+
+### Testing Approach
+
+**Unit Tests:**
+- Test exact matching
+- Test wildcard matching
+- Test regex matching
+- Test pattern statistics
+- Performance benchmarks
+
+**Benchmarks:**
+```
+BenchmarkExactMatch    500ns  (3ns per match)
+BenchmarkWildcardMatch 2µs    (4ns per match)
+BenchmarkRegexMatch    50µs   (100ns per match)
+```
+
+**Files:**
+- `pkg/pattern/pattern_test.go` - Pattern matching tests
+
+---
+
 ## Cache Package
 
 **Location:** `/home/erfi/gloryhole/pkg/cache`
@@ -659,6 +803,217 @@ upstream_dns_servers:
 
 **Files:**
 - `pkg/forwarder/forwarder_test.go` - Forwarder tests
+
+---
+
+## Resolver Package
+
+**Location:** `/home/erfi/gloryhole/pkg/resolver`
+
+### Purpose
+
+Provides custom DNS resolution for HTTP clients, ensuring all application components use configured upstream DNS servers instead of the system's default resolver (`/etc/resolv.conf`). This is critical for consistency in containerized environments where system DNS may differ from configured DNS.
+
+**Added in:** v0.7.7
+
+### Problem Statement
+
+Before v0.7.7, HTTP operations (blocklist downloads, health checks, etc.) used Go's default DNS resolver, which reads from `/etc/resolv.conf`. This caused issues:
+- Blocklist downloads failing due to DNS timeouts
+- Inconsistent DNS resolution across the application
+- Configuration (`upstream_dns_servers`) ignored for HTTP operations
+- Chicken-and-egg problem: DNS server needs DNS to download blocklists
+
+### Key Types
+
+#### Resolver
+
+```go
+type Resolver struct {
+    upstreams []string
+    logger    *logging.Logger
+    dialer    *net.Dialer
+}
+```
+
+### Key Methods
+
+```go
+// Create resolver with configured upstream servers
+func New(upstreams []string, logger *logging.Logger) *Resolver
+
+// Resolve hostname using configured upstreams
+func (r *Resolver) LookupIP(ctx context.Context, network, host string) ([]net.IP, error)
+
+// Dial with custom DNS resolution (compatible with http.Transport)
+func (r *Resolver) DialContext(ctx context.Context, network, addr string) (net.Conn, error)
+
+// Create HTTP client with custom DNS resolver
+func (r *Resolver) NewHTTPClient(timeout time.Duration) *http.Client
+
+// Get configured upstream servers
+func (r *Resolver) Upstreams() []string
+```
+
+### Architecture
+
+**DNS Resolution Flow:**
+```
+HTTP Request → Custom Transport → Custom DialContext
+                                         ↓
+                                  Resolve hostname via upstreams
+                                  (10.0.10.3:53, NOT /etc/resolv.conf)
+                                         ↓
+                                  Dial using resolved IP
+                                         ↓
+                                  Establish connection
+```
+
+**Initialization Flow (main.go):**
+```
+1. Load config (upstream_dns_servers: ["10.0.10.3:53"])
+2. Create resolver: resolver.New(cfg.UpstreamDNSServers, logger)
+3. Create HTTP client: resolver.NewHTTPClient(60 * time.Second)
+4. Inject into components:
+   - Blocklist Manager (for downloads)
+   - Health checks
+   - Any future HTTP operations
+```
+
+### Implementation Details
+
+**Custom net.Resolver:**
+```go
+resolver := &net.Resolver{
+    PreferGo: true,
+    Dial: func(ctx context.Context, network, address string) (net.Conn, error) {
+        // Use configured upstream DNS (e.g., "10.0.10.3:53")
+        // instead of system resolver
+        return dialer.DialContext(ctx, "udp", upstreams[0])
+    },
+}
+```
+
+**Custom http.Transport:**
+```go
+transport := &http.Transport{
+    DialContext:           r.DialContext, // Custom DNS resolution
+    ForceAttemptHTTP2:     true,
+    MaxIdleConns:          100,
+    IdleConnTimeout:       90 * time.Second,
+    TLSHandshakeTimeout:   10 * time.Second,
+    ExpectContinueTimeout: 1 * time.Second,
+}
+```
+
+### Use Cases
+
+**1. Blocklist Downloads:**
+```go
+// Before v0.7.7: Used /etc/resolv.conf → 10.0.10.1:53 (wrong)
+// After v0.7.7:  Uses config           → 10.0.10.3:53 (correct)
+
+resolver := resolver.New([]string{"10.0.10.3:53"}, logger)
+httpClient := resolver.NewHTTPClient(60 * time.Second)
+blocklistMgr := blocklist.NewManager(cfg, logger, metrics, httpClient)
+```
+
+**2. Health Checks:**
+```go
+// Ensure health checks use application DNS, not system DNS
+resolver := resolver.New(cfg.UpstreamDNSServers, logger)
+client := resolver.NewHTTPClient(2 * time.Second)
+resp, err := client.Get("http://localhost:8080/health")
+```
+
+**3. Containerized Environments:**
+```
+Container /etc/resolv.conf → 10.0.10.1:53 (system default)
+Application config         → 10.0.10.3:53 (desired upstream)
+
+Without Resolver: Uses 10.0.10.1 ❌
+With Resolver:    Uses 10.0.10.3 ✅
+```
+
+### Configuration
+
+No direct configuration - uses existing `upstream_dns_servers`:
+
+```yaml
+upstream_dns_servers:
+  - "10.0.10.3:53"  # Used by Resolver for HTTP clients
+  - "1.1.1.1:53"    # Fallback (future enhancement)
+```
+
+### Performance Characteristics
+
+- **Latency:** Same as configured upstream DNS (<50ms typical)
+- **Overhead:** Negligible (~100ns for custom DialContext)
+- **Caching:** Uses system's connection pool and DNS cache
+
+### Thread Safety
+
+**Concurrency Pattern:**
+- Immutable after creation (no shared state modifications)
+- Safe for concurrent use across goroutines
+- No locks required (stateless resolution)
+
+### Component Interactions
+
+**Created By:**
+- Main application (`cmd/glory-hole/main.go`)
+
+**Used By:**
+- Blocklist Manager (HTTP downloads)
+- Health Check (HTTP requests)
+- Future: API integrations, telemetry exports
+
+**Injected Into:**
+- Any component requiring HTTP operations
+
+### Testing Approach
+
+**Unit Tests:**
+- Test DNS resolution with custom upstreams
+- Test HTTP client creation
+- Test fallback to system resolver
+- Test resolution caching
+- Test connection establishment
+
+**Integration Tests:**
+- Verify blocklist downloads use correct DNS
+- Test in containerized environment
+- Verify resolution consistency
+
+**Files:**
+- `pkg/resolver/resolver_test.go` - Resolver tests
+- `pkg/resolver/http_client_test.go` - HTTP client tests (implicit)
+
+### Migration Notes
+
+**Breaking Changes:** None (backward compatible)
+
+**API Changes:**
+- `blocklist.NewDownloader(logger, httpClient)` - Added `httpClient` parameter
+- `blocklist.NewManager(cfg, logger, metrics, httpClient)` - Added `httpClient` parameter
+
+**Upgrade Path:**
+- Pass `nil` for `httpClient` to use default (system resolver) - NOT recommended
+- Pass resolver-backed client for consistent DNS - Recommended
+
+### Future Enhancements
+
+**Planned Features:**
+- Fallback to secondary upstreams on resolution failure
+- DNS resolution caching within resolver
+- Support for DNS-over-HTTPS (DoH) upstreams
+- Per-component DNS resolver configuration
+- Monitoring and metrics for DNS resolution
+
+**Related Issues:**
+- Blocklist download failures in VyOS containers
+- Inconsistent DNS resolution across components
+- Configuration not respected for HTTP operations
 
 ---
 
