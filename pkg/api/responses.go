@@ -78,6 +78,13 @@ type BlocklistReloadResponse struct {
 	Domains int    `json:"domains"`
 }
 
+// CachePurgeResponse represents cache purge result
+type CachePurgeResponse struct {
+	Status        string `json:"status"`
+	Message       string `json:"message"`
+	EntriesCleared int    `json:"entries_cleared,omitempty"`
+}
+
 // ErrorResponse represents an API error
 type ErrorResponse struct {
 	Error   string `json:"error"`

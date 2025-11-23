@@ -291,3 +291,34 @@ func (s *Server) handleBlocklistReload(w http.ResponseWriter, r *http.Request) {
 
 	s.writeJSON(w, http.StatusOK, response)
 }
+
+// handleCachePurge handles POST /api/cache/purge
+func (s *Server) handleCachePurge(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		s.writeError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		return
+	}
+
+	// Check if cache is available
+	if s.cache == nil {
+		s.writeError(w, http.StatusServiceUnavailable, "Cache not available")
+		return
+	}
+
+	// Get stats before clearing
+	statsBefore := s.cache.Stats()
+	entriesBefore := statsBefore.Entries
+
+	// Clear the cache
+	s.cache.Clear()
+
+	s.logger.Info("DNS cache purged", "entries_cleared", entriesBefore)
+
+	response := CachePurgeResponse{
+		Status:         "ok",
+		Message:        "DNS cache purged successfully",
+		EntriesCleared: entriesBefore,
+	}
+
+	s.writeJSON(w, http.StatusOK, response)
+}

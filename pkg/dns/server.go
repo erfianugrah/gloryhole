@@ -577,12 +577,13 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 			case policy.ActionAllow:
 				// Allow the request - skip blocklist check and forward directly
 				if h.Forwarder != nil {
-					// Log allow action
+					// Log allow action with warning that blocklist checks are bypassed
 					if h.Logger != nil {
-						h.Logger.Debug("Policy allowed query, forwarding to upstream",
+						h.Logger.Warn("Policy ALLOW action bypasses blocklist checks - forwarding directly to upstream",
 							"rule", rule.Name,
 							"domain", domain,
-							"client_ip", clientIP)
+							"client_ip", clientIP,
+							"bypasses_blocklist", true)
 					}
 
 					resp, err := h.Forwarder.Forward(ctx, r)

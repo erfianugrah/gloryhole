@@ -489,6 +489,7 @@ func main() {
 		Storage:          stor,
 		BlocklistManager: blocklistMgr,
 		PolicyEngine:     policyEngine,
+		Cache:            handler.Cache, // DNS cache for purge operations
 		Logger:           logger.Logger, // Get underlying slog.Logger
 		Version:          version,
 		ConfigWatcher:    cfgWatcher,   // For kill-switch feature

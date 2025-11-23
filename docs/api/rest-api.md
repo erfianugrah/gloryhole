@@ -265,6 +265,51 @@ curl -X POST http://localhost:8080/api/blocklist/reload
 - `503` - Blocklist manager not available
 - `500` - Reload failed
 
+## Cache Management Endpoints
+
+### POST /api/cache/purge
+
+**Description:** Purge the DNS cache, clearing all cached DNS responses. Useful after blocklist updates or when troubleshooting DNS issues.
+
+**Use Cases:**
+- After reloading blocklists to ensure blocked domains aren't served from cache
+- When DNS responses seem stale or incorrect
+- For testing/debugging DNS resolution without cache interference
+
+**Request:**
+```bash
+curl -X POST http://localhost:8080/api/cache/purge
+```
+
+**Response:** (200 OK)
+```json
+{
+  "status": "ok",
+  "message": "DNS cache purged successfully",
+  "entries_cleared": 1523
+}
+```
+
+**Errors:**
+- `503` - Cache not available (caching disabled in config)
+- `405` - Method not allowed (only POST is supported)
+
+**Recommended Workflow:**
+
+When updating blocklists, use this order:
+```bash
+# 1. Reload blocklists
+curl -X POST http://localhost:8080/api/blocklist/reload
+
+# 2. Purge DNS cache to ensure blocked domains aren't served from cache
+curl -X POST http://localhost:8080/api/cache/purge
+```
+
+**Notes:**
+- Cache will automatically rebuild as new queries come in
+- Purging cache may temporarily increase upstream DNS load
+- Cache statistics will reset to zero after purge
+
 ## Policy Endpoints
 
 ### GET /api/policies

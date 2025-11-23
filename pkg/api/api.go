@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"glory-hole/pkg/blocklist"
+	"glory-hole/pkg/cache"
 	"glory-hole/pkg/config"
 	"glory-hole/pkg/policy"
 	"glory-hole/pkg/storage"
@@ -22,6 +23,7 @@ type Server struct {
 	logger           *slog.Logger
 	blocklistManager *blocklist.Manager
 	policyEngine     *policy.Engine
+	cache            *cache.Cache         // DNS cache for purge operations
 	configWatcher    *config.Watcher      // For kill-switch feature
 	killSwitch       *KillSwitchManager   // For duration-based temporary disabling
 	startTime        time.Time
@@ -34,6 +36,7 @@ type Config struct {
 	Storage          storage.Storage
 	BlocklistManager *blocklist.Manager
 	PolicyEngine     *policy.Engine
+	Cache            *cache.Cache         // DNS cache for purge operations
 	Logger           *slog.Logger
 	ConfigWatcher    *config.Watcher      // For kill-switch feature
 	KillSwitch       *KillSwitchManager   // For duration-based temporary disabling
@@ -57,6 +60,7 @@ func New(cfg *Config) *Server {
 		storage:          cfg.Storage,
 		blocklistManager: cfg.BlocklistManager,
 		policyEngine:     cfg.PolicyEngine,
+		cache:            cfg.Cache,
 		logger:           cfg.Logger,
 		version:          cfg.Version,
 		configWatcher:    cfg.ConfigWatcher,
@@ -84,6 +88,9 @@ func New(cfg *Config) *Server {
 
 	// Blocklist management
 	mux.HandleFunc("POST /api/blocklist/reload", s.handleBlocklistReload)
+
+	// Cache management
+	mux.HandleFunc("POST /api/cache/purge", s.handleCachePurge)
 
 	// Policy management
 	mux.HandleFunc("GET /api/policies", s.handleGetPolicies)
