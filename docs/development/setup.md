@@ -28,12 +28,12 @@ Complete guide to setting up a development environment for Glory-Hole DNS server
 
 ### Required
 
-**Go 1.24.0 or later**
+**Go 1.25.4 or later**
 
 Check your Go version:
 ```bash
 go version
-# Should show: go version go1.24.0 or higher
+# Should show: go version go1.25.4 or higher
 ```
 
 Install/upgrade Go:
@@ -861,7 +861,7 @@ Port 53 requires root privileges. Options:
 **Check Go version:**
 ```bash
 go version
-# Must be 1.24.0 or higher
+# Must be 1.25.4 or higher
 ```
 
 **Clean cache:**

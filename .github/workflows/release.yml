@@ -38,7 +38,8 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.24'
+          go-version: '1.25.4'
+          cache: true
 
       - name: Get version from tag
         id: version
@@ -82,7 +83,7 @@ jobs:
           name: binary-${{ matrix.os }}-${{ matrix.arch }}
           path: |
             glory-hole-*
-          retention-days: 1
+          retention-days: 7
 
   # Build and push Docker images
   build-docker:
@@ -218,47 +219,6 @@ jobs:
           draft: false
           prerelease: ${{ contains(github.ref, 'alpha') || contains(github.ref, 'beta') || contains(github.ref, 'rc') }}
           generate_release_notes: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  # Optional: Sign binaries with GPG
-  sign-binaries:
-    name: Sign Binaries (Optional)
-    needs: create-release
-    runs-on: ubuntu-latest
-    # Disabled for now - enable when GPG key is configured
-    if: false
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Import GPG key
-        uses: crazy-max/ghaction-import-gpg@v6
-        with:
-          gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
-          passphrase: ${{ secrets.GPG_PASSPHRASE }}
-
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: artifacts
-
-      - name: Sign binaries
-        run: |
-          mkdir -p signed-assets
-          for file in artifacts/*/glory-hole-*; do
-            if [[ ! "$file" =~ \.sha256$ ]]; then
-              echo "Signing $file"
-              gpg --detach-sign --armor "$file"
-              cp "$file" signed-assets/
-              cp "${file}.asc" signed-assets/
-            fi
-          done
-
-      - name: Upload signed artifacts to release
-        uses: softprops/action-gh-release@v1
-        with:
-          files: signed-assets/*.asc
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
