@@ -29,7 +29,8 @@ cache:
   max_entries: 10000
   min_ttl: 60s
   max_ttl: 24h
-  negative_ttl: 5m
+  negative_ttl: 5m  # TTL for upstream NXDOMAIN responses
+  blocked_ttl: 1s    # TTL for blocked domain responses (reduces repeated blocking logic)
 
 logging:
   level: "info"          # Use info level to see blocklist activity

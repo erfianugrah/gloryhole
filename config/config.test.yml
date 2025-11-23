@@ -22,7 +22,8 @@ cache:
   max_entries: 10000      # Maximum number of cached entries (LRU eviction)
   min_ttl: 60s            # Minimum TTL (prevent caching very short-lived records)
   max_ttl: 24h            # Maximum TTL (prevent caching stale records)
-  negative_ttl: 5m        # TTL for negative responses (NXDOMAIN)
+  negative_ttl: 5m        # TTL for upstream NXDOMAIN responses
+  blocked_ttl: 1s         # TTL for blocked domain responses (reduces repeated blocking logic)
 
 logging:
   level: "debug"     # Use debug level to see all queries
