@@ -24,8 +24,9 @@ type Server struct {
 	blocklistManager *blocklist.Manager
 	policyEngine     *policy.Engine
 	version          string
-	configWatcher    *config.Watcher // For kill-switch feature
-	configPath       string          // Path to config file for persistence
+	configWatcher    *config.Watcher      // For kill-switch feature
+	configPath       string               // Path to config file for persistence
+	killSwitch       *KillSwitchManager   // For duration-based temporary disabling
 }
 
 // Config holds API server configuration
@@ -36,8 +37,9 @@ type Config struct {
 	PolicyEngine     *policy.Engine
 	Logger           *slog.Logger
 	Version          string
-	ConfigWatcher    *config.Watcher // For kill-switch feature
-	ConfigPath       string          // Path to config file
+	ConfigWatcher    *config.Watcher      // For kill-switch feature
+	ConfigPath       string               // Path to config file
+	KillSwitch       *KillSwitchManager   // For duration-based temporary disabling
 }
 
 // New creates a new API server
@@ -59,6 +61,7 @@ func New(cfg *Config) *Server {
 		version:          cfg.Version,
 		configWatcher:    cfg.ConfigWatcher,
 		configPath:       cfg.ConfigPath,
+		killSwitch:       cfg.KillSwitch,
 		startTime:        time.Now(),
 	}
 
@@ -92,6 +95,12 @@ func New(cfg *Config) *Server {
 	// Feature kill-switches
 	mux.HandleFunc("GET /api/features", s.handleGetFeatures)
 	mux.HandleFunc("PUT /api/features", s.handleUpdateFeatures)
+
+	// Duration-based temporary disabling (Pi-hole style)
+	mux.HandleFunc("POST /api/features/blocklist/disable", s.handleDisableBlocklist)
+	mux.HandleFunc("POST /api/features/blocklist/enable", s.handleEnableBlocklist)
+	mux.HandleFunc("POST /api/features/policies/disable", s.handleDisablePolicies)
+	mux.HandleFunc("POST /api/features/policies/enable", s.handleEnablePolicies)
 
 	// UI routes (add after API routes to avoid conflicts)
 	mux.HandleFunc("GET /api/ui/stats", s.handleStatsPartial)
@@ -129,6 +138,11 @@ func New(cfg *Config) *Server {
 func (s *Server) Start(ctx context.Context) error {
 	s.logger.Info("Starting API server", "address", s.httpServer.Addr)
 
+	// Start kill-switch manager background worker
+	if s.killSwitch != nil {
+		s.killSwitch.Start(ctx)
+	}
+
 	errChan := make(chan error, 1)
 	go func() {
 		if err := s.httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
@@ -148,6 +162,12 @@ func (s *Server) Start(ctx context.Context) error {
 // Shutdown gracefully shuts down the API server
 func (s *Server) Shutdown(ctx context.Context) error {
 	s.logger.Info("Shutting down API server")
+
+	// Stop kill-switch manager
+	if s.killSwitch != nil {
+		s.killSwitch.Stop()
+	}
+
 	return s.httpServer.Shutdown(ctx)
 }
 

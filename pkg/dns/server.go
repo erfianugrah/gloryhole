@@ -28,6 +28,12 @@ var msgPool = sync.Pool{
 }
 
 // Handler is a DNS handler
+// KillSwitchChecker defines the interface for checking temporary disable state
+type KillSwitchChecker interface {
+	IsBlocklistDisabled() (disabled bool, until time.Time)
+	IsPoliciesDisabled() (disabled bool, until time.Time)
+}
+
 type Handler struct {
 	Storage          storage.Storage
 	BlocklistManager *blocklist.Manager
@@ -40,7 +46,8 @@ type Handler struct {
 	RuleEvaluator    *forwarder.RuleEvaluator
 	Forwarder        *forwarder.Forwarder
 	Cache            *cache.Cache
-	ConfigWatcher    *config.Watcher // For kill-switch feature (hot-reload config access)
+	ConfigWatcher    *config.Watcher        // For kill-switch feature (hot-reload config access)
+	KillSwitch       KillSwitchChecker      // For duration-based temporary disabling
 	Metrics          *telemetry.Metrics
 	Logger           *logging.Logger
 	lookupMu         sync.RWMutex
@@ -94,6 +101,11 @@ func (h *Handler) SetMetrics(m *telemetry.Metrics) {
 // SetLogger sets the logger
 func (h *Handler) SetLogger(l *logging.Logger) {
 	h.Logger = l
+}
+
+// SetKillSwitch sets the kill-switch manager for duration-based temporary disabling
+func (h *Handler) SetKillSwitch(ks KillSwitchChecker) {
+	h.KillSwitch = ks
 }
 
 // writeMsg writes a DNS message to the response writer with error handling
@@ -494,12 +506,24 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 	// Policy engine allows complex filtering rules with expressions
 	// Kill-switch check: Only evaluate if enable_policies is true in config
 	// If ConfigWatcher is nil (in tests), assume policies are enabled
+	//
+	// Priority: Temporary disable (duration-based) > Permanent enable (config)
 	enablePolicies := true
 	enableBlocklist := true
 	if h.ConfigWatcher != nil {
 		cfg := h.ConfigWatcher.Config()
 		enablePolicies = cfg.Server.EnablePolicies
 		enableBlocklist = cfg.Server.EnableBlocklist
+	}
+
+	// Check temporary disable state (takes precedence over permanent enable)
+	if h.KillSwitch != nil {
+		if disabled, _ := h.KillSwitch.IsBlocklistDisabled(); disabled {
+			enableBlocklist = false
+		}
+		if disabled, _ := h.KillSwitch.IsPoliciesDisabled(); disabled {
+			enablePolicies = false
+		}
 	}
 
 	if enablePolicies && h.PolicyEngine != nil && h.PolicyEngine.Count() > 0 {

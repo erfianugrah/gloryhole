@@ -430,6 +430,10 @@ func main() {
 	// Set logger for enhanced visibility into DNS operations
 	handler.SetLogger(logger)
 
+	// Create kill-switch manager for duration-based temporary disabling (Pi-hole style)
+	killSwitch := api.NewKillSwitchManager(logger.Logger) // Get underlying slog.Logger
+	handler.SetKillSwitch(killSwitch)
+
 	// Create DNS server
 	server := dns.NewServer(cfg, handler, logger, metrics)
 
@@ -441,8 +445,9 @@ func main() {
 		PolicyEngine:     policyEngine,
 		Logger:           logger.Logger, // Get underlying slog.Logger
 		Version:          version,
-		ConfigWatcher:    cfgWatcher, // For kill-switch feature
-		ConfigPath:       *configPath, // For persisting kill-switch changes
+		ConfigWatcher:    cfgWatcher,   // For kill-switch feature
+		ConfigPath:       *configPath,  // For persisting kill-switch changes
+		KillSwitch:       killSwitch,   // For duration-based temporary disabling
 	})
 
 	// Setup config change callback now that all components are created

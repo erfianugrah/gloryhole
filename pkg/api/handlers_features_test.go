@@ -32,10 +32,13 @@ func TestHandleGetFeatures(t *testing.T) {
 		t.Fatalf("failed to create config watcher: %v", err)
 	}
 
+	// Create kill-switch manager
+
 	server := New(&Config{
 		ListenAddress: ":8080",
 		ConfigWatcher: watcher,
 		ConfigPath:    configPath,
+		KillSwitch:    NewKillSwitchManager(nil),
 	})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/features", nil)
@@ -83,6 +86,7 @@ func TestHandleGetFeatures_MethodNotAllowed(t *testing.T) {
 		ListenAddress: ":8080",
 		ConfigWatcher: watcher,
 		ConfigPath:    configPath,
+		KillSwitch:    NewKillSwitchManager(nil),
 	})
 
 	methods := []string{http.MethodPost, http.MethodPut, http.MethodDelete, http.MethodPatch}
@@ -120,6 +124,7 @@ func TestHandleUpdateFeatures_EnableBlocklist(t *testing.T) {
 		ListenAddress: ":8080",
 		ConfigWatcher: watcher,
 		ConfigPath:    configPath,
+		KillSwitch:    NewKillSwitchManager(nil),
 	})
 
 	enabled := true
@@ -181,6 +186,7 @@ func TestHandleUpdateFeatures_DisablePolicies(t *testing.T) {
 		ListenAddress: ":8080",
 		ConfigWatcher: watcher,
 		ConfigPath:    configPath,
+		KillSwitch:    NewKillSwitchManager(nil),
 	})
 
 	disabled := false
@@ -243,6 +249,7 @@ func TestHandleUpdateFeatures_UpdateBoth(t *testing.T) {
 		ListenAddress: ":8080",
 		ConfigWatcher: watcher,
 		ConfigPath:    configPath,
+		KillSwitch:    NewKillSwitchManager(nil),
 	})
 
 	// Enable both (from disabled state)
@@ -312,6 +319,7 @@ func TestHandleUpdateFeatures_NoChanges(t *testing.T) {
 		ListenAddress: ":8080",
 		ConfigWatcher: watcher,
 		ConfigPath:    configPath,
+		KillSwitch:    NewKillSwitchManager(nil),
 	})
 
 	reqBody := FeaturesRequest{}
@@ -347,6 +355,7 @@ func TestHandleUpdateFeatures_InvalidJSON(t *testing.T) {
 		ListenAddress: ":8080",
 		ConfigWatcher: watcher,
 		ConfigPath:    configPath,
+		KillSwitch:    NewKillSwitchManager(nil),
 	})
 
 	req := httptest.NewRequest(http.MethodPut, "/api/features", bytes.NewReader([]byte("invalid json")))
@@ -379,6 +388,7 @@ func TestHandleUpdateFeatures_MethodNotAllowed(t *testing.T) {
 		ListenAddress: ":8080",
 		ConfigWatcher: watcher,
 		ConfigPath:    configPath,
+		KillSwitch:    NewKillSwitchManager(nil),
 	})
 
 	methods := []string{http.MethodGet, http.MethodPost, http.MethodDelete, http.MethodPatch}
@@ -423,6 +433,7 @@ func TestHandleUpdateFeatures_ReadOnlyConfig(t *testing.T) {
 		ListenAddress: ":8080",
 		ConfigWatcher: watcher,
 		ConfigPath:    configPath,
+		KillSwitch:    NewKillSwitchManager(nil),
 	})
 
 	enabled := true
@@ -461,6 +472,7 @@ func TestHandleUpdateFeatures_LargePayload(t *testing.T) {
 		ListenAddress: ":8080",
 		ConfigWatcher: watcher,
 		ConfigPath:    configPath,
+		KillSwitch:    NewKillSwitchManager(nil),
 	})
 
 	// Create a payload larger than 1MB

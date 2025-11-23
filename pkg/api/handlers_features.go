@@ -16,9 +16,18 @@ type FeaturesRequest struct {
 
 // FeaturesResponse represents the current state of feature kill-switches
 type FeaturesResponse struct {
-	UpdatedAt        time.Time `json:"updated_at"`
-	BlocklistEnabled bool      `json:"blocklist_enabled"`
-	PoliciesEnabled  bool      `json:"policies_enabled"`
+	UpdatedAt                time.Time  `json:"updated_at"`
+	BlocklistEnabled         bool       `json:"blocklist_enabled"`          // Permanent setting from config
+	PoliciesEnabled          bool       `json:"policies_enabled"`           // Permanent setting from config
+	BlocklistTemporarilyDisabled bool   `json:"blocklist_temp_disabled"`    // Temporary disable state
+	BlocklistDisabledUntil   *time.Time `json:"blocklist_disabled_until,omitempty"` // When it will auto-re-enable
+	PoliciesTemporarilyDisabled  bool   `json:"policies_temp_disabled"`     // Temporary disable state
+	PoliciesDisabledUntil    *time.Time `json:"policies_disabled_until,omitempty"`  // When it will auto-re-enable
+}
+
+// DisableRequest represents a request to temporarily disable a feature
+type DisableRequest struct {
+	Duration int `json:"duration"` // Duration in seconds (0 = indefinite)
 }
 
 // handleGetFeatures returns the current state of feature kill-switches
@@ -34,10 +43,23 @@ func (s *Server) handleGetFeatures(w http.ResponseWriter, r *http.Request) {
 	// Get current config
 	cfg := s.configWatcher.Config()
 
+	// Get temporary disable status
+	blocklistTempDisabled, blocklistUntil, policiesTempDisabled, policiesUntil := s.killSwitch.GetStatus()
+
 	resp := FeaturesResponse{
-		UpdatedAt:        time.Now(),
-		BlocklistEnabled: cfg.Server.EnableBlocklist,
-		PoliciesEnabled:  cfg.Server.EnablePolicies,
+		UpdatedAt:                    time.Now(),
+		BlocklistEnabled:             cfg.Server.EnableBlocklist,
+		PoliciesEnabled:              cfg.Server.EnablePolicies,
+		BlocklistTemporarilyDisabled: blocklistTempDisabled,
+		PoliciesTemporarilyDisabled:  policiesTempDisabled,
+	}
+
+	// Only set until times if temporarily disabled
+	if blocklistTempDisabled {
+		resp.BlocklistDisabledUntil = &blocklistUntil
+	}
+	if policiesTempDisabled {
+		resp.PoliciesDisabledUntil = &policiesUntil
 	}
 
 	s.writeJSON(w, http.StatusOK, resp)
@@ -108,6 +130,132 @@ func (s *Server) handleUpdateFeatures(w http.ResponseWriter, r *http.Request) {
 		UpdatedAt:        time.Now(),
 		BlocklistEnabled: cfg.Server.EnableBlocklist,
 		PoliciesEnabled:  cfg.Server.EnablePolicies,
+	}
+
+	s.writeJSON(w, http.StatusOK, resp)
+}
+
+// handleDisableBlocklist temporarily disables the blocklist for a specified duration
+// POST /api/features/blocklist/disable
+func (s *Server) handleDisableBlocklist(w http.ResponseWriter, r *http.Request) {
+	// Only allow POST
+	if r.Method != http.MethodPost {
+		w.Header().Set("Allow", "POST")
+		s.writeError(w, http.StatusMethodNotAllowed, "Only POST is allowed")
+		return
+	}
+
+	// Limit request body size
+	r.Body = http.MaxBytesReader(w, r.Body, 1024*1024) // 1MB limit
+
+	// Parse request
+	var req DisableRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		s.writeError(w, http.StatusBadRequest, "Invalid JSON")
+		return
+	}
+
+	// Validate duration (0 = indefinite, max 24 hours)
+	if req.Duration < 0 || req.Duration > 86400 {
+		s.writeError(w, http.StatusBadRequest, "Duration must be between 0 and 86400 seconds (24 hours)")
+		return
+	}
+
+	// Disable for specified duration
+	var until time.Time
+	if req.Duration == 0 {
+		// Indefinite disable (1 year)
+		until = s.killSwitch.DisableBlocklistFor(365 * 24 * time.Hour)
+	} else {
+		until = s.killSwitch.DisableBlocklistFor(time.Duration(req.Duration) * time.Second)
+	}
+
+	resp := map[string]interface{}{
+		"disabled_until": until,
+		"duration":       req.Duration,
+		"message":        "Blocklist temporarily disabled",
+	}
+
+	s.writeJSON(w, http.StatusOK, resp)
+}
+
+// handleEnableBlocklist immediately re-enables the blocklist (cancels temporary disable)
+// POST /api/features/blocklist/enable
+func (s *Server) handleEnableBlocklist(w http.ResponseWriter, r *http.Request) {
+	// Only allow POST
+	if r.Method != http.MethodPost {
+		w.Header().Set("Allow", "POST")
+		s.writeError(w, http.StatusMethodNotAllowed, "Only POST is allowed")
+		return
+	}
+
+	s.killSwitch.EnableBlocklist()
+
+	resp := map[string]interface{}{
+		"message": "Blocklist re-enabled",
+	}
+
+	s.writeJSON(w, http.StatusOK, resp)
+}
+
+// handleDisablePolicies temporarily disables policies for a specified duration
+// POST /api/features/policies/disable
+func (s *Server) handleDisablePolicies(w http.ResponseWriter, r *http.Request) {
+	// Only allow POST
+	if r.Method != http.MethodPost {
+		w.Header().Set("Allow", "POST")
+		s.writeError(w, http.StatusMethodNotAllowed, "Only POST is allowed")
+		return
+	}
+
+	// Limit request body size
+	r.Body = http.MaxBytesReader(w, r.Body, 1024*1024) // 1MB limit
+
+	// Parse request
+	var req DisableRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		s.writeError(w, http.StatusBadRequest, "Invalid JSON")
+		return
+	}
+
+	// Validate duration (0 = indefinite, max 24 hours)
+	if req.Duration < 0 || req.Duration > 86400 {
+		s.writeError(w, http.StatusBadRequest, "Duration must be between 0 and 86400 seconds (24 hours)")
+		return
+	}
+
+	// Disable for specified duration
+	var until time.Time
+	if req.Duration == 0 {
+		// Indefinite disable (1 year)
+		until = s.killSwitch.DisablePoliciesFor(365 * 24 * time.Hour)
+	} else {
+		until = s.killSwitch.DisablePoliciesFor(time.Duration(req.Duration) * time.Second)
+	}
+
+	resp := map[string]interface{}{
+		"disabled_until": until,
+		"duration":       req.Duration,
+		"message":        "Policies temporarily disabled",
+	}
+
+	s.writeJSON(w, http.StatusOK, resp)
+}
+
+// handleEnablePolicies immediately re-enables policies (cancels temporary disable)
+// POST /api/features/policies/enable
+func (s *Server) handleEnablePolicies(w http.ResponseWriter, r *http.Request) {
+	// Only allow POST
+	if r.Method != http.MethodPost {
+		w.Header().Set("Allow", "POST")
+		s.writeError(w, http.StatusMethodNotAllowed, "Only POST is allowed")
+		return
+	}
+
+	s.killSwitch.EnablePolicies()
+
+	resp := map[string]interface{}{
+		"message": "Policies re-enabled",
 	}
 
 	s.writeJSON(w, http.StatusOK, resp)
