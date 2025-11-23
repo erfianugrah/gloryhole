@@ -25,15 +25,13 @@ Contributing to Glory-Hole development.
 
 - **[Development Setup](development/setup.md)** - Set up your dev environment
 - **[Testing Guide](development/testing.md)** - Running and writing tests
-- **[Contributing](development/contributing.md)** - How to contribute
-- **[Roadmap](development/roadmap.md)** - Future plans and milestones
+- **[Roadmap](roadmap.md)** - Future plans and milestones
 
 ### [Deployment](deployment/)
 Deploy Glory-Hole in production.
 
+- **[VyOS & Docker Guide](deployment/vyos-docker-guide.md)** - VyOS container and Docker deployment
 - **[Docker](deployment/docker.md)** - Containerized deployment
-- **[Kubernetes](deployment/kubernetes.md)** - Kubernetes deployment guide
-- **[Systemd](deployment/systemd.md)** - Linux systemd service
 - **[Cloudflare D1](deployment/cloudflare-d1.md)** - Edge deployment with D1
 - **[Monitoring](deployment/monitoring.md)** - Observability and monitoring
 
