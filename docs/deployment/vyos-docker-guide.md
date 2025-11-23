@@ -271,7 +271,7 @@ save
 
 ### Data Migration
 
-Coming in v0.7.6:
+Available in v0.7.7:
 - Import Pi-hole blocklists from gravity.db
 - Import whitelist/blacklist
 - Import local DNS records
@@ -443,7 +443,7 @@ docker run --rm \
 configure
 
 # Update image
-set container name glory-hole image 'ghcr.io/yourusername/glory-hole:v0.7.5'
+set container name glory-hole image 'ghcr.io/yourusername/glory-hole:v0.7.7'
 
 commit
 restart container glory-hole

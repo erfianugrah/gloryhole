@@ -1,4 +1,4 @@
-# Kill-Switch Feature Design (v0.7.1)
+# Kill-Switch Feature Design (v0.7.7)
 
 **Purpose**: Runtime toggle for ad-blocking and policy enforcement without server restart
 

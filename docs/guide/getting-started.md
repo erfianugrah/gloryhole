@@ -198,7 +198,7 @@ glory-hole -config config.yml
 You should see output similar to:
 
 ```
-INFO Glory Hole DNS starting version=0.7.1
+INFO Glory Hole DNS starting version=0.7.7
 INFO Initializing blocklist manager sources=1
 INFO Blocklist manager started domains=101348
 INFO Storage initialized successfully backend=sqlite
@@ -277,7 +277,7 @@ curl http://localhost:8080/api/health
 # {
 #   "status": "ok",
 #   "uptime": "5m30s",
-#   "version": "0.7.1"
+#   "version": "0.7.7"
 # }
 ```
 
