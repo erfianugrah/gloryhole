@@ -191,9 +191,11 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 		}
 	}()
 
-	// Create response message
-	// Note: We don't pool these because ResponseWriter may hold references
-	msg := new(dns.Msg)
+	// Create response message from pool to reduce allocations
+	// Safe to pool because WriteMsg() is synchronous and completes before we return
+	msg := msgPool.Get().(*dns.Msg)
+	defer msgPool.Put(msg)
+
 	msg.SetReply(r)
 	msg.Authoritative = true
 	msg.RecursionAvailable = true

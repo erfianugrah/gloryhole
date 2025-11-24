@@ -316,7 +316,7 @@ func TestMigrations_Integration(t *testing.T) {
 	}
 
 	// Create storage (which will run migrations)
-	stor, err := NewSQLiteStorage(cfg)
+	stor, err := NewSQLiteStorage(cfg, nil)
 	if err != nil {
 		t.Fatalf("failed to create storage: %v", err)
 	}

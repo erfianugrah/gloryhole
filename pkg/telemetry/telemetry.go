@@ -50,6 +50,9 @@ type Metrics struct {
 	ActiveClients metric.Int64UpDownCounter
 	BlocklistSize metric.Int64UpDownCounter
 	CacheSize     metric.Int64UpDownCounter
+
+	// Storage metrics
+	StorageQueriesDropped metric.Int64Counter
 }
 
 // New creates a new telemetry instance
@@ -274,19 +277,28 @@ func (t *Telemetry) InitMetrics() (*Metrics, error) {
 		return nil, fmt.Errorf("failed to create cache size gauge: %w", err)
 	}
 
+	storageQueriesDropped, err := meter.Int64Counter(
+		"storage.queries.dropped",
+		metric.WithDescription("Number of queries dropped due to full buffer"),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create storage queries dropped counter: %w", err)
+	}
+
 	return &Metrics{
-		DNSQueriesTotal:     queriesTotal,
-		DNSQueriesByType:    queriesByType,
-		DNSQueryDuration:    queryDuration,
-		DNSCacheHits:        cacheHits,
-		DNSCacheMisses:      cacheMisses,
-		DNSBlockedQueries:   blockedQueries,
-		DNSForwardedQueries: forwardedQueries,
-		RateLimitViolations: rateLimitViolations,
-		RateLimitDropped:    rateLimitDropped,
-		ActiveClients:       activeClients,
-		BlocklistSize:       blocklistSize,
-		CacheSize:           cacheSize,
+		DNSQueriesTotal:       queriesTotal,
+		DNSQueriesByType:      queriesByType,
+		DNSQueryDuration:      queryDuration,
+		DNSCacheHits:          cacheHits,
+		DNSCacheMisses:        cacheMisses,
+		DNSBlockedQueries:     blockedQueries,
+		DNSForwardedQueries:   forwardedQueries,
+		RateLimitViolations:   rateLimitViolations,
+		RateLimitDropped:      rateLimitDropped,
+		ActiveClients:         activeClients,
+		BlocklistSize:         blocklistSize,
+		CacheSize:             cacheSize,
+		StorageQueriesDropped: storageQueriesDropped,
 	}, nil
 }
 
@@ -298,6 +310,14 @@ func (t *Telemetry) MeterProvider() metric.MeterProvider {
 // TracerProvider returns the tracer provider
 func (t *Telemetry) TracerProvider() trace.TracerProvider {
 	return t.tracerProvider
+}
+
+// AddDroppedQuery implements storage.MetricsRecorder interface
+// This allows Metrics to be passed to storage without creating import cycles
+func (m *Metrics) AddDroppedQuery(ctx context.Context, count int64) {
+	if m != nil && m.StorageQueriesDropped != nil {
+		m.StorageQueriesDropped.Add(ctx, count)
+	}
 }
 
 // Shutdown gracefully shuts down telemetry

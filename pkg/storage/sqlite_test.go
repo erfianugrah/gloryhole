@@ -25,7 +25,7 @@ func TestNewSQLiteStorage(t *testing.T) {
 		RetentionDays: 7,
 	}
 
-	storage, err := NewSQLiteStorage(cfg)
+	storage, err := NewSQLiteStorage(cfg, nil)
 	if err != nil {
 		t.Fatalf("NewSQLiteStorage() error = %v", err)
 	}
@@ -519,7 +519,7 @@ func TestSQLiteStorage_Persistence(t *testing.T) {
 	}
 
 	// Create storage and insert data
-	storage1, err := NewSQLiteStorage(cfg)
+	storage1, err := NewSQLiteStorage(cfg, nil)
 	if err != nil {
 		t.Fatalf("NewSQLiteStorage() error = %v", err)
 	}
@@ -537,7 +537,7 @@ func TestSQLiteStorage_Persistence(t *testing.T) {
 	_ = storage1.Close()
 
 	// Reopen storage and verify data persisted
-	storage2, err := NewSQLiteStorage(cfg)
+	storage2, err := NewSQLiteStorage(cfg, nil)
 	if err != nil {
 		t.Fatalf("NewSQLiteStorage() error = %v", err)
 	}
@@ -575,7 +575,7 @@ func setupTestStorage(t *testing.T) (Storage, func()) {
 		RetentionDays: 7,
 	}
 
-	storage, err := NewSQLiteStorage(cfg)
+	storage, err := NewSQLiteStorage(cfg, nil)
 	if err != nil {
 		t.Fatalf("setupTestStorage() error = %v", err)
 	}

@@ -8,7 +8,7 @@ import (
 
 // New creates a new storage instance based on the configuration
 // Returns ErrNotEnabled if storage is disabled in config
-func New(cfg *Config) (Storage, error) {
+func New(cfg *Config, metrics MetricsRecorder) (Storage, error) {
 	if cfg == nil {
 		cfg = &Config{}
 		*cfg = DefaultConfig()
@@ -27,9 +27,9 @@ func New(cfg *Config) (Storage, error) {
 	// Create storage based on backend type
 	switch cfg.Backend {
 	case BackendSQLite:
-		return NewSQLiteStorage(cfg)
+		return NewSQLiteStorage(cfg, metrics)
 	case BackendD1:
-		return NewD1Storage(cfg)
+		return NewD1Storage(cfg, metrics)
 	default:
 		return nil, fmt.Errorf("%w: %s", ErrInvalidBackend, cfg.Backend)
 	}

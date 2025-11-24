@@ -156,7 +156,7 @@ func TestNewWithDisabledConfig(t *testing.T) {
 		Enabled: false,
 	}
 
-	storage, err := New(cfg)
+	storage, err := New(cfg, nil)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -177,7 +177,7 @@ func TestNewWithInvalidBackend(t *testing.T) {
 		Backend: "invalid",
 	}
 
-	_, err := New(cfg)
+	_, err := New(cfg, nil)
 	if err == nil {
 		t.Error("expected error for invalid backend")
 	}

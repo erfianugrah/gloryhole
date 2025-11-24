@@ -13,6 +13,12 @@ import (
 	_ "modernc.org/sqlite"
 )
 
+// MetricsRecorder defines the interface for recording storage metrics
+// This interface breaks the import cycle between storage and telemetry packages
+type MetricsRecorder interface {
+	AddDroppedQuery(ctx context.Context, count int64)
+}
+
 //go:embed migrations/001_initial.sql
 var initialSchema string
 
@@ -20,6 +26,7 @@ var initialSchema string
 type SQLiteStorage struct {
 	db                   *sql.DB
 	cfg                  *Config
+	metrics              MetricsRecorder
 	buffer               chan *QueryLog
 	stmtInsertQuery      *sql.Stmt
 	stmtGetRecentQueries *sql.Stmt
@@ -30,7 +37,7 @@ type SQLiteStorage struct {
 }
 
 // NewSQLiteStorage creates a new SQLite storage backend
-func NewSQLiteStorage(cfg *Config) (Storage, error) {
+func NewSQLiteStorage(cfg *Config, metrics MetricsRecorder) (Storage, error) {
 	if cfg == nil {
 		return nil, ErrInvalidConfig
 	}
@@ -92,6 +99,7 @@ func NewSQLiteStorage(cfg *Config) (Storage, error) {
 	storage := &SQLiteStorage{
 		db:              db,
 		cfg:             cfg,
+		metrics:         metrics,
 		buffer:          make(chan *QueryLog, cfg.BufferSize),
 		stmtInsertQuery: stmtInsert,
 	}
@@ -143,7 +151,10 @@ func (s *SQLiteStorage) LogQuery(ctx context.Context, query *QueryLog) error {
 	case <-ctx.Done():
 		return ctx.Err()
 	default:
-		// Buffer full, drop query or return error
+		// Buffer full, drop query and record metric
+		if s.metrics != nil {
+			s.metrics.AddDroppedQuery(ctx, 1)
+		}
 		return ErrBufferFull
 	}
 }

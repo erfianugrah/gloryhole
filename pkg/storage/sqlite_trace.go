@@ -37,7 +37,9 @@ func (s *SQLiteStorage) GetTraceStatistics(ctx context.Context, since time.Time)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close() // Close error is non-critical since rows.Err() is checked at return
+	}()
 
 	// Aggregate trace data
 	for rows.Next() {
@@ -87,7 +89,9 @@ func (s *SQLiteStorage) GetQueriesWithTraceFilter(ctx context.Context, filter Tr
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close() // Close error is non-critical since rows.Err() is checked at return
+	}()
 
 	var queries []*QueryLog
 	var skipped int

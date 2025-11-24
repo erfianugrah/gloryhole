@@ -217,7 +217,7 @@ func main() {
 			"backend", cfg.Database.Backend,
 			"path", cfg.Database.SQLite.Path,
 		)
-		stor, err = storage.New(&cfg.Database)
+		stor, err = storage.New(&cfg.Database, metrics)
 		if err != nil {
 			logger.Error("Failed to initialize storage", "error", err)
 			// Continue anyway - server can run without query logging
