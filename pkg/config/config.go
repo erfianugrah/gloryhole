@@ -11,6 +11,7 @@ import (
 )
 
 // Config holds the application configuration
+//nolint:fieldalignment // Struct is organized for readability; padding cost is acceptable.
 type Config struct {
 	Telemetry             TelemetryConfig             `yaml:"telemetry"`
 	Server                ServerConfig                `yaml:"server"`
@@ -102,14 +103,27 @@ const (
 )
 
 // RateLimitConfig controls optional per-client rate limiting.
+// RateLimitConfig controls optional per-client rate limiting.
+//nolint:fieldalignment // Alignment cost is negligible compared to readability.
 type RateLimitConfig struct {
-	Enabled           bool            `yaml:"enabled"`
-	RequestsPerSecond float64         `yaml:"requests_per_second"`
-	Burst             int             `yaml:"burst"`
-	Action            RateLimitAction `yaml:"on_exceed"`
-	LogViolations     bool            `yaml:"log_violations"`
-	CleanupInterval   time.Duration   `yaml:"cleanup_interval"`
-	MaxTrackedClients int             `yaml:"max_tracked_clients"`
+	Enabled           bool                `yaml:"enabled"`
+	RequestsPerSecond float64             `yaml:"requests_per_second"`
+	Burst             int                 `yaml:"burst"`
+	Action            RateLimitAction     `yaml:"on_exceed"`
+	LogViolations     bool                `yaml:"log_violations"`
+	CleanupInterval   time.Duration       `yaml:"cleanup_interval"`
+	MaxTrackedClients int                 `yaml:"max_tracked_clients"`
+	Overrides         []RateLimitOverride `yaml:"overrides"`
+}
+
+// RateLimitOverride allows per-client or per-CIDR customization of limits.
+type RateLimitOverride struct {
+	Name              string           `yaml:"name"`
+	Clients           []string         `yaml:"clients"`
+	CIDRs             []string         `yaml:"cidrs"`
+	RequestsPerSecond *float64         `yaml:"requests_per_second"`
+	Burst             *int             `yaml:"burst"`
+	Action            *RateLimitAction `yaml:"on_exceed"`
 }
 
 // LoggingConfig holds logging settings
@@ -384,6 +398,25 @@ func (c *Config) Validate() error {
 		case RateLimitActionDrop, RateLimitActionNXDOMAIN:
 		default:
 			return fmt.Errorf("rate_limit.on_exceed must be 'drop' or 'nxdomain'")
+		}
+
+		for i, override := range c.RateLimit.Overrides {
+			if len(override.Clients) == 0 && len(override.CIDRs) == 0 {
+				return fmt.Errorf("rate_limit.overrides[%d] must specify at least one client or CIDR", i)
+			}
+			if override.RequestsPerSecond != nil && *override.RequestsPerSecond <= 0 {
+				return fmt.Errorf("rate_limit.overrides[%d].requests_per_second must be > 0", i)
+			}
+			if override.Burst != nil && *override.Burst <= 0 {
+				return fmt.Errorf("rate_limit.overrides[%d].burst must be > 0", i)
+			}
+			if override.Action != nil {
+				switch *override.Action {
+				case RateLimitActionDrop, RateLimitActionNXDOMAIN:
+				default:
+					return fmt.Errorf("rate_limit.overrides[%d].on_exceed must be 'drop' or 'nxdomain'", i)
+				}
+			}
 		}
 	}
 

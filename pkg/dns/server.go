@@ -208,8 +208,7 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 
 	// Enforce optional rate limiting before expensive work
 	if h.RateLimiter != nil {
-		if allowed, limited := h.RateLimiter.Allow(clientIP); !allowed && limited {
-			action := h.RateLimiter.Action()
+		if allowed, limited, action := h.RateLimiter.Allow(clientIP); !allowed && limited {
 			dropped := action == config.RateLimitActionDrop
 			h.recordRateLimit(ctx, clientIP, qtypeLabel, string(action), dropped)
 			if h.RateLimiter.LogViolations() && h.Logger != nil {

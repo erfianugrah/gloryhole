@@ -129,6 +129,16 @@ rate_limit:
   log_violations: true
   cleanup_interval: "10m"
   max_tracked_clients: 10000
+  overrides:
+    - name: "kids-devices"
+      clients: ["192.168.1.120", "192.168.1.121"]
+      requests_per_second: 25
+      burst: 50
+      on_exceed: "drop"
+    - name: "iot-network"
+      cidrs: ["192.168.10.0/24"]
+      requests_per_second: 5
+      burst: 10
 ```
 
 | Field | Description |
@@ -140,6 +150,7 @@ rate_limit:
 | `log_violations` | Emits warning logs for each violation (with client IP and domain). |
 | `cleanup_interval` | How often idle clients are purged from memory. |
 | `max_tracked_clients` | Upper bound for simultaneous client buckets; the oldest entries are evicted beyond this number. |
+| `overrides` | Optional list of client/CIDR-specific limits that replace the global rate/burst/action. |
 
 Use `drop` when you want abusive clients to back off (no response) and `nxdomain` when you prefer deterministic responses for downstream resolvers.
 
