@@ -93,6 +93,17 @@ type ErrorResponse struct {
 	Code    int    `json:"code"`
 }
 
+// TraceStatisticsResponse represents aggregated trace statistics
+type TraceStatisticsResponse struct {
+	Since        string           `json:"since"`
+	Until        string           `json:"until"`
+	TotalBlocked int64            `json:"total_blocked"`
+	ByStage      map[string]int64 `json:"by_stage"`
+	ByAction     map[string]int64 `json:"by_action"`
+	ByRule       map[string]int64 `json:"by_rule"`
+	BySource     map[string]int64 `json:"by_source"`
+}
+
 // convertQueryLog converts storage.QueryLog to QueryResponse
 func convertQueryLog(q *storage.QueryLog) QueryResponse {
 	return QueryResponse{
@@ -116,5 +127,18 @@ func convertDomainStats(d *storage.DomainStats) DomainStatsResponse {
 		Domain:  d.Domain,
 		Queries: d.QueryCount,
 		Blocked: d.Blocked,
+	}
+}
+
+// convertTraceStatistics converts storage.TraceStatistics to TraceStatisticsResponse
+func convertTraceStatistics(t *storage.TraceStatistics) TraceStatisticsResponse {
+	return TraceStatisticsResponse{
+		Since:        t.Since.Format(time.RFC3339),
+		Until:        t.Until.Format(time.RFC3339),
+		TotalBlocked: t.TotalBlocked,
+		ByStage:      t.ByStage,
+		ByAction:     t.ByAction,
+		ByRule:       t.ByRule,
+		BySource:     t.BySource,
 	}
 }

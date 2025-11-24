@@ -20,6 +20,10 @@ type Storage interface {
 	GetBlockedCount(ctx context.Context, since time.Time) (int64, error)
 	GetQueryCount(ctx context.Context, since time.Time) (int64, error)
 
+	// Trace Analytics
+	GetTraceStatistics(ctx context.Context, since time.Time) (*TraceStatistics, error)
+	GetQueriesWithTraceFilter(ctx context.Context, filter TraceFilter, limit, offset int) ([]*QueryLog, error)
+
 	// Maintenance
 	Cleanup(ctx context.Context, olderThan time.Time) error
 	Close() error
@@ -72,6 +76,25 @@ type DomainStats struct {
 	Domain       string    `json:"domain"`
 	QueryCount   int64     `json:"query_count"`
 	Blocked      bool      `json:"blocked"`
+}
+
+// TraceStatistics represents aggregated trace statistics
+type TraceStatistics struct {
+	Since        time.Time         `json:"since"`
+	Until        time.Time         `json:"until"`
+	TotalBlocked int64             `json:"total_blocked"`
+	ByStage      map[string]int64  `json:"by_stage"`
+	ByAction     map[string]int64  `json:"by_action"`
+	ByRule       map[string]int64  `json:"by_rule"`
+	BySource     map[string]int64  `json:"by_source"`
+}
+
+// TraceFilter represents filtering options for trace queries
+type TraceFilter struct {
+	Stage  string
+	Action string
+	Rule   string
+	Source string
 }
 
 // BackendType represents the type of storage backend

@@ -87,6 +87,23 @@ func (n *NoOpStorage) GetQueryCount(ctx context.Context, since time.Time) (int64
 	return 0, nil
 }
 
+// GetTraceStatistics returns empty trace statistics
+func (n *NoOpStorage) GetTraceStatistics(ctx context.Context, since time.Time) (*TraceStatistics, error) {
+	return &TraceStatistics{
+		Since:    since,
+		Until:    time.Now(),
+		ByStage:  make(map[string]int64),
+		ByAction: make(map[string]int64),
+		ByRule:   make(map[string]int64),
+		BySource: make(map[string]int64),
+	}, nil
+}
+
+// GetQueriesWithTraceFilter returns an empty slice
+func (n *NoOpStorage) GetQueriesWithTraceFilter(ctx context.Context, filter TraceFilter, limit, offset int) ([]*QueryLog, error) {
+	return []*QueryLog{}, nil
+}
+
 // Cleanup does nothing
 func (n *NoOpStorage) Cleanup(ctx context.Context, olderThan time.Time) error {
 	return nil

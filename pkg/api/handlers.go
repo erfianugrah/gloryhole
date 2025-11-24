@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"strconv"
 	"time"
+
+	"glory-hole/pkg/storage"
 )
 
 const (
@@ -181,11 +183,31 @@ func (s *Server) handleQueries(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Get recent queries from storage
+	// Check for trace filtering parameters
+	stage := r.URL.Query().Get("stage")
+	action := r.URL.Query().Get("action")
+	rule := r.URL.Query().Get("rule")
+	source := r.URL.Query().Get("source")
+
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
 
-	queries, err := s.storage.GetRecentQueries(ctx, limit, offset)
+	var queries []*storage.QueryLog
+	var err error
+
+	// Use trace filtering if any trace parameters are provided
+	if stage != "" || action != "" || rule != "" || source != "" {
+		filter := storage.TraceFilter{
+			Stage:  stage,
+			Action: action,
+			Rule:   rule,
+			Source: source,
+		}
+		queries, err = s.storage.GetQueriesWithTraceFilter(ctx, filter, limit, offset)
+	} else {
+		queries, err = s.storage.GetRecentQueries(ctx, limit, offset)
+	}
+
 	if err != nil {
 		s.logger.Error("Failed to get queries", "error", err)
 		s.writeError(w, http.StatusInternalServerError, "Failed to retrieve queries")
@@ -320,5 +342,44 @@ func (s *Server) handleCachePurge(w http.ResponseWriter, r *http.Request) {
 		EntriesCleared: entriesBefore,
 	}
 
+	s.writeJSON(w, http.StatusOK, response)
+}
+
+// handleTraceStatistics handles GET /api/traces/stats
+func (s *Server) handleTraceStatistics(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		s.writeError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		return
+	}
+
+	// Check if storage is available
+	if s.storage == nil {
+		s.writeError(w, http.StatusServiceUnavailable, "Storage not available")
+		return
+	}
+
+	// Parse query parameters
+	sinceParam := r.URL.Query().Get("since")
+	since := time.Now().Add(-24 * time.Hour) // Default to last 24 hours
+	if sinceParam != "" {
+		if duration, err := time.ParseDuration(sinceParam); err == nil {
+			since = time.Now().Add(-duration)
+		} else if t, err := time.Parse(time.RFC3339, sinceParam); err == nil {
+			since = t
+		}
+	}
+
+	// Get trace statistics from storage
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+
+	stats, err := s.storage.GetTraceStatistics(ctx, since)
+	if err != nil {
+		s.logger.Error("Failed to get trace statistics", "error", err)
+		s.writeError(w, http.StatusInternalServerError, "Failed to retrieve trace statistics")
+		return
+	}
+
+	response := convertTraceStatistics(stats)
 	s.writeJSON(w, http.StatusOK, response)
 }

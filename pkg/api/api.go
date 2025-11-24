@@ -80,6 +80,9 @@ func New(cfg *Config) *Server {
 	// Statistics
 	mux.HandleFunc("/api/stats", s.handleStats)
 
+	// Trace statistics
+	mux.HandleFunc("/api/traces/stats", s.handleTraceStatistics)
+
 	// Queries
 	mux.HandleFunc("/api/queries", s.handleQueries)
 

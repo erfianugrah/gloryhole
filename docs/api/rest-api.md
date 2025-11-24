@@ -136,17 +136,90 @@ curl http://localhost:8080/api/stats?since=7d
 **Errors:**
 - `503` - Storage not available
 
+### GET /api/traces/stats
+
+**Description:** Get aggregated trace statistics for blocked queries. Provides insights into how queries were blocked (blocklist, policy, rate limiting) and which rules were triggered.
+
+**Parameters:**
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| `since` | duration or timestamp | No | `24h` | Time period (e.g., `1h`, `24h`) or RFC3339 timestamp |
+
+**Request:**
+```bash
+# Last 24 hours (default)
+curl http://localhost:8080/api/traces/stats
+
+# Last hour
+curl http://localhost:8080/api/traces/stats?since=1h
+
+# Since specific timestamp
+curl http://localhost:8080/api/traces/stats?since=2025-11-24T00:00:00Z
+```
+
+**Response:** (200 OK)
+```json
+{
+  "since": "2025-11-23T10:30:00Z",
+  "until": "2025-11-24T10:30:00Z",
+  "total_blocked": 15432,
+  "by_stage": {
+    "blocklist": 12000,
+    "policy": 3200,
+    "cache": 232
+  },
+  "by_action": {
+    "block": 12000,
+    "BLOCK": 3200,
+    "blocked_hit": 232
+  },
+  "by_rule": {
+    "Block ads and trackers": 2100,
+    "Block social media": 1100
+  },
+  "by_source": {
+    "manager": 12000,
+    "policy_engine": 3200,
+    "response_cache": 232
+  }
+}
+```
+
+**Response Fields:**
+| Field | Type | Description |
+|-------|------|-------------|
+| `since` | string | Start of time period (ISO 8601) |
+| `until` | string | End of time period (ISO 8601) |
+| `total_blocked` | int | Total number of blocked queries |
+| `by_stage` | object | Counts by decision stage (blocklist, policy, cache, rate_limit) |
+| `by_action` | object | Counts by action taken (block, BLOCK, blocked_hit, rate_limited) |
+| `by_rule` | object | Counts by policy rule name |
+| `by_source` | object | Counts by decision source (manager, policy_engine, response_cache, rate_limiter) |
+
+**Use Cases:**
+- Identify which blocklists or policies are most effective
+- Understand the breakdown of blocking decisions
+- Monitor policy rule effectiveness
+- Debug why queries are being blocked
+
+**Errors:**
+- `503` - Storage not available
+
 ## Query Endpoints
 
 ### GET /api/queries
 
-**Description:** Get recent DNS queries with pagination.
+**Description:** Get recent DNS queries with pagination and optional trace filtering.
 
 **Parameters:**
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
 | `limit` | int | No | `100` | Number of results (1-1000) |
 | `offset` | int | No | `0` | Pagination offset |
+| `stage` | string | No | - | Filter by decision stage (blocklist, policy, cache, rate_limit) |
+| `action` | string | No | - | Filter by action (block, BLOCK, blocked_hit, rate_limited) |
+| `rule` | string | No | - | Filter by policy rule name |
+| `source` | string | No | - | Filter by source (manager, policy_engine, response_cache, rate_limiter) |
 
 **Request:**
 ```bash
@@ -158,6 +231,18 @@ curl http://localhost:8080/api/queries?limit=50
 
 # Pagination
 curl http://localhost:8080/api/queries?limit=50&offset=100
+
+# Filter by stage - only policy blocks
+curl 'http://localhost:8080/api/queries?stage=policy'
+
+# Filter by source - only blocklist manager
+curl 'http://localhost:8080/api/queries?source=manager'
+
+# Filter by specific rule
+curl 'http://localhost:8080/api/queries?rule=Block+social+media'
+
+# Combine filters - policy blocks from policy engine
+curl 'http://localhost:8080/api/queries?stage=policy&source=policy_engine'
 ```
 
 **Response:** (200 OK)
@@ -579,6 +664,6 @@ Planned for future releases:
 - **Rate Limiting**: Configurable limits per IP/key
 - **Webhooks**: Notify on events (blocklist update, high block rate, etc.)
 - **Bulk Operations**: Batch create/update/delete policies
-- **Query Filtering**: Filter queries by domain, IP, status
+- **Enhanced Query Filtering**: Filter by domain, IP, date range
 - **Statistics Export**: CSV/JSON export
 - **Real-time WebSocket**: Live query stream
