@@ -84,7 +84,9 @@ func (m *mockResponseWriter) RemoteAddr() net.Addr {
 }
 
 func (m *mockResponseWriter) WriteMsg(msg *dnslib.Msg) error {
-	m.msg = msg
+	// Copy the message to avoid races with pooled messages
+	// Real DNS writers serialize to bytes, so this simulates that behavior
+	m.msg = msg.Copy()
 	return nil
 }
 
