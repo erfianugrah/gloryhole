@@ -69,7 +69,7 @@ func TestHandler_SetStorage(t *testing.T) {
 			Path: ":memory:",
 		},
 	}
-	stor, err := storage.New(cfg)
+	stor, err := storage.New(cfg, nil)
 	if err != nil {
 		t.Fatalf("Failed to create storage: %v", err)
 	}
@@ -511,7 +511,7 @@ func TestServeDNS_WithStorage(t *testing.T) {
 			Path: ":memory:",
 		},
 	}
-	stor, err := storage.New(cfg)
+	stor, err := storage.New(cfg, nil)
 	if err != nil {
 		t.Fatalf("Failed to create storage: %v", err)
 	}

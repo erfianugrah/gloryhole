@@ -202,7 +202,7 @@ func TestIntegration_DNSWithStorage(t *testing.T) {
 	metrics, _ := telem.InitMetrics()
 
 	// Initialize storage
-	stor, err := storage.New(&cfg.Database)
+	stor, err := storage.New(&cfg.Database, metrics)
 	if err != nil {
 		t.Fatalf("Failed to create storage: %v", err)
 	}

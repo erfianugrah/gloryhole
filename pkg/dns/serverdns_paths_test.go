@@ -481,7 +481,7 @@ func TestServeDNS_StorageLogging(t *testing.T) {
 		SQLite: storage.SQLiteConfig{
 			Path: ":memory:",
 		},
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("Failed to create storage: %v", err)
 	}

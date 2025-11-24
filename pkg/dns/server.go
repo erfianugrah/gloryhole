@@ -196,6 +196,9 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 	msg := msgPool.Get().(*dns.Msg)
 	defer msgPool.Put(msg)
 
+	// Reset the message to clean state before use
+	*msg = dns.Msg{}
+
 	msg.SetReply(r)
 	msg.Authoritative = true
 	msg.RecursionAvailable = true
