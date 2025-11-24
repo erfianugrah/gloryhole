@@ -160,8 +160,10 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: |
+            type=gha,scope=main
+            type=gha,scope=${{ github.ref_name }}
+          cache-to: type=gha,mode=max,scope=${{ github.ref_name }}
           build-args: |
             VERSION=${{ github.ref_name }}
             BUILD_TIME=${{ steps.build-meta.outputs.build_time }}
