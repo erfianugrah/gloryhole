@@ -39,7 +39,7 @@ type QueryLog struct {
 	Upstream       string    `json:"upstream,omitempty"`
 	ID             int64     `json:"id"`
 	ResponseCode   int       `json:"response_code"`
-	ResponseTimeMs int64     `json:"response_time_ms"`
+	ResponseTimeMs float64   `json:"response_time_ms"`
 	Blocked        bool      `json:"blocked"`
 	Cached         bool      `json:"cached"`
 	BlockTrace     []BlockTraceEntry `json:"block_trace,omitempty"`

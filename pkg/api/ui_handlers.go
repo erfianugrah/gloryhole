@@ -262,7 +262,7 @@ func (s *Server) handleQueriesPartial(w http.ResponseWriter, r *http.Request) {
 		QueryType      string
 		Blocked        bool
 		Cached         bool
-		ResponseTimeMs int64
+		ResponseTimeMs float64
 	}
 
 	queries := []QueryData{}

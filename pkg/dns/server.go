@@ -172,7 +172,7 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 					ResponseCode:   responseCode,
 					Blocked:        blocked,
 					Cached:         cached,
-					ResponseTimeMs: time.Since(startTime).Milliseconds(),
+					ResponseTimeMs: time.Since(startTime).Seconds() * 1000,
 					Upstream:       upstream,
 					BlockTrace:     trace.Entries(),
 				}

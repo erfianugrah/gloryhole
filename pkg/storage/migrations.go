@@ -29,6 +29,45 @@ var migrations = []Migration{
 			ALTER TABLE queries ADD COLUMN block_trace TEXT;
 		`,
 	},
+	{
+		Version:     3,
+		Description: "Change response_time_ms from INTEGER to REAL for sub-millisecond precision",
+		SQL: `
+			-- Create new table with REAL type for response_time_ms
+			CREATE TABLE queries_new (
+				id INTEGER PRIMARY KEY AUTOINCREMENT,
+				timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+				client_ip TEXT NOT NULL,
+				domain TEXT NOT NULL,
+				query_type TEXT NOT NULL,
+				response_code INTEGER NOT NULL,
+				blocked BOOLEAN NOT NULL,
+				cached BOOLEAN NOT NULL,
+				response_time_ms REAL NOT NULL,
+				upstream TEXT,
+				block_trace TEXT
+			);
+
+			-- Copy data from old table
+			INSERT INTO queries_new
+			SELECT id, timestamp, client_ip, domain, query_type, response_code,
+			       blocked, cached, CAST(response_time_ms AS REAL), upstream, block_trace
+			FROM queries;
+
+			-- Drop old table
+			DROP TABLE queries;
+
+			-- Rename new table
+			ALTER TABLE queries_new RENAME TO queries;
+
+			-- Recreate indexes
+			CREATE INDEX idx_queries_timestamp ON queries(timestamp);
+			CREATE INDEX idx_queries_domain ON queries(domain);
+			CREATE INDEX idx_queries_blocked ON queries(blocked);
+			CREATE INDEX idx_queries_client_ip ON queries(client_ip);
+			CREATE INDEX idx_queries_cached ON queries(cached);
+		`,
+	},
 	// Future migrations will be added here with incrementing version numbers
 	// Example:
 	// {
