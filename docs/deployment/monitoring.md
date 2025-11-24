@@ -261,17 +261,17 @@ rate(dns_queries_blocked[1m]) * 60
 
 | Metric | Type | Description |
 |--------|------|-------------|
-| `rate_limit_violations` | Counter | Number of rate limit violations |
-| `rate_limit_dropped` | Counter | Number of dropped requests due to rate limiting |
+| `rate_limit_violations` | Counter | Number of rate limit violations (labels: `action`, `type`, `client`) |
+| `rate_limit_dropped` | Counter | Number of dropped requests due to rate limiting (labels match `rate_limit_violations`) |
 
 **Example queries:**
 
 ```promql
-# Rate limit violations per second
-rate(rate_limit_violations[5m])
+# Rate limit violations per second (grouped by action)
+sum by(action) (rate(rate_limit_violations[5m]))
 
-# Dropped requests per second
-rate(rate_limit_dropped[5m])
+# Dropped requests per second, regardless of action
+sum without(action,client,type) (rate(rate_limit_dropped[5m]))
 ```
 
 ### System Metrics

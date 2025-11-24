@@ -22,6 +22,7 @@ import (
 	"glory-hole/pkg/logging"
 	"glory-hole/pkg/pattern"
 	"glory-hole/pkg/policy"
+	"glory-hole/pkg/ratelimit"
 	"glory-hole/pkg/resolver"
 	"glory-hole/pkg/storage"
 	"glory-hole/pkg/telemetry"
@@ -139,6 +140,7 @@ func main() {
 
 	// Initialize blocklist manager if configured (lock-free, high performance)
 	var blocklistMgr *blocklist.Manager
+	var rateLimiter *ratelimit.Manager
 	if len(cfg.Blocklists) > 0 {
 		logger.Info("Initializing blocklist manager", "sources", len(cfg.Blocklists))
 		blocklistMgr = blocklist.NewManager(cfg, logger, metrics, httpClient)
@@ -153,6 +155,18 @@ func main() {
 			logger.Info("Blocklist manager started",
 				"domains", blocklistMgr.Size(),
 				"auto_update", cfg.AutoUpdateBlocklists,
+			)
+		}
+	}
+
+	if cfg.RateLimit.Enabled {
+		rateLimiter = ratelimit.NewManager(&cfg.RateLimit, logger)
+		if rateLimiter != nil {
+			handler.SetRateLimiter(rateLimiter)
+			logger.Info("Rate limiter enabled",
+				"requests_per_second", cfg.RateLimit.RequestsPerSecond,
+				"burst", cfg.RateLimit.Burst,
+				"action", cfg.RateLimit.Action,
 			)
 		}
 	}
@@ -287,106 +301,106 @@ func main() {
 				}
 				record = localrecords.NewCNAMERecord(entry.Domain, entry.Target)
 
-		case "TXT":
-			// Create TXT record
-			if len(entry.TxtRecords) == 0 {
-				logger.Error("TXT record has no text data", "domain", entry.Domain)
-				continue
-			}
-			record = localrecords.NewLocalRecord(entry.Domain, localrecords.RecordTypeTXT)
-			record.TxtRecords = entry.TxtRecords
+			case "TXT":
+				// Create TXT record
+				if len(entry.TxtRecords) == 0 {
+					logger.Error("TXT record has no text data", "domain", entry.Domain)
+					continue
+				}
+				record = localrecords.NewLocalRecord(entry.Domain, localrecords.RecordTypeTXT)
+				record.TxtRecords = entry.TxtRecords
 
-		case "MX":
-			// Create MX record
-			if entry.Target == "" {
-				logger.Error("MX record has no target", "domain", entry.Domain)
-				continue
-			}
-			var priority uint16 = 10 // Default priority
-			if entry.Priority != nil {
-				priority = *entry.Priority
-			}
-			record = localrecords.NewMXRecord(entry.Domain, entry.Target, priority)
-		case "PTR":
-			// Create PTR record
-			if entry.Target == "" {
-				logger.Error("PTR record has no target", "domain", entry.Domain)
-				continue
-			}
-			record = localrecords.NewPTRRecord(entry.Domain, entry.Target)
-		case "SRV":
-			// Create SRV record
-			if entry.Target == "" {
-				logger.Error("SRV record has no target", "domain", entry.Domain)
-				continue
-			}
-			if entry.Port == nil || *entry.Port == 0 {
-				logger.Error("SRV record requires port", "domain", entry.Domain)
-				continue
-			}
-			var priority uint16 = 0
-			if entry.Priority != nil {
-				priority = *entry.Priority
-			}
-			var weight uint16 = 0
-			if entry.Weight != nil {
-				weight = *entry.Weight
-			}
-			record = localrecords.NewSRVRecord(entry.Domain, entry.Target, priority, weight, *entry.Port)
+			case "MX":
+				// Create MX record
+				if entry.Target == "" {
+					logger.Error("MX record has no target", "domain", entry.Domain)
+					continue
+				}
+				var priority uint16 = 10 // Default priority
+				if entry.Priority != nil {
+					priority = *entry.Priority
+				}
+				record = localrecords.NewMXRecord(entry.Domain, entry.Target, priority)
+			case "PTR":
+				// Create PTR record
+				if entry.Target == "" {
+					logger.Error("PTR record has no target", "domain", entry.Domain)
+					continue
+				}
+				record = localrecords.NewPTRRecord(entry.Domain, entry.Target)
+			case "SRV":
+				// Create SRV record
+				if entry.Target == "" {
+					logger.Error("SRV record has no target", "domain", entry.Domain)
+					continue
+				}
+				if entry.Port == nil || *entry.Port == 0 {
+					logger.Error("SRV record requires port", "domain", entry.Domain)
+					continue
+				}
+				var priority uint16 = 0
+				if entry.Priority != nil {
+					priority = *entry.Priority
+				}
+				var weight uint16 = 0
+				if entry.Weight != nil {
+					weight = *entry.Weight
+				}
+				record = localrecords.NewSRVRecord(entry.Domain, entry.Target, priority, weight, *entry.Port)
 
-		case "NS":
-			// Create NS record
-			if entry.Target == "" {
-				logger.Error("NS record has no target", "domain", entry.Domain)
+			case "NS":
+				// Create NS record
+				if entry.Target == "" {
+					logger.Error("NS record has no target", "domain", entry.Domain)
+					continue
+				}
+				record = localrecords.NewNSRecord(entry.Domain, entry.Target)
+
+			case "SOA":
+				// Create SOA record
+				if entry.Ns == "" || entry.Mbox == "" {
+					logger.Error("SOA record requires ns and mbox fields", "domain", entry.Domain)
+					continue
+				}
+				// Use defaults for optional fields if not specified
+				var serial uint32 = 1
+				if entry.Serial != nil {
+					serial = *entry.Serial
+				}
+				var refresh uint32 = 3600 // 1 hour
+				if entry.Refresh != nil {
+					refresh = *entry.Refresh
+				}
+				var retry uint32 = 600 // 10 minutes
+				if entry.Retry != nil {
+					retry = *entry.Retry
+				}
+				var expire uint32 = 86400 // 1 day
+				if entry.Expire != nil {
+					expire = *entry.Expire
+				}
+				var minttl uint32 = 300 // 5 minutes
+				if entry.Minttl != nil {
+					minttl = *entry.Minttl
+				}
+				record = localrecords.NewSOARecord(entry.Domain, entry.Ns, entry.Mbox, serial, refresh, retry, expire, minttl)
+
+			case "CAA":
+				// Create CAA record
+				if entry.CaaTag == "" || entry.CaaValue == "" {
+					logger.Error("CAA record requires caa_tag and caa_value fields", "domain", entry.Domain)
+					continue
+				}
+				var flag uint8 = 0 // Default flag is 0 (non-critical)
+				if entry.CaaFlag != nil {
+					flag = *entry.CaaFlag
+				}
+				record = localrecords.NewCAARecord(entry.Domain, entry.CaaTag, entry.CaaValue, flag)
+
+			default:
+				logger.Error("Unsupported record type", "domain", entry.Domain, "type", entry.Type)
 				continue
 			}
-			record = localrecords.NewNSRecord(entry.Domain, entry.Target)
-
-		case "SOA":
-			// Create SOA record
-			if entry.Ns == "" || entry.Mbox == "" {
-				logger.Error("SOA record requires ns and mbox fields", "domain", entry.Domain)
-				continue
-			}
-			// Use defaults for optional fields if not specified
-			var serial uint32 = 1
-			if entry.Serial != nil {
-				serial = *entry.Serial
-			}
-			var refresh uint32 = 3600 // 1 hour
-			if entry.Refresh != nil {
-				refresh = *entry.Refresh
-			}
-			var retry uint32 = 600 // 10 minutes
-			if entry.Retry != nil {
-				retry = *entry.Retry
-			}
-			var expire uint32 = 86400 // 1 day
-			if entry.Expire != nil {
-				expire = *entry.Expire
-			}
-			var minttl uint32 = 300 // 5 minutes
-			if entry.Minttl != nil {
-				minttl = *entry.Minttl
-			}
-			record = localrecords.NewSOARecord(entry.Domain, entry.Ns, entry.Mbox, serial, refresh, retry, expire, minttl)
-
-		case "CAA":
-			// Create CAA record
-			if entry.CaaTag == "" || entry.CaaValue == "" {
-				logger.Error("CAA record requires caa_tag and caa_value fields", "domain", entry.Domain)
-				continue
-			}
-			var flag uint8 = 0 // Default flag is 0 (non-critical)
-			if entry.CaaFlag != nil {
-				flag = *entry.CaaFlag
-			}
-			record = localrecords.NewCAARecord(entry.Domain, entry.CaaTag, entry.CaaValue, flag)
-
-		default:
-			logger.Error("Unsupported record type", "domain", entry.Domain, "type", entry.Type)
-			continue
-		}
 
 			// Apply custom TTL if specified
 			if entry.TTL > 0 {
@@ -492,9 +506,9 @@ func main() {
 		Cache:            handler.Cache, // DNS cache for purge operations
 		Logger:           logger.Logger, // Get underlying slog.Logger
 		Version:          version,
-		ConfigWatcher:    cfgWatcher,   // For kill-switch feature
-		ConfigPath:       *configPath,  // For persisting kill-switch changes
-		KillSwitch:       killSwitch,   // For duration-based temporary disabling
+		ConfigWatcher:    cfgWatcher,  // For kill-switch feature
+		ConfigPath:       *configPath, // For persisting kill-switch changes
+		KillSwitch:       killSwitch,  // For duration-based temporary disabling
 	})
 
 	// Setup config change callback now that all components are created
@@ -597,6 +611,27 @@ func main() {
 				"total", len(newCfg.Whitelist))
 		}
 
+		if !equalRateLimitConfig(&cfg.RateLimit, &newCfg.RateLimit) {
+			logger.Info("Rate limit configuration changed")
+			if rateLimiter != nil {
+				rateLimiter.Stop()
+				rateLimiter = nil
+			}
+
+			if newCfg.RateLimit.Enabled {
+				rateLimiter = ratelimit.NewManager(&newCfg.RateLimit, logger)
+				handler.SetRateLimiter(rateLimiter)
+				logger.Info("Rate limiter reloaded",
+					"requests_per_second", newCfg.RateLimit.RequestsPerSecond,
+					"burst", newCfg.RateLimit.Burst,
+					"action", newCfg.RateLimit.Action,
+				)
+			} else {
+				handler.SetRateLimiter(nil)
+				logger.Info("Rate limiter disabled")
+			}
+		}
+
 		// Hot-reload local records if changed
 		if !equalLocalRecordsConfig(&cfg.LocalRecords, &newCfg.LocalRecords) {
 			logger.Info("Local records configuration changed")
@@ -641,71 +676,71 @@ func main() {
 						if entry.Target != "" {
 							record = localrecords.NewCNAMERecord(entry.Domain, entry.Target)
 						}
-				case "TXT":
-					if len(entry.TxtRecords) > 0 {
-						record = localrecords.NewLocalRecord(entry.Domain, localrecords.RecordTypeTXT)
-						record.TxtRecords = entry.TxtRecords
-					}
-				case "MX":
-					if entry.Target != "" {
-						var priority uint16 = 10
-						if entry.Priority != nil {
-							priority = *entry.Priority
+					case "TXT":
+						if len(entry.TxtRecords) > 0 {
+							record = localrecords.NewLocalRecord(entry.Domain, localrecords.RecordTypeTXT)
+							record.TxtRecords = entry.TxtRecords
 						}
-						record = localrecords.NewMXRecord(entry.Domain, entry.Target, priority)
-					}
-				case "PTR":
-					if entry.Target != "" {
-						record = localrecords.NewPTRRecord(entry.Domain, entry.Target)
-					}
-				case "SRV":
-					if entry.Target != "" && entry.Port != nil && *entry.Port != 0 {
-						var priority uint16 = 0
-						if entry.Priority != nil {
-							priority = *entry.Priority
+					case "MX":
+						if entry.Target != "" {
+							var priority uint16 = 10
+							if entry.Priority != nil {
+								priority = *entry.Priority
+							}
+							record = localrecords.NewMXRecord(entry.Domain, entry.Target, priority)
 						}
-						var weight uint16 = 0
-						if entry.Weight != nil {
-							weight = *entry.Weight
+					case "PTR":
+						if entry.Target != "" {
+							record = localrecords.NewPTRRecord(entry.Domain, entry.Target)
 						}
-						record = localrecords.NewSRVRecord(entry.Domain, entry.Target, priority, weight, *entry.Port)
-					}
-				case "NS":
-					if entry.Target != "" {
-						record = localrecords.NewNSRecord(entry.Domain, entry.Target)
-					}
-				case "SOA":
-					if entry.Ns != "" && entry.Mbox != "" {
-						var serial uint32 = 1
-						if entry.Serial != nil {
-							serial = *entry.Serial
+					case "SRV":
+						if entry.Target != "" && entry.Port != nil && *entry.Port != 0 {
+							var priority uint16 = 0
+							if entry.Priority != nil {
+								priority = *entry.Priority
+							}
+							var weight uint16 = 0
+							if entry.Weight != nil {
+								weight = *entry.Weight
+							}
+							record = localrecords.NewSRVRecord(entry.Domain, entry.Target, priority, weight, *entry.Port)
 						}
-						var refresh uint32 = 3600
-						if entry.Refresh != nil {
-							refresh = *entry.Refresh
+					case "NS":
+						if entry.Target != "" {
+							record = localrecords.NewNSRecord(entry.Domain, entry.Target)
 						}
-						var retry uint32 = 600
-						if entry.Retry != nil {
-							retry = *entry.Retry
+					case "SOA":
+						if entry.Ns != "" && entry.Mbox != "" {
+							var serial uint32 = 1
+							if entry.Serial != nil {
+								serial = *entry.Serial
+							}
+							var refresh uint32 = 3600
+							if entry.Refresh != nil {
+								refresh = *entry.Refresh
+							}
+							var retry uint32 = 600
+							if entry.Retry != nil {
+								retry = *entry.Retry
+							}
+							var expire uint32 = 86400
+							if entry.Expire != nil {
+								expire = *entry.Expire
+							}
+							var minttl uint32 = 300
+							if entry.Minttl != nil {
+								minttl = *entry.Minttl
+							}
+							record = localrecords.NewSOARecord(entry.Domain, entry.Ns, entry.Mbox, serial, refresh, retry, expire, minttl)
 						}
-						var expire uint32 = 86400
-						if entry.Expire != nil {
-							expire = *entry.Expire
+					case "CAA":
+						if entry.CaaTag != "" && entry.CaaValue != "" {
+							var flag uint8 = 0
+							if entry.CaaFlag != nil {
+								flag = *entry.CaaFlag
+							}
+							record = localrecords.NewCAARecord(entry.Domain, entry.CaaTag, entry.CaaValue, flag)
 						}
-						var minttl uint32 = 300
-						if entry.Minttl != nil {
-							minttl = *entry.Minttl
-						}
-						record = localrecords.NewSOARecord(entry.Domain, entry.Ns, entry.Mbox, serial, refresh, retry, expire, minttl)
-					}
-				case "CAA":
-					if entry.CaaTag != "" && entry.CaaValue != "" {
-						var flag uint8 = 0
-						if entry.CaaFlag != nil {
-							flag = *entry.CaaFlag
-						}
-						record = localrecords.NewCAARecord(entry.Domain, entry.CaaTag, entry.CaaValue, flag)
-					}
 					}
 
 					if record != nil {
@@ -795,6 +830,10 @@ func main() {
 			blocklistMgr.Stop()
 		}
 
+		if rateLimiter != nil {
+			rateLimiter.Stop()
+		}
+
 		// Shutdown storage
 		if stor != nil {
 			if err := stor.Close(); err != nil {
@@ -834,6 +873,19 @@ func equalPolicyConfig(a, b *config.PolicyConfig) bool {
 		}
 	}
 	return true
+}
+
+func equalRateLimitConfig(a, b *config.RateLimitConfig) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return a.Enabled == b.Enabled &&
+		a.RequestsPerSecond == b.RequestsPerSecond &&
+		a.Burst == b.Burst &&
+		a.Action == b.Action &&
+		a.LogViolations == b.LogViolations &&
+		a.CleanupInterval == b.CleanupInterval &&
+		a.MaxTrackedClients == b.MaxTrackedClients
 }
 
 // equalConditionalForwardingConfig compares two conditional forwarding configurations

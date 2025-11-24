@@ -668,8 +668,8 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "rate(rate_limit_violations{job=\"$job\",instance=\"$instance\"}[5m])",
-          "legendFormat": "Rate Limit Violations",
+          "expr": "sum by(action) (rate(rate_limit_violations{job=\"$job\",instance=\"$instance\"}[5m]))",
+          "legendFormat": "{{action}} violations",
           "refId": "A"
         },
         {
@@ -677,8 +677,8 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "rate(rate_limit_dropped{job=\"$job\",instance=\"$instance\"}[5m])",
-          "legendFormat": "Dropped Requests",
+          "expr": "sum by(action) (rate(rate_limit_dropped{job=\"$job\",instance=\"$instance\"}[5m]))",
+          "legendFormat": "{{action}} dropped",
           "refId": "B"
         }
       ],

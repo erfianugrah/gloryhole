@@ -116,6 +116,35 @@ server:
 
 ## Upstream DNS Servers
 
+## Rate Limiting
+
+Protects the server from noisy clients by applying a token-bucket per source IP. Disabled by default.
+
+```yaml
+rate_limit:
+  enabled: true
+  requests_per_second: 100
+  burst: 200
+  on_exceed: "nxdomain"   # or "drop"
+  log_violations: true
+  cleanup_interval: "10m"
+  max_tracked_clients: 10000
+```
+
+| Field | Description |
+|-------|-------------|
+| `enabled` | Turns the limiter on/off without losing configuration. |
+| `requests_per_second` | Steady-state rate granted to each client IP. |
+| `burst` | Tokens available for short spikes before throttling. |
+| `on_exceed` | Action when a client exceeds its budget: `drop` silently swallows the query, `nxdomain` responds with NXDOMAIN per RFC 2308. |
+| `log_violations` | Emits warning logs for each violation (with client IP and domain). |
+| `cleanup_interval` | How often idle clients are purged from memory. |
+| `max_tracked_clients` | Upper bound for simultaneous client buckets; the oldest entries are evicted beyond this number. |
+
+Use `drop` when you want abusive clients to back off (no response) and `nxdomain` when you prefer deterministic responses for downstream resolvers.
+
+## Upstream DNS Servers
+
 Configure where Glory-Hole forwards non-blocked queries.
 
 ```yaml

@@ -2,6 +2,7 @@ package resolver
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"time"
@@ -22,7 +23,8 @@ type Resolver struct {
 // If upstreams is empty or nil, it falls back to the system's default resolver.
 //
 // Example:
-//   resolver := resolver.New([]string{"1.1.1.1:53", "8.8.8.8:53"}, logger)
+//
+//	resolver := resolver.New([]string{"1.1.1.1:53", "8.8.8.8:53"}, logger)
 func New(upstreams []string, logger *logging.Logger) *Resolver {
 	if len(upstreams) == 0 {
 		logger.Warn("No upstream DNS servers configured, using system default resolver")
@@ -48,32 +50,46 @@ func (r *Resolver) LookupIP(ctx context.Context, network, host string) ([]net.IP
 		return net.DefaultResolver.LookupIP(ctx, network, host)
 	}
 
-	// Create custom resolver for the first upstream
-	// TODO: Implement fallback to other upstreams on failure
-	netResolver := &net.Resolver{
-		PreferGo: true,
-		Dial: func(ctx context.Context, network, address string) (net.Conn, error) {
-			// Use first configured upstream for resolution
-			return r.dialer.DialContext(ctx, "udp", r.upstreams[0])
-		},
-	}
+	var lastErr error
+	for idx, upstream := range r.upstreams {
+		// RFC 1035 §7.2 requires resolvers to retry alternate name servers on failure.
+		netResolver := &net.Resolver{
+			PreferGo: true,
+			Dial: func(ctx context.Context, network, address string) (net.Conn, error) {
+				return r.dialer.DialContext(ctx, "udp", upstream)
+			},
+		}
 
-	ips, err := netResolver.LookupIP(ctx, network, host)
-	if err != nil {
-		r.logger.Debug("DNS resolution failed",
+		ips, err := netResolver.LookupIP(ctx, network, host)
+		if err != nil {
+			lastErr = err
+			r.logger.Warn("DNS resolution attempt failed",
+				"host", host,
+				"upstream", upstream,
+				"attempt", idx+1,
+				"error", err,
+			)
+			continue
+		}
+
+		r.logger.Debug("DNS resolution successful",
 			"host", host,
-			"upstream", r.upstreams[0],
-			"error", err,
+			"upstream", upstream,
+			"ips", ips,
 		)
-		return nil, fmt.Errorf("failed to resolve %s via %s: %w", host, r.upstreams[0], err)
+		return ips, nil
 	}
 
-	r.logger.Debug("DNS resolution successful",
+	// All upstreams failed; fall back to system resolver as a last resort.
+	r.logger.Warn("All upstream DNS servers failed, falling back to system resolver",
 		"host", host,
-		"upstream", r.upstreams[0],
-		"ips", ips,
+		"attempts", len(r.upstreams),
+		"error", lastErr,
 	)
-
+	ips, err := net.DefaultResolver.LookupIP(ctx, network, host)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve %s via configured upstreams: %w", host, errors.Join(lastErr, err))
+	}
 	return ips, nil
 }
 

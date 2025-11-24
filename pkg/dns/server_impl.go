@@ -14,6 +14,8 @@ import (
 	"glory-hole/pkg/telemetry"
 
 	"github.com/miekg/dns"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
 )
 
 // Server is the DNS server
@@ -221,9 +223,15 @@ func (w *wrappedHandler) serveDNS(rw dns.ResponseWriter, r *dns.Msg) {
 	// Extract query information
 	var domain string
 	var qtype uint16
+	queryTypeName := "UNKNOWN"
 	if len(r.Question) > 0 {
 		domain = r.Question[0].Name
 		qtype = r.Question[0].Qtype
+		if label := dns.TypeToString[qtype]; label != "" {
+			queryTypeName = label
+		} else {
+			queryTypeName = fmt.Sprintf("TYPE%d", qtype)
+		}
 	}
 
 	clientIP := getClientIP(rw)
@@ -231,14 +239,20 @@ func (w *wrappedHandler) serveDNS(rw dns.ResponseWriter, r *dns.Msg) {
 	// Log the query
 	w.logger.Info("DNS query received",
 		"domain", domain,
-		"type", dns.TypeToString[qtype],
+		"type", queryTypeName,
 		"client", clientIP,
 	)
 
 	// Record metrics
 	if w.metrics != nil {
 		w.metrics.DNSQueriesTotal.Add(ctx, 1)
-		w.metrics.DNSQueriesByType.Add(ctx, 1) // attribute.String("type", dns.TypeToString[qtype]),
+		if queryTypeName != "" {
+			w.metrics.DNSQueriesByType.Add(ctx, 1, metric.WithAttributes(
+				attribute.String("type", queryTypeName),
+			))
+		} else {
+			w.metrics.DNSQueriesByType.Add(ctx, 1)
+		}
 	}
 
 	// Call the actual handler

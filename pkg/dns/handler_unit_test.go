@@ -13,6 +13,7 @@ import (
 	"glory-hole/pkg/localrecords"
 	"glory-hole/pkg/logging"
 	"glory-hole/pkg/policy"
+	"glory-hole/pkg/ratelimit"
 	"glory-hole/pkg/storage"
 
 	"github.com/miekg/dns"
@@ -122,6 +123,27 @@ func TestHandler_SetPolicyEngine(t *testing.T) {
 	}
 }
 
+func TestHandler_SetRateLimiter(t *testing.T) {
+	handler := NewHandler()
+	rl := ratelimit.NewManager(&config.RateLimitConfig{
+		Enabled:           true,
+		RequestsPerSecond: 1,
+		Burst:             1,
+		CleanupInterval:   time.Second,
+		MaxTrackedClients: 10,
+	}, logging.NewDefault())
+	if rl == nil {
+		t.Fatal("expected rate limiter instance")
+	}
+	defer rl.Stop()
+
+	handler.SetRateLimiter(rl)
+
+	if handler.RateLimiter == nil {
+		t.Error("SetRateLimiter() failed to set limiter")
+	}
+}
+
 // Test ServeDNS edge cases
 func TestServeDNS_CacheHit(t *testing.T) {
 	handler := NewHandler()
@@ -182,6 +204,37 @@ func TestServeDNS_CacheHit(t *testing.T) {
 
 	if len(w.msg.Answer) < 1 {
 		t.Errorf("Expected at least 1 answer (cache hit), got %d", len(w.msg.Answer))
+	}
+}
+
+func TestServeDNS_RateLimitDrop(t *testing.T) {
+	handler := NewHandler()
+	rl := ratelimit.NewManager(&config.RateLimitConfig{
+		Enabled:           true,
+		RequestsPerSecond: 1,
+		Burst:             1,
+		Action:            config.RateLimitActionDrop,
+		CleanupInterval:   time.Minute,
+		MaxTrackedClients: 10,
+	}, logging.NewDefault())
+	if rl == nil {
+		t.Fatal("expected rate limiter instance")
+	}
+	defer rl.Stop()
+	handler.SetRateLimiter(rl)
+
+	req := new(dns.Msg)
+	req.SetQuestion("ratelimit.test.", dns.TypeA)
+
+	w1 := &mockResponseWriter{remoteAddr: &net.UDPAddr{IP: net.ParseIP("10.0.0.1"), Port: 5300}}
+	ctx := context.Background()
+	handler.ServeDNS(ctx, w1, req)
+
+	w2 := &mockResponseWriter{remoteAddr: &net.UDPAddr{IP: net.ParseIP("10.0.0.1"), Port: 5301}}
+	handler.ServeDNS(ctx, w2, req)
+
+	if w2.msg != nil {
+		t.Fatalf("expected second response to be dropped by rate limiter")
 	}
 }
 

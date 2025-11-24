@@ -23,6 +23,7 @@ type Config struct {
 	Logging               LoggingConfig               `yaml:"logging"`
 	Database              storage.Config              `yaml:"database"`
 	Cache                 CacheConfig                 `yaml:"cache"`
+	RateLimit             RateLimitConfig             `yaml:"rate_limit"`
 	UpdateInterval        time.Duration               `yaml:"update_interval"`
 	AutoUpdateBlocklists  bool                        `yaml:"auto_update_blocklists"`
 }
@@ -55,7 +56,7 @@ type LocalRecordsConfig struct {
 
 // LocalRecordEntry represents a single local DNS record in the config
 type LocalRecordEntry struct {
-	CaaFlag    *uint8   `yaml:"caa_flag,omitempty"`    // CAA: Flags (usually 0 or 128)
+	CaaFlag    *uint8   `yaml:"caa_flag,omitempty"` // CAA: Flags (usually 0 or 128)
 	Priority   *uint16  `yaml:"priority,omitempty"`
 	Weight     *uint16  `yaml:"weight,omitempty"`
 	Port       *uint16  `yaml:"port,omitempty"`
@@ -64,8 +65,8 @@ type LocalRecordEntry struct {
 	Refresh    *uint32  `yaml:"refresh,omitempty"`
 	Retry      *uint32  `yaml:"retry,omitempty"`
 	Serial     *uint32  `yaml:"serial,omitempty"`
-	CaaTag     string   `yaml:"caa_tag,omitempty"`     // CAA: Tag (issue/issuewild/iodef)
-	CaaValue   string   `yaml:"caa_value,omitempty"`   // CAA: Value (CA domain or URL)
+	CaaTag     string   `yaml:"caa_tag,omitempty"`   // CAA: Tag (issue/issuewild/iodef)
+	CaaValue   string   `yaml:"caa_value,omitempty"` // CAA: Value (CA domain or URL)
 	Mbox       string   `yaml:"mbox,omitempty"`
 	Ns         string   `yaml:"ns,omitempty"`
 	Target     string   `yaml:"target"`
@@ -90,6 +91,25 @@ type PolicyRuleEntry struct {
 	Action     string `yaml:"action"`      // Action: BLOCK, ALLOW, REDIRECT
 	ActionData string `yaml:"action_data"` // Optional action data (e.g., redirect target)
 	Enabled    bool   `yaml:"enabled"`     // Whether the rule is active
+}
+
+// RateLimitAction represents how the server responds when the limit is exceeded.
+type RateLimitAction string
+
+const (
+	RateLimitActionDrop     RateLimitAction = "drop"
+	RateLimitActionNXDOMAIN RateLimitAction = "nxdomain"
+)
+
+// RateLimitConfig controls optional per-client rate limiting.
+type RateLimitConfig struct {
+	Enabled           bool            `yaml:"enabled"`
+	RequestsPerSecond float64         `yaml:"requests_per_second"`
+	Burst             int             `yaml:"burst"`
+	Action            RateLimitAction `yaml:"on_exceed"`
+	LogViolations     bool            `yaml:"log_violations"`
+	CleanupInterval   time.Duration   `yaml:"cleanup_interval"`
+	MaxTrackedClients int             `yaml:"max_tracked_clients"`
 }
 
 // LoggingConfig holds logging settings
@@ -255,6 +275,23 @@ func (c *Config) applyDefaults() {
 		c.Cache.BlockedTTL = 1 * time.Second
 	}
 
+	// Rate limit defaults
+	if c.RateLimit.RequestsPerSecond <= 0 {
+		c.RateLimit.RequestsPerSecond = 200
+	}
+	if c.RateLimit.Burst <= 0 {
+		c.RateLimit.Burst = int(c.RateLimit.RequestsPerSecond)
+	}
+	if c.RateLimit.Action == "" {
+		c.RateLimit.Action = RateLimitActionNXDOMAIN
+	}
+	if c.RateLimit.CleanupInterval == 0 {
+		c.RateLimit.CleanupInterval = 10 * time.Minute
+	}
+	if c.RateLimit.MaxTrackedClients == 0 {
+		c.RateLimit.MaxTrackedClients = 10000
+	}
+
 	// Logging defaults
 	if c.Logging.Level == "" {
 		c.Logging.Level = "info"
@@ -334,6 +371,20 @@ func (c *Config) Validate() error {
 	// Validate conditional forwarding
 	if err := c.ConditionalForwarding.Validate(); err != nil {
 		return fmt.Errorf("conditional_forwarding validation failed: %w", err)
+	}
+
+	if c.RateLimit.Enabled {
+		if c.RateLimit.RequestsPerSecond <= 0 {
+			return fmt.Errorf("rate_limit.requests_per_second must be > 0 when rate limiting is enabled")
+		}
+		if c.RateLimit.Burst <= 0 {
+			return fmt.Errorf("rate_limit.burst must be > 0 when rate limiting is enabled")
+		}
+		switch c.RateLimit.Action {
+		case RateLimitActionDrop, RateLimitActionNXDOMAIN:
+		default:
+			return fmt.Errorf("rate_limit.on_exceed must be 'drop' or 'nxdomain'")
+		}
 	}
 
 	return nil

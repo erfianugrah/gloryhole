@@ -3,6 +3,7 @@ package dns
 import (
 	"context"
 	"net"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -16,10 +17,13 @@ import (
 	"glory-hole/pkg/logging"
 	"glory-hole/pkg/pattern"
 	"glory-hole/pkg/policy"
+	"glory-hole/pkg/ratelimit"
 	"glory-hole/pkg/storage"
 	"glory-hole/pkg/telemetry"
 
 	"github.com/miekg/dns"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
 )
 
 // msgPool provides object pooling for dns.Msg to reduce allocations
@@ -37,23 +41,24 @@ type KillSwitchChecker interface {
 }
 
 type Handler struct {
-	Storage          storage.Storage
-	BlocklistManager *blocklist.Manager
-	Blocklist        map[string]struct{}
-	Whitelist        map[string]struct{}
+	Storage           storage.Storage
+	BlocklistManager  *blocklist.Manager
+	Blocklist         map[string]struct{}
+	Whitelist         map[string]struct{}
 	WhitelistPatterns atomic.Pointer[pattern.Matcher] // Pattern-based whitelist (wildcard/regex)
-	Overrides        map[string]net.IP
-	CNAMEOverrides   map[string]string
-	LocalRecords     *localrecords.Manager
-	PolicyEngine     *policy.Engine
-	RuleEvaluator    *forwarder.RuleEvaluator
-	Forwarder        *forwarder.Forwarder
-	Cache            *cache.Cache
-	ConfigWatcher    *config.Watcher        // For kill-switch feature (hot-reload config access)
-	KillSwitch       KillSwitchChecker      // For duration-based temporary disabling
-	Metrics          *telemetry.Metrics
-	Logger           *logging.Logger
-	lookupMu         sync.RWMutex
+	Overrides         map[string]net.IP
+	CNAMEOverrides    map[string]string
+	LocalRecords      *localrecords.Manager
+	PolicyEngine      *policy.Engine
+	RuleEvaluator     *forwarder.RuleEvaluator
+	Forwarder         *forwarder.Forwarder
+	Cache             *cache.Cache
+	ConfigWatcher     *config.Watcher   // For kill-switch feature (hot-reload config access)
+	KillSwitch        KillSwitchChecker // For duration-based temporary disabling
+	RateLimiter       *ratelimit.Manager
+	Metrics           *telemetry.Metrics
+	Logger            *logging.Logger
+	lookupMu          sync.RWMutex
 }
 
 // NewHandler creates a new DNS handler
@@ -111,6 +116,11 @@ func (h *Handler) SetKillSwitch(ks KillSwitchChecker) {
 	h.KillSwitch = ks
 }
 
+// SetRateLimiter wires a rate limiter implementation.
+func (h *Handler) SetRateLimiter(rl *ratelimit.Manager) {
+	h.RateLimiter = rl
+}
+
 // writeMsg writes a DNS message to the response writer with error handling
 // If the write fails (e.g., client disconnected), the error is silently ignored
 // as there's no way to notify the client at that point
@@ -129,6 +139,7 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 	var blocked, cached bool
 	var upstream string
 	var responseCode int
+	clientIP := getClientIP(w)
 
 	// Async logging at the end (non-blocking, <10µs overhead)
 	defer func() {
@@ -138,15 +149,7 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 			queryType := ""
 			if len(r.Question) > 0 {
 				domain = strings.TrimSuffix(r.Question[0].Name, ".")
-				queryType = dns.TypeToString[r.Question[0].Qtype]
-			}
-
-			// Get client IP
-			clientIP := ""
-			if addr, ok := w.RemoteAddr().(*net.UDPAddr); ok {
-				clientIP = addr.IP.String()
-			} else if addr, ok := w.RemoteAddr().(*net.TCPAddr); ok {
-				clientIP = addr.IP.String()
+				queryType = dnsTypeLabel(r.Question[0].Qtype)
 			}
 
 			// Log query asynchronously (fire and forget)
@@ -201,6 +204,34 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 	question := r.Question[0]
 	domain := question.Name
 	qtype := question.Qtype
+	qtypeLabel := dnsTypeLabel(qtype)
+
+	// Enforce optional rate limiting before expensive work
+	if h.RateLimiter != nil {
+		if allowed, limited := h.RateLimiter.Allow(clientIP); !allowed && limited {
+			action := h.RateLimiter.Action()
+			dropped := action == config.RateLimitActionDrop
+			h.recordRateLimit(ctx, clientIP, qtypeLabel, string(action), dropped)
+			if h.RateLimiter.LogViolations() && h.Logger != nil {
+				h.Logger.Warn("Rate limit exceeded",
+					"client_ip", clientIP,
+					"domain", domain,
+					"action", action,
+					"query_type", qtypeLabel,
+				)
+			}
+
+			if dropped {
+				responseCode = dns.RcodeRefused
+				return
+			}
+
+			responseCode = dns.RcodeNameError
+			msg.SetRcode(r, dns.RcodeNameError)
+			h.writeMsg(w, msg)
+			return
+		}
+	}
 
 	// Check cache first (before any lookups)
 	// Cache lookups are fast (~100ns) and can save upstream roundtrip (~10ms)
@@ -497,14 +528,6 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 		}
 	}
 
-	// Get client IP for policy evaluation and conditional forwarding
-	clientIP := ""
-	if addr, ok := w.RemoteAddr().(*net.UDPAddr); ok {
-		clientIP = addr.IP.String()
-	} else if addr, ok := w.RemoteAddr().(*net.TCPAddr); ok {
-		clientIP = addr.IP.String()
-	}
-
 	// Evaluate policy engine rules (if configured and enabled via kill-switch)
 	// Policy engine allows complex filtering rules with expressions
 	// Kill-switch check: Only evaluate if enable_policies is true in config
@@ -535,7 +558,7 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 		policyCtx := policy.NewContext(
 			strings.TrimSuffix(domain, "."),
 			clientIP,
-			dns.TypeToString[qtype],
+			qtypeLabel,
 		)
 
 		// Evaluate rules
@@ -548,7 +571,7 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 					"action", rule.Action,
 					"domain", domain,
 					"client_ip", clientIP,
-					"query_type", dns.TypeToString[qtype])
+					"query_type", qtypeLabel)
 			}
 
 			switch rule.Action {
@@ -559,9 +582,7 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 				msg.SetRcode(r, dns.RcodeNameError)
 
 				// Record blocked query metric
-				if h.Metrics != nil {
-					h.Metrics.DNSBlockedQueries.Add(ctx, 1)
-				}
+				h.recordBlockedQuery(ctx, "policy_block", qtypeLabel)
 
 				// Log block action
 				if h.Logger != nil {
@@ -606,16 +627,14 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 						return
 					}
 
-					// Record forwarded query metric
-					if h.Metrics != nil {
-						h.Metrics.DNSForwardedQueries.Add(ctx, 1)
-					}
-
 					// Track upstream server
 					upstreams := h.Forwarder.Upstreams()
 					if len(upstreams) > 0 {
 						upstream = upstreams[0]
 					}
+
+					// Record forwarded query metric
+					h.recordForwardedQuery(ctx, "policy_allow", qtypeLabel, upstream)
 
 					// Cache the response
 					if h.Cache != nil {
@@ -660,7 +679,7 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 						"rule", rule.Name,
 						"domain", domain,
 						"redirect_ip", redirectIP.String(),
-						"query_type", dns.TypeToString[qtype])
+						"query_type", qtypeLabel)
 				}
 
 				// Create response based on query type and IP version
@@ -743,15 +762,13 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 					return
 				}
 
-				// Record forwarded query metric
-				if h.Metrics != nil {
-					h.Metrics.DNSForwardedQueries.Add(ctx, 1)
-				}
-
 				// Track upstream server
 				if len(upstreams) > 0 {
 					upstream = upstreams[0]
 				}
+
+				// Record forwarded query metric
+				h.recordForwardedQuery(ctx, "conditional_rule", qtypeLabel, upstream)
 
 				// Cache the response
 				if h.Cache != nil {
@@ -817,9 +834,7 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 			msg.SetRcode(r, dns.RcodeNameError)
 
 			// Record blocked query metric
-			if h.Metrics != nil {
-				h.Metrics.DNSBlockedQueries.Add(ctx, 1)
-			}
+			h.recordBlockedQuery(ctx, "blocklist_manager", qtypeLabel)
 
 			// Cache blocked response to avoid repeated blocklist lookups
 			if h.Cache != nil {
@@ -922,9 +937,7 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 			msg.SetRcode(r, dns.RcodeNameError)
 
 			// Record blocked query metric
-			if h.Metrics != nil {
-				h.Metrics.DNSBlockedQueries.Add(ctx, 1)
-			}
+			h.recordBlockedQuery(ctx, "blocklist_legacy", qtypeLabel)
 
 			// Cache blocked response to avoid repeated blocklist lookups
 			if h.Cache != nil {
@@ -987,7 +1000,7 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 		upstreams := h.RuleEvaluator.Evaluate(
 			strings.TrimSuffix(domain, "."),
 			clientIP,
-			dns.TypeToString[qtype],
+			qtypeLabel,
 		)
 
 		if len(upstreams) > 0 {
@@ -997,7 +1010,7 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 					"domain", domain,
 					"client_ip", clientIP,
 					"upstreams", upstreams,
-					"query_type", dns.TypeToString[qtype])
+					"query_type", qtypeLabel)
 			}
 
 			// Rule matched - forward to conditional upstreams
@@ -1016,15 +1029,13 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 				return
 			}
 
-			// Record forwarded query metric
-			if h.Metrics != nil {
-				h.Metrics.DNSForwardedQueries.Add(ctx, 1)
-			}
-
 			// Track upstream server
 			if len(upstreams) > 0 {
 				upstream = upstreams[0]
 			}
+
+			// Record forwarded query metric
+			h.recordForwardedQuery(ctx, "policy_forward", qtypeLabel, upstream)
 
 			// Cache the successful response
 			if h.Cache != nil {
@@ -1048,11 +1059,6 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 			return
 		}
 
-		// Record forwarded query metric
-		if h.Metrics != nil {
-			h.Metrics.DNSForwardedQueries.Add(ctx, 1)
-		}
-
 		// Track upstream server used (approximation - before the query)
 		upstreams := h.Forwarder.Upstreams()
 		if len(upstreams) > 0 {
@@ -1060,6 +1066,9 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 			// The forwarder uses round-robin and retries, so this may not be 100% accurate
 			upstream = upstreams[0] // Just use the first upstream as a placeholder
 		}
+
+		// Record forwarded query metric
+		h.recordForwardedQuery(ctx, "default_forward", qtypeLabel, upstream)
 
 		// Cache the upstream response (if cache is enabled)
 		// This includes both successful responses and negative responses (NXDOMAIN)
@@ -1077,4 +1086,74 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 	responseCode = dns.RcodeNameError
 	msg.SetRcode(r, dns.RcodeNameError)
 	h.writeMsg(w, msg)
+}
+
+// dnsTypeLabel returns a human-readable string for the query type, falling back to TYPE#### per RFC 3597 when unknown.
+func dnsTypeLabel(qtype uint16) string {
+	if label := dns.TypeToString[qtype]; label != "" {
+		return label
+	}
+	return "TYPE" + strconv.FormatUint(uint64(qtype), 10)
+}
+
+// recordRateLimit captures rate limit violations and drops with consistent attributes.
+func (h *Handler) recordRateLimit(ctx context.Context, clientIP, qtypeLabel, action string, dropped bool) {
+	if h.Metrics == nil {
+		return
+	}
+	attrs := make([]attribute.KeyValue, 0, 3)
+	if clientIP != "" {
+		attrs = append(attrs, attribute.String("client", clientIP))
+	}
+	if qtypeLabel != "" {
+		attrs = append(attrs, attribute.String("type", qtypeLabel))
+	}
+	if action != "" {
+		attrs = append(attrs, attribute.String("action", action))
+	}
+	h.Metrics.RateLimitViolations.Add(ctx, 1, metric.WithAttributes(attrs...))
+	if dropped {
+		h.Metrics.RateLimitDropped.Add(ctx, 1, metric.WithAttributes(attrs...))
+	}
+}
+
+// recordBlockedQuery increments the blocked-query counter with contextual attributes for better observability.
+func (h *Handler) recordBlockedQuery(ctx context.Context, reason, qtypeLabel string) {
+	if h.Metrics == nil {
+		return
+	}
+	attrs := make([]attribute.KeyValue, 0, 2)
+	if reason != "" {
+		attrs = append(attrs, attribute.String("reason", reason))
+	}
+	if qtypeLabel != "" {
+		attrs = append(attrs, attribute.String("type", qtypeLabel))
+	}
+	if len(attrs) == 0 {
+		h.Metrics.DNSBlockedQueries.Add(ctx, 1)
+		return
+	}
+	h.Metrics.DNSBlockedQueries.Add(ctx, 1, metric.WithAttributes(attrs...))
+}
+
+// recordForwardedQuery increments the forwarded-query counter tagged with path/upstream metadata.
+func (h *Handler) recordForwardedQuery(ctx context.Context, path, qtypeLabel, upstream string) {
+	if h.Metrics == nil {
+		return
+	}
+	attrs := make([]attribute.KeyValue, 0, 3)
+	if path != "" {
+		attrs = append(attrs, attribute.String("path", path))
+	}
+	if qtypeLabel != "" {
+		attrs = append(attrs, attribute.String("type", qtypeLabel))
+	}
+	if upstream != "" {
+		attrs = append(attrs, attribute.String("upstream", upstream))
+	}
+	if len(attrs) == 0 {
+		h.Metrics.DNSForwardedQueries.Add(ctx, 1)
+		return
+	}
+	h.Metrics.DNSForwardedQueries.Add(ctx, 1, metric.WithAttributes(attrs...))
 }

@@ -7,6 +7,16 @@ server:
   udp_enabled: true
   web_ui_address: ":8080"
 
+# Optional per-client rate limiting
+rate_limit:
+  enabled: false
+  requests_per_second: 100
+  burst: 200
+  on_exceed: "nxdomain"  # drop or nxdomain
+  log_violations: true
+  cleanup_interval: "10m"
+  max_tracked_clients: 10000
+
 # Upstream DNS servers
 upstream_dns_servers:
   - "1.1.1.1:53"
