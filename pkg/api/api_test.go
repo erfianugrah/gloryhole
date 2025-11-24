@@ -62,6 +62,21 @@ func (m *mockStorage) GetQueryCount(ctx context.Context, since time.Time) (int64
 	return 0, nil
 }
 
+func (m *mockStorage) GetTraceStatistics(ctx context.Context, since time.Time) (*storage.TraceStatistics, error) {
+	return &storage.TraceStatistics{
+		Since:    since,
+		Until:    time.Now(),
+		ByStage:  make(map[string]int64),
+		ByAction: make(map[string]int64),
+		ByRule:   make(map[string]int64),
+		BySource: make(map[string]int64),
+	}, nil
+}
+
+func (m *mockStorage) GetQueriesWithTraceFilter(ctx context.Context, filter storage.TraceFilter, limit, offset int) ([]*storage.QueryLog, error) {
+	return m.queries, nil
+}
+
 func (m *mockStorage) Cleanup(ctx context.Context, olderThan time.Time) error {
 	return nil
 }

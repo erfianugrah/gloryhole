@@ -488,7 +488,7 @@ func (m *mockUIStorage) LogQuery(ctx context.Context, query *storage.QueryLog) e
 	return nil
 }
 
-func (m *mockUIStorage) GetRecentQueries(ctx context.Context, limit int) ([]*storage.QueryLog, error) {
+func (m *mockUIStorage) GetRecentQueries(ctx context.Context, limit, offset int) ([]*storage.QueryLog, error) {
 	if m.queries == nil {
 		return []*storage.QueryLog{}, nil
 	}
@@ -518,6 +518,45 @@ func (m *mockUIStorage) GetTopDomains(ctx context.Context, limit int, blocked bo
 		return filtered[:limit], nil
 	}
 	return filtered, nil
+}
+
+func (m *mockUIStorage) GetQueriesByDomain(ctx context.Context, domain string, limit int) ([]*storage.QueryLog, error) {
+	return nil, nil
+}
+
+func (m *mockUIStorage) GetQueriesByClientIP(ctx context.Context, clientIP string, limit int) ([]*storage.QueryLog, error) {
+	return nil, nil
+}
+
+func (m *mockUIStorage) GetBlockedCount(ctx context.Context, since time.Time) (int64, error) {
+	return 0, nil
+}
+
+func (m *mockUIStorage) GetQueryCount(ctx context.Context, since time.Time) (int64, error) {
+	return 0, nil
+}
+
+func (m *mockUIStorage) GetTraceStatistics(ctx context.Context, since time.Time) (*storage.TraceStatistics, error) {
+	return &storage.TraceStatistics{
+		Since:    since,
+		Until:    time.Now(),
+		ByStage:  make(map[string]int64),
+		ByAction: make(map[string]int64),
+		ByRule:   make(map[string]int64),
+		BySource: make(map[string]int64),
+	}, nil
+}
+
+func (m *mockUIStorage) GetQueriesWithTraceFilter(ctx context.Context, filter storage.TraceFilter, limit, offset int) ([]*storage.QueryLog, error) {
+	return m.queries, nil
+}
+
+func (m *mockUIStorage) Cleanup(ctx context.Context, olderThan time.Time) error {
+	return nil
+}
+
+func (m *mockUIStorage) Ping(ctx context.Context) error {
+	return nil
 }
 
 func (m *mockUIStorage) Close() error {
