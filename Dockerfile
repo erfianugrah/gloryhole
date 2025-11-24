@@ -26,10 +26,12 @@ COPY . .
 
 # Build the application
 # - Strip debug info (-s -w)
-# - Set version from build arg (fallback to git tag)
+# - Set version from build arg
 # - Enable static linking
-RUN CGO_ENABLED=1 GOOS=linux go build \
-	-a -installsuffix cgo \
+# - Mount Go build cache for faster rebuilds
+RUN --mount=type=cache,target=/root/.cache/go-build \
+    --mount=type=cache,target=/go/pkg/mod \
+    CGO_ENABLED=1 GOOS=linux go build \
 	-ldflags="-s -w -X main.version=${VERSION} -X main.buildTime=${BUILD_TIME} -extldflags '-static'" \
 	-o glory-hole \
 	./cmd/glory-hole
