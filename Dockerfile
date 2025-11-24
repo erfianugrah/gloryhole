@@ -4,6 +4,10 @@
 # Stage 1: Build
 FROM golang:1.24-alpine AS builder
 
+# Accept build arguments
+ARG VERSION=dev
+ARG BUILD_TIME=unknown
+
 # Install build dependencies
 RUN apk add --no-cache git ca-certificates tzdata build-base
 
@@ -22,11 +26,11 @@ COPY . .
 
 # Build the application
 # - Strip debug info (-s -w)
-# - Set version from git tag
+# - Set version from build arg (fallback to git tag)
 # - Enable static linking
 RUN CGO_ENABLED=1 GOOS=linux go build \
 	-a -installsuffix cgo \
-	-ldflags="-s -w -X main.version=$(git describe --tags --always --dirty 2>/dev/null || echo 'dev') -X main.buildTime=$(date -u '+%Y-%m-%d_%H:%M:%S') -extldflags '-static'" \
+	-ldflags="-s -w -X main.version=${VERSION} -X main.buildTime=${BUILD_TIME} -extldflags '-static'" \
 	-o glory-hole \
 	./cmd/glory-hole
 
