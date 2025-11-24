@@ -320,6 +320,8 @@ server:
   listen_address: ":53"
   tcp_enabled: true
   udp_enabled: true
+  web_ui_address: ":8080"    # REST API and Web UI
+  decision_trace: false       # Enable for detailed block breadcrumbs
 
 # Upstream DNS Servers
 upstream_dns_servers:

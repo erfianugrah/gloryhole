@@ -4,11 +4,19 @@ metadata:
   name: glory-hole-config
 data:
   config.yml: |
+    server:
+      listen_address: ":53"
+      tcp_enabled: true
+      udp_enabled: true
+      web_ui_address: ":8080"
+      decision_trace: false
+
     upstream_dns_servers:
       - "1.1.1.1:53"
       - "8.8.8.8:53"
 
     update_interval: "24h"
+    auto_update_blocklists: true
 
     blocklists:
       - "https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts"
@@ -16,18 +24,12 @@ data:
     whitelist: []
 
     local_records:
+      enabled: false
       records: []
 
     policy:
+      enabled: false
       rules: []
-
-    dns:
-      address: ":53"
-      protocol: "both"
-
-    api:
-      enabled: true
-      address: ":8080"
 
     cache:
       enabled: true
@@ -36,15 +38,20 @@ data:
       max_ttl: "24h"
       negative_ttl: "5m"
 
-    storage:
+    database:
       enabled: true
       backend: "sqlite"
-      connection_string: "/data/glory-hole.db"
+      sqlite:
+        path: "/data/glory-hole.db"
+        wal_mode: true
       buffer_size: 1000
+      flush_interval: "5s"
       retention_days: 7
 
     telemetry:
       enabled: true
-      prometheus:
-        enabled: true
-        port: 9090
+      service_name: "glory-hole"
+      service_version: "latest"
+      prometheus_enabled: true
+      prometheus_port: 9090
+      tracing_enabled: false

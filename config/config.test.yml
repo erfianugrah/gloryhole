@@ -3,6 +3,7 @@ server:
   listen_address: "127.0.0.1:5354" # Use port 5353 to avoid needing root
   udp_enabled: true
   tcp_enabled: true
+  decision_trace: true  # Enable for test visibility
 
 upstream_dns_servers:
   - "10.0.10.2:53" # Cloudflare DNS
