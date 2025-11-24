@@ -10,8 +10,29 @@ permissions:
   packages: write
 
 jobs:
-  # Build binaries for multiple platforms
+  # Run tests first to ensure quality
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.4'
+          cache: true
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Test with coverage
+        run: go test -v -race -coverprofile=coverage.out -covermode=atomic ./...
+
+  # Build binaries for multiple platforms (runs in parallel with Docker after tests pass)
   build-binaries:
+    needs: [test]
     name: Build Binaries
     runs-on: ubuntu-latest
     strategy:
@@ -85,9 +106,10 @@ jobs:
             glory-hole-*
           retention-days: 7
 
-  # Build and push Docker images
+  # Build and push Docker images (runs in parallel with binaries after tests pass)
   build-docker:
     name: Build Docker Images
+    needs: [test]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
