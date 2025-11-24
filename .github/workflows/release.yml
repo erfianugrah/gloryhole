@@ -24,11 +24,8 @@ jobs:
           go-version: '1.25.4'
           cache: true
 
-      - name: Download dependencies
-        run: go mod download
-
       - name: Test with coverage
-        run: go test -v -race -coverprofile=coverage.out -covermode=atomic ./...
+        run: go test -race -coverprofile=coverage.out -covermode=atomic ./...
 
   # Build binaries for multiple platforms (runs in parallel with Docker after tests pass)
   build-binaries:
