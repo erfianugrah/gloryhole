@@ -262,6 +262,8 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 			responseCode = cachedResp.Rcode
 			trace.Append(cachedTrace)
 			if cachedResp.Rcode == dns.RcodeNameError {
+				// Mark as blocked for accurate statistics tracking
+				blocked = true
 				trace.Record(traceStageCache, "blocked_hit", func(entry *storage.BlockTraceEntry) {
 					entry.Source = "response_cache"
 				})
