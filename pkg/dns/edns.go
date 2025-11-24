@@ -57,16 +57,23 @@ func SetEDNS0(resp *dns.Msg, reqInfo *EDNSInfo) {
 	// Determine buffer size
 	bufferSize := negotiateBufferSize(reqInfo.BufferSize)
 
+	// Check if response already has an OPT record (e.g., from cache or upstream)
+	if resp.IsEdns0() != nil {
+		// Already has EDNS0, don't add another one
+		return
+	}
+
 	// Create OPT record
+	// Note: Do NOT set Class field manually - it represents UDP payload size for OPT records
+	// and is automatically set by SetUDPSize()
 	opt := &dns.OPT{
 		Hdr: dns.RR_Header{
 			Name:   ".",
 			Rrtype: dns.TypeOPT,
-			Class:  dns.ClassINET,
 		},
 	}
 
-	// Set UDP payload size
+	// Set UDP payload size (this sets the Class field internally)
 	opt.SetUDPSize(bufferSize)
 
 	// Preserve DNSSEC OK bit from request
