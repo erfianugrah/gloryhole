@@ -174,7 +174,15 @@ curl http://localhost:8080/api/queries?limit=50&offset=100
       "blocked": false,
       "cached": true,
       "response_time_ms": 5,
-      "upstream": "1.1.1.1:53"
+      "upstream": "1.1.1.1:53",
+      "block_trace": [
+        {
+          "stage": "blocklist",
+          "action": "block",
+          "source": "manager",
+          "detail": "rule matched"
+        }
+      ]
     }
   ],
   "total": 1,
@@ -196,6 +204,7 @@ curl http://localhost:8080/api/queries?limit=50&offset=100
 | `cached` | bool | Was response cached? |
 | `response_time_ms` | float | Response time in milliseconds |
 | `upstream` | string | Upstream server used (if forwarded) |
+| `block_trace` | array | (Optional) Detailed decision breadcrumbs, when `server.decision_trace` is enabled |
 
 **Errors:**
 - `503` - Storage not available

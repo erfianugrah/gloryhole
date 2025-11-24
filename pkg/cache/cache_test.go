@@ -625,7 +625,7 @@ func TestSetBlocked_Basic(t *testing.T) {
 	resp.SetRcode(query, dns.RcodeNameError)
 
 	// Cache the blocked response
-	cache.SetBlocked(ctx, query, resp)
+	cache.SetBlocked(ctx, query, resp, nil)
 
 	// Verify it's cached
 	cached := cache.Get(ctx, query)
@@ -667,7 +667,7 @@ func TestSetBlocked_TTL(t *testing.T) {
 	resp.SetRcode(query, dns.RcodeNameError)
 
 	// Cache it
-	cache.SetBlocked(ctx, query, resp)
+	cache.SetBlocked(ctx, query, resp, nil)
 
 	// Should be cached immediately
 	cached := cache.Get(ctx, query)
@@ -703,7 +703,7 @@ func TestSetBlocked_Disabled(t *testing.T) {
 	resp := new(dns.Msg)
 	resp.SetRcode(query, dns.RcodeNameError)
 
-	cache.SetBlocked(ctx, query, resp)
+	cache.SetBlocked(ctx, query, resp, nil)
 
 	// Should not be cached
 	cached := cache.Get(ctx, query)
@@ -730,7 +730,7 @@ func TestSetBlocked_ZeroTTL(t *testing.T) {
 	resp := new(dns.Msg)
 	resp.SetRcode(query, dns.RcodeNameError)
 
-	cache.SetBlocked(ctx, query, resp)
+	cache.SetBlocked(ctx, query, resp, nil)
 
 	// Should not be cached with zero TTL
 	cached := cache.Get(ctx, query)
@@ -758,7 +758,7 @@ func TestSetBlocked_MultipleQueries(t *testing.T) {
 		query := testQuery(domain, dns.TypeA)
 		resp := new(dns.Msg)
 		resp.SetRcode(query, dns.RcodeNameError)
-		cache.SetBlocked(ctx, query, resp)
+		cache.SetBlocked(ctx, query, resp, nil)
 	}
 
 	// Verify all are cached
@@ -799,13 +799,13 @@ func TestSetBlocked_DifferentQueryTypes(t *testing.T) {
 	queryA := testQuery(domain, dns.TypeA)
 	respA := new(dns.Msg)
 	respA.SetRcode(queryA, dns.RcodeNameError)
-	cache.SetBlocked(ctx, queryA, respA)
+	cache.SetBlocked(ctx, queryA, respA, nil)
 
 	// Cache AAAA record
 	queryAAAA := testQuery(domain, dns.TypeAAAA)
 	respAAAA := new(dns.Msg)
 	respAAAA.SetRcode(queryAAAA, dns.RcodeNameError)
-	cache.SetBlocked(ctx, queryAAAA, respAAAA)
+	cache.SetBlocked(ctx, queryAAAA, respAAAA, nil)
 
 	// Both should be cached separately
 	cachedA := cache.Get(ctx, queryA)

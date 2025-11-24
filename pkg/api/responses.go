@@ -38,16 +38,17 @@ type StatsResponse struct {
 
 // QueryResponse represents a single DNS query log entry
 type QueryResponse struct {
-	Timestamp      string `json:"timestamp"`
-	ClientIP       string `json:"client_ip"`
-	Domain         string `json:"domain"`
-	QueryType      string `json:"query_type"`
-	Upstream       string `json:"upstream,omitempty"`
-	ID             int64  `json:"id"`
-	ResponseCode   int    `json:"response_code"`
-	ResponseTimeMs int64  `json:"response_time_ms"`
-	Blocked        bool   `json:"blocked"`
-	Cached         bool   `json:"cached"`
+	Timestamp      string                    `json:"timestamp"`
+	ClientIP       string                    `json:"client_ip"`
+	Domain         string                    `json:"domain"`
+	QueryType      string                    `json:"query_type"`
+	Upstream       string                    `json:"upstream,omitempty"`
+	ID             int64                     `json:"id"`
+	ResponseCode   int                       `json:"response_code"`
+	ResponseTimeMs int64                     `json:"response_time_ms"`
+	Blocked        bool                      `json:"blocked"`
+	Cached         bool                      `json:"cached"`
+	BlockTrace     []storage.BlockTraceEntry `json:"block_trace,omitempty"`
 }
 
 // QueriesResponse represents paginated query results
@@ -80,8 +81,8 @@ type BlocklistReloadResponse struct {
 
 // CachePurgeResponse represents cache purge result
 type CachePurgeResponse struct {
-	Status        string `json:"status"`
-	Message       string `json:"message"`
+	Status         string `json:"status"`
+	Message        string `json:"message"`
 	EntriesCleared int    `json:"entries_cleared,omitempty"`
 }
 
@@ -105,6 +106,7 @@ func convertQueryLog(q *storage.QueryLog) QueryResponse {
 		Cached:         q.Cached,
 		ResponseTimeMs: q.ResponseTimeMs,
 		Upstream:       q.Upstream,
+		BlockTrace:     q.BlockTrace,
 	}
 }
 

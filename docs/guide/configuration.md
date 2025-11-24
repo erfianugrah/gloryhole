@@ -86,6 +86,7 @@ server:
 | `tcp_enabled` | bool | `true` | Enable TCP DNS queries (RFC requirement) |
 | `udp_enabled` | bool | `true` | Enable UDP DNS queries (most common) |
 | `web_ui_address` | string | `:8080` | Web UI and REST API address |
+| `decision_trace` | bool | `false` | Capture multi-stage breadcrumbs for blocked queries (higher storage/log volume) |
 
 ### Examples
 
@@ -113,6 +114,13 @@ server:
   tcp_enabled: false
   udp_enabled: true
 ```
+
+**Decision trace:**
+```yaml
+server:
+  decision_trace: true   # Persist detailed breadcrumbs for blocked queries
+```
+> Enabling this generates richer query logs (and larger DB rows) but makes it easy to audit every blocking stage directly from the UI/API.
 
 ## Upstream DNS Servers
 

@@ -22,12 +22,12 @@ func TestManagerAllow(t *testing.T) {
 	}
 	defer mgr.Stop()
 
-	if allowed, limited, _ := mgr.Allow("192.168.1.1"); !allowed || limited {
-		t.Fatalf("first request should be allowed")
+	if allowed, limited, _, label := mgr.Allow("192.168.1.1"); !allowed || limited || label != "global" {
+		t.Fatalf("first request should be allowed with global label (allowed=%v limited=%v label=%s)", allowed, limited, label)
 	}
 
-	if allowed, limited, _ := mgr.Allow("192.168.1.1"); allowed || !limited {
-		t.Fatalf("second request immediately should be limited")
+	if allowed, limited, _, label := mgr.Allow("192.168.1.1"); allowed || !limited || label != "global" {
+		t.Fatalf("second request immediately should be limited with global label (allowed=%v limited=%v label=%s)", allowed, limited, label)
 	}
 }
 
@@ -57,16 +57,16 @@ func TestManagerOverrideByClient(t *testing.T) {
 	defer mgr.Stop()
 
 	// Default client should not be throttled
-	if allowed, limited, action := mgr.Allow("192.168.1.1"); !allowed || limited || action != cfg.Action {
+	if allowed, limited, action, label := mgr.Allow("192.168.1.1"); !allowed || limited || action != cfg.Action || label != "global" {
 		t.Fatalf("default client should use global settings")
 	}
 
 	// Override client should get drop action
-	if allowed, limited, action := mgr.Allow("10.0.0.5"); !allowed || limited || action != config.RateLimitActionDrop {
-		t.Fatalf("first request for override client should pass with drop action, got allow=%v limited=%v action=%v", allowed, limited, action)
+	if allowed, limited, action, label := mgr.Allow("10.0.0.5"); !allowed || limited || action != config.RateLimitActionDrop || label != "slow-client" {
+		t.Fatalf("first request for override client should pass with drop action")
 	}
 
-	if allowed, limited, action := mgr.Allow("10.0.0.5"); allowed || !limited || action != config.RateLimitActionDrop {
+	if allowed, limited, action, label := mgr.Allow("10.0.0.5"); allowed || !limited || action != config.RateLimitActionDrop || label != "slow-client" {
 		t.Fatalf("second request should be limited with drop action")
 	}
 }
@@ -95,11 +95,11 @@ func TestManagerOverrideByCIDR(t *testing.T) {
 	}
 	defer mgr.Stop()
 
-	if allowed, limited, _ := mgr.Allow("192.168.10.1"); !allowed || limited {
+	if allowed, limited, _, label := mgr.Allow("192.168.10.1"); !allowed || limited || label != "iot" {
 		t.Fatalf("first request should be allowed")
 	}
 
-	if allowed, limited, _ := mgr.Allow("192.168.10.1"); allowed || !limited {
+	if allowed, limited, _, label := mgr.Allow("192.168.10.1"); allowed || !limited || label != "iot" {
 		t.Fatalf("second request from CIDR should be limited")
 	}
 }

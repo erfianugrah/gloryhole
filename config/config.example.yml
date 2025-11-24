@@ -6,6 +6,7 @@ server:
   tcp_enabled: true
   udp_enabled: true
   web_ui_address: ":8080"
+  decision_trace: false    # Capture detailed block breadcrumbs (higher storage cost)
 
 # Optional per-client rate limiting
 rate_limit:

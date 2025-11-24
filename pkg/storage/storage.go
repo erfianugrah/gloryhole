@@ -38,6 +38,17 @@ type QueryLog struct {
 	ResponseTimeMs int64     `json:"response_time_ms"`
 	Blocked        bool      `json:"blocked"`
 	Cached         bool      `json:"cached"`
+	BlockTrace     []BlockTraceEntry `json:"block_trace,omitempty"`
+}
+
+// BlockTraceEntry captures a single decision step explaining how a query was handled.
+type BlockTraceEntry struct {
+	Stage    string            `json:"stage"`
+	Action   string            `json:"action"`
+	Rule     string            `json:"rule,omitempty"`
+	Source   string            `json:"source,omitempty"`
+	Detail   string            `json:"detail,omitempty"`
+	Metadata map[string]string `json:"metadata,omitempty"`
 }
 
 // Statistics represents aggregated query statistics

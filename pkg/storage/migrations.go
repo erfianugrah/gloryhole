@@ -22,6 +22,13 @@ var migrations = []Migration{
 		Description: "Initial schema with queries, domain_stats, and statistics tables",
 		SQL:         initialSchema,
 	},
+	{
+		Version:     2,
+		Description: "Add block trace column for query decision breadcrumbs",
+		SQL: `
+			ALTER TABLE queries ADD COLUMN block_trace TEXT;
+		`,
+	},
 	// Future migrations will be added here with incrementing version numbers
 	// Example:
 	// {

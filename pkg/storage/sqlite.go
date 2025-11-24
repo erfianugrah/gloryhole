@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	_ "embed"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"sync"
@@ -80,8 +81,8 @@ func NewSQLiteStorage(cfg *Config) (Storage, error) {
 	// Prepare statements
 	stmtInsert, err := db.Prepare(`
 		INSERT INTO queries
-		(timestamp, client_ip, domain, query_type, response_code, blocked, cached, response_time_ms, upstream)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+		(timestamp, client_ip, domain, query_type, response_code, blocked, cached, response_time_ms, upstream, block_trace)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`)
 	if err != nil {
 		_ = db.Close()
@@ -236,6 +237,11 @@ func (s *SQLiteStorage) flushBatch(queries []*QueryLog) error {
 	stmt := tx.Stmt(s.stmtInsertQuery)
 
 	for _, query := range queries {
+		traceValue, encodeErr := encodeBlockTrace(query.BlockTrace)
+		if encodeErr != nil {
+			return fmt.Errorf("%w: %v", ErrQueryFailed, encodeErr)
+		}
+
 		_, err := stmt.Exec(
 			query.Timestamp,
 			query.ClientIP,
@@ -246,6 +252,7 @@ func (s *SQLiteStorage) flushBatch(queries []*QueryLog) error {
 			query.Cached,
 			query.ResponseTimeMs,
 			query.Upstream,
+			traceValue,
 		)
 		if err != nil {
 			return fmt.Errorf("%w: %v", ErrQueryFailed, err)
@@ -308,7 +315,7 @@ func (s *SQLiteStorage) GetRecentQueries(ctx context.Context, limit, offset int)
 
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, timestamp, client_ip, domain, query_type, response_code,
-		       blocked, cached, response_time_ms, upstream
+		       blocked, cached, response_time_ms, upstream, block_trace
 		FROM queries
 		ORDER BY timestamp DESC
 		LIMIT ? OFFSET ?
@@ -332,7 +339,7 @@ func (s *SQLiteStorage) GetQueriesByDomain(ctx context.Context, domain string, l
 
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, timestamp, client_ip, domain, query_type, response_code,
-		       blocked, cached, response_time_ms, upstream
+		       blocked, cached, response_time_ms, upstream, block_trace
 		FROM queries
 		WHERE domain = ?
 		ORDER BY timestamp DESC
@@ -357,7 +364,7 @@ func (s *SQLiteStorage) GetQueriesByClientIP(ctx context.Context, clientIP strin
 
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, timestamp, client_ip, domain, query_type, response_code,
-		       blocked, cached, response_time_ms, upstream
+		       blocked, cached, response_time_ms, upstream, block_trace
 		FROM queries
 		WHERE client_ip = ?
 		ORDER BY timestamp DESC
@@ -571,6 +578,32 @@ func (s *SQLiteStorage) Ping(ctx context.Context) error {
 	return s.db.PingContext(ctx)
 }
 
+func encodeBlockTrace(entries []BlockTraceEntry) (interface{}, error) {
+	if len(entries) == 0 {
+		return nil, nil
+	}
+
+	data, err := json.Marshal(entries)
+	if err != nil {
+		return nil, err
+	}
+
+	return string(data), nil
+}
+
+func decodeBlockTrace(raw sql.NullString) ([]BlockTraceEntry, error) {
+	if !raw.Valid || raw.String == "" {
+		return nil, nil
+	}
+
+	var entries []BlockTraceEntry
+	if err := json.Unmarshal([]byte(raw.String), &entries); err != nil {
+		return nil, err
+	}
+
+	return entries, nil
+}
+
 // scanQueryLogs is a helper function that scans SQL rows into QueryLog structs.
 // It's used by multiple query methods (GetRecentQueries, GetQueriesByDomain, etc.)
 // to avoid code duplication in row scanning logic.
@@ -589,6 +622,7 @@ func scanQueryLogs(rows *sql.Rows) ([]*QueryLog, error) {
 	for rows.Next() {
 		var q QueryLog
 		var upstream sql.NullString
+		var trace sql.NullString
 
 		err := rows.Scan(
 			&q.ID,
@@ -601,6 +635,7 @@ func scanQueryLogs(rows *sql.Rows) ([]*QueryLog, error) {
 			&q.Cached,
 			&q.ResponseTimeMs,
 			&upstream,
+			&trace,
 		)
 		if err != nil {
 			return nil, err
@@ -609,6 +644,12 @@ func scanQueryLogs(rows *sql.Rows) ([]*QueryLog, error) {
 		if upstream.Valid {
 			q.Upstream = upstream.String
 		}
+
+		entries, err := decodeBlockTrace(trace)
+		if err != nil {
+			return nil, err
+		}
+		q.BlockTrace = entries
 
 		queries = append(queries, &q)
 	}

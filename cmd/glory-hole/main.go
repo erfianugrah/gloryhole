@@ -134,6 +134,7 @@ func main() {
 
 	// Create DNS handler
 	handler := dns.NewHandler()
+	handler.SetDecisionTrace(cfg.Server.DecisionTrace)
 
 	// Set config watcher for kill-switch feature (hot-reload access)
 	handler.ConfigWatcher = cfgWatcher
@@ -518,6 +519,8 @@ func main() {
 			"dns_address", newCfg.Server.ListenAddress,
 			"api_address", newCfg.Server.WebUIAddress,
 		)
+
+		handler.SetDecisionTrace(newCfg.Server.DecisionTrace)
 
 		// Hot-reload blocklists if sources changed
 		if blocklistMgr != nil && !equalBlocklistConfig(cfg.Blocklists, newCfg.Blocklists) {

@@ -5,6 +5,8 @@ import (
 	"os"
 	"testing"
 	"time"
+
+	"github.com/miekg/dns"
 )
 
 func TestNewSQLiteStorage(t *testing.T) {
@@ -113,6 +115,54 @@ func TestSQLiteStorage_GetRecentQueries(t *testing.T) {
 		if queries[i].Timestamp.After(queries[i-1].Timestamp) {
 			t.Error("queries not ordered by most recent first")
 		}
+	}
+}
+
+func TestSQLiteStorage_BlockTracePersistence(t *testing.T) {
+	storage, cleanup := setupTestStorage(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	sqlStorage := storage.(*SQLiteStorage)
+
+	traceJSON := `[{"stage":"policy","action":"block","rule":"kids"}]`
+
+	_, err := sqlStorage.db.Exec(`
+		INSERT INTO queries
+		(timestamp, client_ip, domain, query_type, response_code, blocked, cached, response_time_ms, upstream, block_trace)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`,
+		time.Now(),
+		"192.168.1.50",
+		"blocked.example.com",
+		"A",
+		dns.RcodeNameError,
+		true,
+		false,
+		5,
+		"1.1.1.1:53",
+		traceJSON,
+	)
+	if err != nil {
+		t.Fatalf("Failed to insert test data: %v", err)
+	}
+
+	queries, err := storage.GetRecentQueries(ctx, 1, 0)
+	if err != nil {
+		t.Fatalf("GetRecentQueries() error = %v", err)
+	}
+
+	if len(queries) != 1 {
+		t.Fatalf("expected 1 query, got %d", len(queries))
+	}
+
+	if len(queries[0].BlockTrace) != 1 {
+		t.Fatalf("expected block trace entry, got %d", len(queries[0].BlockTrace))
+	}
+
+	entry := queries[0].BlockTrace[0]
+	if entry.Stage != "policy" || entry.Action != "block" || entry.Rule != "kids" {
+		t.Fatalf("unexpected block trace entry: %+v", entry)
 	}
 }
 

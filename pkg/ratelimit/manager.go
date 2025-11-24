@@ -12,6 +12,7 @@ import (
 )
 
 // Manager enforces simple per-client rate limiting using token buckets.
+//
 //nolint:fieldalignment // Layout favors logical grouping; padding impact is minimal.
 type Manager struct {
 	cfg        *config.RateLimitConfig
@@ -30,6 +31,7 @@ type clientLimiter struct {
 	limiter  *rate.Limiter
 	lastSeen time.Time
 	action   config.RateLimitAction
+	label    string
 }
 
 type overrideMatcher struct {
@@ -45,6 +47,7 @@ type limiterSettings struct {
 	limit  rate.Limit
 	burst  int
 	action config.RateLimitAction
+	label  string
 }
 
 // NewManager creates a rate limit manager when rate limiting is enabled.
@@ -72,19 +75,19 @@ func NewManager(cfg *config.RateLimitConfig, logger *logging.Logger) *Manager {
 }
 
 // Allow returns whether the client may proceed or exceeded the rate limit.
-func (m *Manager) Allow(clientIP string) (allowed bool, limited bool, action config.RateLimitAction) {
+func (m *Manager) Allow(clientIP string) (allowed bool, limited bool, action config.RateLimitAction, label string) {
 	if m == nil || clientIP == "" {
-		return true, false, config.RateLimitActionDrop
+		return true, false, config.RateLimitActionDrop, "global"
 	}
 
 	entry := m.getLimiter(clientIP)
 	if entry.limiter.Allow() {
 		m.touch(clientIP, entry)
-		return true, false, entry.action
+		return true, false, entry.action, entry.label
 	}
 
 	m.touch(clientIP, entry)
-	return false, true, entry.action
+	return false, true, entry.action, entry.label
 }
 
 // LogViolations reports whether violations should be logged.
@@ -151,6 +154,7 @@ func (m *Manager) getLimiter(clientIP string) *clientLimiter {
 		limiter:  rate.NewLimiter(settings.limit, settings.burst),
 		lastSeen: m.now(),
 		action:   settings.action,
+		label:    settings.label,
 	}
 	m.clients[clientIP] = entry
 	return entry
@@ -182,10 +186,15 @@ func (m *Manager) evictOldestLocked() {
 
 func (m *Manager) settingsForIP(clientIP string) limiterSettings {
 	if override := m.overrideForIP(clientIP); override != nil {
+		label := override.name
+		if label == "" {
+			label = "override"
+		}
 		return limiterSettings{
 			limit:  override.limit,
 			burst:  override.burst,
 			action: override.action,
+			label:  label,
 		}
 	}
 
@@ -193,6 +202,7 @@ func (m *Manager) settingsForIP(clientIP string) limiterSettings {
 		limit:  rate.Limit(m.cfg.RequestsPerSecond),
 		burst:  m.cfg.Burst,
 		action: m.cfg.Action,
+		label:  "global",
 	}
 }
 

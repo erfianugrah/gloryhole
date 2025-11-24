@@ -11,6 +11,7 @@ import (
 )
 
 // Config holds the application configuration
+//
 //nolint:fieldalignment // Struct is organized for readability; padding cost is acceptable.
 type Config struct {
 	Telemetry             TelemetryConfig             `yaml:"telemetry"`
@@ -37,6 +38,7 @@ type ServerConfig struct {
 	UDPEnabled      bool   `yaml:"udp_enabled"`
 	EnableBlocklist bool   `yaml:"enable_blocklist"` // Kill-switch for ad-blocking
 	EnablePolicies  bool   `yaml:"enable_policies"`  // Kill-switch for policy engine
+	DecisionTrace   bool   `yaml:"decision_trace"`   // Capture block decision traces
 }
 
 // CacheConfig holds cache settings
@@ -104,6 +106,7 @@ const (
 
 // RateLimitConfig controls optional per-client rate limiting.
 // RateLimitConfig controls optional per-client rate limiting.
+//
 //nolint:fieldalignment // Alignment cost is negligible compared to readability.
 type RateLimitConfig struct {
 	Enabled           bool                `yaml:"enabled"`

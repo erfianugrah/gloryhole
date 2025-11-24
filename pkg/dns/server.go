@@ -55,6 +55,7 @@ type Handler struct {
 	Cache             *cache.Cache
 	ConfigWatcher     *config.Watcher   // For kill-switch feature (hot-reload config access)
 	KillSwitch        KillSwitchChecker // For duration-based temporary disabling
+	DecisionTrace     bool
 	RateLimiter       *ratelimit.Manager
 	Metrics           *telemetry.Metrics
 	Logger            *logging.Logger
@@ -116,6 +117,11 @@ func (h *Handler) SetKillSwitch(ks KillSwitchChecker) {
 	h.KillSwitch = ks
 }
 
+// SetDecisionTrace enables or disables decision trace capture.
+func (h *Handler) SetDecisionTrace(enabled bool) {
+	h.DecisionTrace = enabled
+}
+
 // SetRateLimiter wires a rate limiter implementation.
 func (h *Handler) SetRateLimiter(rl *ratelimit.Manager) {
 	h.RateLimiter = rl
@@ -139,6 +145,7 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 	var blocked, cached bool
 	var upstream string
 	var responseCode int
+	trace := newBlockTraceRecorder(h.DecisionTrace)
 	clientIP := getClientIP(w)
 
 	// Async logging at the end (non-blocking, <10µs overhead)
@@ -167,6 +174,7 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 					Cached:         cached,
 					ResponseTimeMs: time.Since(startTime).Milliseconds(),
 					Upstream:       upstream,
+					BlockTrace:     trace.Entries(),
 				}
 
 				// Log query to storage (fire and forget, but log errors)
@@ -208,7 +216,14 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 
 	// Enforce optional rate limiting before expensive work
 	if h.RateLimiter != nil {
-		if allowed, limited, action := h.RateLimiter.Allow(clientIP); !allowed && limited {
+		if allowed, limited, action, label := h.RateLimiter.Allow(clientIP); !allowed && limited {
+			trace.Record(traceStageRateLimit, string(action), func(entry *storage.BlockTraceEntry) {
+				entry.Source = label
+				entry.Metadata = map[string]string{
+					"client_ip": clientIP,
+				}
+			})
+
 			dropped := action == config.RateLimitActionDrop
 			h.recordRateLimit(ctx, clientIP, qtypeLabel, string(action), dropped)
 			if h.RateLimiter.LogViolations() && h.Logger != nil {
@@ -235,7 +250,7 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 	// Check cache first (before any lookups)
 	// Cache lookups are fast (~100ns) and can save upstream roundtrip (~10ms)
 	if h.Cache != nil {
-		if cachedResp := h.Cache.Get(ctx, r); cachedResp != nil {
+		if cachedResp, cachedTrace := h.Cache.GetWithTrace(ctx, r); cachedResp != nil {
 			// Important: Update the message ID to match the query
 			// Cached responses have the original query's ID, but we need this query's ID
 			cachedResp.Id = r.Id
@@ -245,6 +260,12 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 
 			cached = true
 			responseCode = cachedResp.Rcode
+			trace.Append(cachedTrace)
+			if cachedResp.Rcode == dns.RcodeNameError {
+				trace.Record(traceStageCache, "blocked_hit", func(entry *storage.BlockTraceEntry) {
+					entry.Source = "response_cache"
+				})
+			}
 			h.writeMsg(w, cachedResp)
 			return
 		}
@@ -580,6 +601,12 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 				responseCode = dns.RcodeNameError
 				msg.SetRcode(r, dns.RcodeNameError)
 
+				trace.Record(traceStagePolicy, string(rule.Action), func(entry *storage.BlockTraceEntry) {
+					entry.Rule = rule.Name
+					entry.Source = "policy_engine"
+					entry.Detail = "rule matched"
+				})
+
 				// Record blocked query metric
 				h.recordBlockedQuery(ctx, "policy_block", qtypeLabel)
 
@@ -593,7 +620,7 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 
 				// Cache blocked response to avoid repeated policy evaluation
 				if h.Cache != nil {
-					h.Cache.SetBlocked(ctx, r, msg)
+					h.Cache.SetBlocked(ctx, r, msg, trace.Entries())
 				}
 
 				h.writeMsg(w, msg)
@@ -656,6 +683,14 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 				return
 
 			case policy.ActionRedirect:
+				trace.Record(traceStagePolicy, string(rule.Action), func(entry *storage.BlockTraceEntry) {
+					entry.Rule = rule.Name
+					entry.Source = "policy_engine"
+					entry.Detail = "redirect"
+					if rule.ActionData != "" {
+						entry.Metadata = map[string]string{"target": rule.ActionData}
+					}
+				})
 				// Redirect to specified IP address
 				redirectIP := net.ParseIP(rule.ActionData)
 				if redirectIP == nil {
@@ -832,12 +867,16 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 			responseCode = dns.RcodeNameError
 			msg.SetRcode(r, dns.RcodeNameError)
 
+			trace.Record(traceStageBlocklist, "block", func(entry *storage.BlockTraceEntry) {
+				entry.Source = "manager"
+			})
+
 			// Record blocked query metric
 			h.recordBlockedQuery(ctx, "blocklist_manager", qtypeLabel)
 
 			// Cache blocked response to avoid repeated blocklist lookups
 			if h.Cache != nil {
-				h.Cache.SetBlocked(ctx, r, msg)
+				h.Cache.SetBlocked(ctx, r, msg, trace.Entries())
 			}
 
 			h.writeMsg(w, msg)
@@ -935,12 +974,16 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 			responseCode = dns.RcodeNameError
 			msg.SetRcode(r, dns.RcodeNameError)
 
+			trace.Record(traceStageBlocklist, "block", func(entry *storage.BlockTraceEntry) {
+				entry.Source = "legacy"
+			})
+
 			// Record blocked query metric
 			h.recordBlockedQuery(ctx, "blocklist_legacy", qtypeLabel)
 
 			// Cache blocked response to avoid repeated blocklist lookups
 			if h.Cache != nil {
-				h.Cache.SetBlocked(ctx, r, msg)
+				h.Cache.SetBlocked(ctx, r, msg, trace.Entries())
 			}
 
 			h.writeMsg(w, msg)

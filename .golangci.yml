@@ -42,6 +42,8 @@ linters:
   settings:
     govet:
       enable-all: true
+      disable:
+        - fieldalignment
     cyclop:
       max-complexity: 100
     goconst:

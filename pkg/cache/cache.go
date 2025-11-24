@@ -8,6 +8,7 @@ import (
 
 	"glory-hole/pkg/config"
 	"glory-hole/pkg/logging"
+	"glory-hole/pkg/storage"
 	"glory-hole/pkg/telemetry"
 
 	"github.com/miekg/dns"
@@ -39,6 +40,9 @@ type cacheEntry struct {
 
 	// Size in bytes (for memory tracking)
 	size int
+
+	// Block trace metadata (for blocked responses)
+	blockTrace []storage.BlockTraceEntry
 }
 
 // cacheStats tracks cache performance metrics
@@ -98,12 +102,18 @@ func New(cfg *config.CacheConfig, logger *logging.Logger, metrics *telemetry.Met
 // Get retrieves a cached DNS response for the given request
 // Returns nil if not found or expired
 func (c *Cache) Get(ctx context.Context, r *dns.Msg) *dns.Msg {
+	resp, _ := c.GetWithTrace(ctx, r)
+	return resp
+}
+
+// GetWithTrace returns the cached response and any associated block trace metadata.
+func (c *Cache) GetWithTrace(ctx context.Context, r *dns.Msg) (*dns.Msg, []storage.BlockTraceEntry) {
 	if !c.cfg.Enabled {
-		return nil
+		return nil, nil
 	}
 
 	if len(r.Question) == 0 {
-		return nil
+		return nil, nil
 	}
 
 	key := c.makeKey(r.Question[0].Name, r.Question[0].Qtype)
@@ -114,7 +124,7 @@ func (c *Cache) Get(ctx context.Context, r *dns.Msg) *dns.Msg {
 
 	if !found {
 		c.recordMiss()
-		return nil
+		return nil, nil
 	}
 
 	// Check if expired
@@ -132,7 +142,7 @@ func (c *Cache) Get(ctx context.Context, r *dns.Msg) *dns.Msg {
 		}
 
 		c.mu.Unlock()
-		return nil
+		return nil, nil
 	}
 
 	// Update last access time (for LRU)
@@ -143,7 +153,7 @@ func (c *Cache) Get(ctx context.Context, r *dns.Msg) *dns.Msg {
 	c.recordHit()
 
 	// Return a copy to prevent mutations
-	return entry.msg.Copy()
+	return entry.msg.Copy(), cloneBlockTrace(entry.blockTrace)
 }
 
 // Set stores a DNS response in the cache with appropriate TTL
@@ -207,7 +217,7 @@ func (c *Cache) Set(ctx context.Context, r *dns.Msg, resp *dns.Msg) {
 // SetBlocked stores a blocked domain response in the cache with BlockedTTL
 // This is used for domains blocked by policy engine or blocklist to avoid
 // repeating the blocking logic on every query
-func (c *Cache) SetBlocked(ctx context.Context, r *dns.Msg, resp *dns.Msg) {
+func (c *Cache) SetBlocked(ctx context.Context, r *dns.Msg, resp *dns.Msg, trace []storage.BlockTraceEntry) {
 	if !c.cfg.Enabled {
 		return
 	}
@@ -232,6 +242,7 @@ func (c *Cache) SetBlocked(ctx context.Context, r *dns.Msg, resp *dns.Msg) {
 		expiresAt:  now.Add(ttl),
 		lastAccess: now,
 		size:       resp.Len(),
+		blockTrace: cloneBlockTrace(trace),
 	}
 
 	c.mu.Lock()
@@ -445,4 +456,14 @@ func (c *Cache) recordMiss() {
 	if c.metrics != nil {
 		c.metrics.DNSCacheMisses.Add(context.Background(), 1)
 	}
+}
+
+func cloneBlockTrace(entries []storage.BlockTraceEntry) []storage.BlockTraceEntry {
+	if len(entries) == 0 {
+		return nil
+	}
+
+	out := make([]storage.BlockTraceEntry, len(entries))
+	copy(out, entries)
+	return out
 }
