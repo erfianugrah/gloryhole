@@ -32,6 +32,7 @@ cache:
   max_ttl: 24h
   negative_ttl: 5m  # TTL for upstream NXDOMAIN responses
   blocked_ttl: 1s    # TTL for blocked domain responses (reduces repeated blocking logic)
+  shard_count: 16   # Light sharding for blocklist testing (improves performance with large blocklists)
 
 logging:
   level: "info"          # Use info level to see blocklist activity

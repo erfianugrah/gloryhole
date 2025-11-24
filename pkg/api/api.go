@@ -23,7 +23,7 @@ type Server struct {
 	logger           *slog.Logger
 	blocklistManager *blocklist.Manager
 	policyEngine     *policy.Engine
-	cache            *cache.Cache         // DNS cache for purge operations
+	cache            cache.Interface      // DNS cache for purge operations
 	configWatcher    *config.Watcher      // For kill-switch feature
 	killSwitch       *KillSwitchManager   // For duration-based temporary disabling
 	startTime        time.Time
@@ -36,7 +36,7 @@ type Config struct {
 	Storage          storage.Storage
 	BlocklistManager *blocklist.Manager
 	PolicyEngine     *policy.Engine
-	Cache            *cache.Cache         // DNS cache for purge operations
+	Cache            cache.Interface      // DNS cache for purge operations
 	Logger           *slog.Logger
 	ConfigWatcher    *config.Watcher      // For kill-switch feature
 	KillSwitch       *KillSwitchManager   // For duration-based temporary disabling

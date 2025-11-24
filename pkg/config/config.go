@@ -49,6 +49,7 @@ type CacheConfig struct {
 	MaxTTL      time.Duration `yaml:"max_ttl"`
 	NegativeTTL time.Duration `yaml:"negative_ttl"` // TTL for upstream NXDOMAIN responses
 	BlockedTTL  time.Duration `yaml:"blocked_ttl"`  // TTL for blocked domain responses
+	ShardCount  int           `yaml:"shard_count"`  // Number of shards for concurrent access (0 = use non-sharded cache)
 }
 
 // LocalRecordsConfig holds local DNS records configuration

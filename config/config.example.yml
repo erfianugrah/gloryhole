@@ -201,6 +201,9 @@ cache:
   max_ttl: "24h"
   negative_ttl: "5m"  # TTL for upstream NXDOMAIN responses
   blocked_ttl: "1s"    # TTL for blocked domain responses (reduces repeated blocking logic)
+  shard_count: 0      # Number of cache shards (0 = non-sharded, 64 = recommended for high traffic)
+                      # Sharding reduces lock contention on multi-core systems
+                      # Recommended: 64 shards for >100K QPS, 0 (disabled) for <10K QPS
 
 # Logging
 logging:

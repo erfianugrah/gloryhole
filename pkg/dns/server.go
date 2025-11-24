@@ -52,7 +52,7 @@ type Handler struct {
 	PolicyEngine      *policy.Engine
 	RuleEvaluator     *forwarder.RuleEvaluator
 	Forwarder         *forwarder.Forwarder
-	Cache             *cache.Cache
+	Cache             cache.Interface
 	ConfigWatcher     *config.Watcher   // For kill-switch feature (hot-reload config access)
 	KillSwitch        KillSwitchChecker // For duration-based temporary disabling
 	DecisionTrace     bool
@@ -78,7 +78,7 @@ func (h *Handler) SetForwarder(f *forwarder.Forwarder) {
 }
 
 // SetCache sets the DNS response cache
-func (h *Handler) SetCache(c *cache.Cache) {
+func (h *Handler) SetCache(c cache.Interface) {
 	h.Cache = c
 }
 

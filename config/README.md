@@ -79,7 +79,9 @@ List of upstream DNS servers to forward queries to.
 URLs of blocklist sources (hosts, adblock, or plain text format).
 
 ### Cache
-DNS response caching configuration.
+DNS response caching configuration with optional sharding for improved concurrency.
+
+**Performance Tip:** Enable cache sharding (`shard_count: 64`) for high-traffic deployments to reduce lock contention and improve multi-core scalability.
 
 ### Database
 SQLite query logging configuration.

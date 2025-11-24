@@ -64,8 +64,9 @@ type Stats struct {
 	HitRate   float64 // hits / (hits + misses)
 }
 
-// New creates a new DNS cache with the given configuration
-func New(cfg *config.CacheConfig, logger *logging.Logger, metrics *telemetry.Metrics) (*Cache, error) {
+// New creates a new DNS cache with the given configuration.
+// Returns a sharded cache if cfg.ShardCount > 0, otherwise returns a non-sharded cache.
+func New(cfg *config.CacheConfig, logger *logging.Logger, metrics *telemetry.Metrics) (Interface, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("cache config cannot be nil")
 	}
@@ -77,6 +78,13 @@ func New(cfg *config.CacheConfig, logger *logging.Logger, metrics *telemetry.Met
 		return nil, fmt.Errorf("max_entries must be positive, got %d", cfg.MaxEntries)
 	}
 
+	// Use sharded cache if configured
+	if cfg.ShardCount > 0 {
+		logger.Info("Creating sharded DNS cache", "shard_count", cfg.ShardCount)
+		return NewSharded(cfg, logger, metrics, cfg.ShardCount)
+	}
+
+	// Use non-sharded cache (backward compatibility)
 	c := &Cache{
 		cfg:         cfg,
 		logger:      logger,

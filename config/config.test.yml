@@ -25,6 +25,7 @@ cache:
   max_ttl: 24h            # Maximum TTL (prevent caching stale records)
   negative_ttl: 5m        # TTL for upstream NXDOMAIN responses
   blocked_ttl: 1s         # TTL for blocked domain responses (reduces repeated blocking logic)
+  shard_count: 0          # Cache sharding (0 = disabled, use for test consistency)
 
 logging:
   level: "debug"     # Use debug level to see all queries
