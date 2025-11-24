@@ -609,8 +609,14 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 					entry.Detail = "rule matched"
 				})
 
-				// Record blocked query metric
-				h.recordBlockedQuery(ctx, "policy_block", qtypeLabel)
+				// Record blocked query metric with trace metadata
+				h.recordBlockedQuery(ctx, blockMetadata{
+					reason:     "policy_block",
+					qtypeLabel: qtypeLabel,
+					stage:      traceStagePolicy,
+					rule:       rule.Name,
+					source:     "policy_engine",
+				})
 
 				// Log block action
 				if h.Logger != nil {
@@ -873,8 +879,13 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 				entry.Source = "manager"
 			})
 
-			// Record blocked query metric
-			h.recordBlockedQuery(ctx, "blocklist_manager", qtypeLabel)
+			// Record blocked query metric with trace metadata
+			h.recordBlockedQuery(ctx, blockMetadata{
+				reason:     "blocklist_manager",
+				qtypeLabel: qtypeLabel,
+				stage:      traceStageBlocklist,
+				source:     "manager",
+			})
 
 			// Cache blocked response to avoid repeated blocklist lookups
 			if h.Cache != nil {
@@ -980,8 +991,13 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 				entry.Source = "legacy"
 			})
 
-			// Record blocked query metric
-			h.recordBlockedQuery(ctx, "blocklist_legacy", qtypeLabel)
+			// Record blocked query metric with trace metadata
+			h.recordBlockedQuery(ctx, blockMetadata{
+				reason:     "blocklist_legacy",
+				qtypeLabel: qtypeLabel,
+				stage:      traceStageBlocklist,
+				source:     "legacy",
+			})
 
 			// Cache blocked response to avoid repeated blocklist lookups
 			if h.Cache != nil {
@@ -1161,18 +1177,41 @@ func (h *Handler) recordRateLimit(ctx context.Context, clientIP, qtypeLabel, act
 	}
 }
 
+// blockMetadata contains metadata for recording blocked query metrics
+type blockMetadata struct {
+	reason     string
+	qtypeLabel string
+	stage      string
+	rule       string
+	source     string
+}
+
 // recordBlockedQuery increments the blocked-query counter with contextual attributes for better observability.
-func (h *Handler) recordBlockedQuery(ctx context.Context, reason, qtypeLabel string) {
+func (h *Handler) recordBlockedQuery(ctx context.Context, meta blockMetadata) {
 	if h.Metrics == nil {
 		return
 	}
-	attrs := make([]attribute.KeyValue, 0, 2)
-	if reason != "" {
-		attrs = append(attrs, attribute.String("reason", reason))
+	attrs := make([]attribute.KeyValue, 0, 5)
+
+	// Legacy reason field (kept for backward compatibility)
+	if meta.reason != "" {
+		attrs = append(attrs, attribute.String("reason", meta.reason))
 	}
-	if qtypeLabel != "" {
-		attrs = append(attrs, attribute.String("type", qtypeLabel))
+	if meta.qtypeLabel != "" {
+		attrs = append(attrs, attribute.String("type", meta.qtypeLabel))
 	}
+
+	// New trace-based attributes
+	if meta.stage != "" {
+		attrs = append(attrs, attribute.String("stage", meta.stage))
+	}
+	if meta.rule != "" {
+		attrs = append(attrs, attribute.String("rule", meta.rule))
+	}
+	if meta.source != "" {
+		attrs = append(attrs, attribute.String("source", meta.source))
+	}
+
 	if len(attrs) == 0 {
 		h.Metrics.DNSBlockedQueries.Add(ctx, 1)
 		return
