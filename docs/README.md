@@ -2,6 +2,14 @@
 
 Welcome to the Glory-Hole DNS Server documentation. This guide will help you understand, deploy, and operate Glory-Hole in any environment.
 
+> **📖 [Complete Documentation Index](INDEX.md)** - Find all documentation organized by topic
+
+## Latest Release
+
+- **[v0.7.22 Final Summary](FINAL_SUMMARY.md)** - Complete optimization summary
+- **[Verification Checklist](VERIFICATION_CHECKLIST.md)** - Quality assurance results
+- **[Performance Results](performance/OPTIMIZATION_RESULTS.md)** - Benchmark comparisons
+
 ## Documentation Structure
 
 ### [User Guide](guide/)
@@ -83,6 +91,6 @@ All Glory-Hole documentation follows these principles:
 
 ---
 
-**Version:** 0.7.8
-**Last Updated:** 2025-11-23
+**Version:** 0.7.22
+**Last Updated:** 2025-11-25
 **Status:** Production Ready
