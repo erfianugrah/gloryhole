@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"embed"
 	"encoding/json"
 	"html/template"
@@ -41,6 +42,7 @@ func initTemplates() error {
 		"add": func(a, b int) int {
 			return a + b
 		},
+		"join": strings.Join,
 	}
 
 	templates, err = template.New("").Funcs(funcMap).ParseFS(tmplFS, "*.html")
@@ -159,11 +161,14 @@ func (s *Server) handleSettingsPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	data := struct {
-		Version string
-	}{
-		Version: s.version,
+	cfg := s.currentConfig()
+	if cfg == nil {
+		s.logger.Error("Configuration not available for settings page")
+		http.Error(w, "Configuration not available", http.StatusServiceUnavailable)
+		return
 	}
+
+	data := s.newSettingsPageData(cfg)
 
 	if err := templates.ExecuteTemplate(w, "settings.html", data); err != nil {
 		s.logger.Error("Failed to render settings template", "error", err)
@@ -269,7 +274,11 @@ func (s *Server) handleQueriesPartial(w http.ResponseWriter, r *http.Request) {
 
 	// Get queries from storage
 	if s.storage != nil {
-		dbQueries, err := s.storage.GetRecentQueries(r.Context(), limit, offset)
+		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+		defer cancel()
+
+		filter := buildQueryFilterFromRequest(r)
+		dbQueries, err := s.storage.GetQueriesFiltered(ctx, filter, limit, offset)
 		if err == nil {
 			for _, q := range dbQueries {
 				queries = append(queries, QueryData{

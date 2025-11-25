@@ -12,6 +12,7 @@ import (
 	"glory-hole/pkg/cache"
 	"glory-hole/pkg/config"
 	"glory-hole/pkg/policy"
+	"glory-hole/pkg/ratelimit"
 	"glory-hole/pkg/storage"
 )
 
@@ -23,12 +24,14 @@ type Server struct {
 	logger           *slog.Logger
 	blocklistManager *blocklist.Manager
 	policyEngine     *policy.Engine
-	cache            cache.Interface      // DNS cache for purge operations
-	configWatcher    *config.Watcher      // For kill-switch feature
-	killSwitch       *KillSwitchManager   // For duration-based temporary disabling
+	cache            cache.Interface    // DNS cache for purge operations
+	configWatcher    *config.Watcher    // For kill-switch feature
+	killSwitch       *KillSwitchManager // For duration-based temporary disabling
+	configSnapshot   *config.Config     // Used when watcher is unavailable (tests, static configs)
 	startTime        time.Time
 	version          string
-	configPath       string               // Path to config file for persistence
+	configPath       string // Path to config file for persistence
+	rateLimiter      *ratelimit.Manager
 }
 
 // Config holds API server configuration
@@ -36,13 +39,15 @@ type Config struct {
 	Storage          storage.Storage
 	BlocklistManager *blocklist.Manager
 	PolicyEngine     *policy.Engine
-	Cache            cache.Interface      // DNS cache for purge operations
+	Cache            cache.Interface // DNS cache for purge operations
 	Logger           *slog.Logger
-	ConfigWatcher    *config.Watcher      // For kill-switch feature
-	KillSwitch       *KillSwitchManager   // For duration-based temporary disabling
+	ConfigWatcher    *config.Watcher    // For kill-switch feature
+	KillSwitch       *KillSwitchManager // For duration-based temporary disabling
 	ListenAddress    string
 	Version          string
-	ConfigPath       string               // Path to config file
+	ConfigPath       string // Path to config file
+	InitialConfig    *config.Config
+	RateLimiter      *ratelimit.Manager
 }
 
 // New creates a new API server
@@ -66,19 +71,23 @@ func New(cfg *Config) *Server {
 		configWatcher:    cfg.ConfigWatcher,
 		configPath:       cfg.ConfigPath,
 		killSwitch:       cfg.KillSwitch,
+		configSnapshot:   cfg.InitialConfig,
 		startTime:        time.Now(),
+		rateLimiter:      cfg.RateLimiter,
 	}
 
 	// Setup routes
 	mux := http.NewServeMux()
 
 	// Health checks
-	mux.HandleFunc("/api/health", s.handleHealth)  // Detailed health with uptime/version
-	mux.HandleFunc("/health", s.handleLiveness)    // Simple liveness check
-	mux.HandleFunc("/ready", s.handleReadiness)    // Readiness check with components
+	mux.HandleFunc("/api/health", s.handleHealth) // Detailed health with uptime/version
+	mux.HandleFunc("/health", s.handleLiveness)   // Simple liveness check
+	mux.HandleFunc("/ready", s.handleReadiness)   // Readiness check with components
 
 	// Statistics
 	mux.HandleFunc("/api/stats", s.handleStats)
+	mux.HandleFunc("/api/stats/timeseries", s.handleStatsTimeSeries)
+	mux.HandleFunc("/api/stats/query-types", s.handleQueryTypes)
 
 	// Trace statistics
 	mux.HandleFunc("/api/traces/stats", s.handleTraceStatistics)
@@ -112,6 +121,12 @@ func New(cfg *Config) *Server {
 	mux.HandleFunc("POST /api/features/policies/disable", s.handleDisablePolicies)
 	mux.HandleFunc("POST /api/features/policies/enable", s.handleEnablePolicies)
 
+	// Configuration surface
+	mux.HandleFunc("GET /api/config", s.handleGetConfig)
+	mux.HandleFunc("PUT /api/config/upstreams", s.handleUpdateUpstreams)
+	mux.HandleFunc("PUT /api/config/cache", s.handleUpdateCache)
+	mux.HandleFunc("PUT /api/config/logging", s.handleUpdateLogging)
+
 	// UI routes (add after API routes to avoid conflicts)
 	mux.HandleFunc("GET /api/ui/stats", s.handleStatsPartial)
 	mux.HandleFunc("GET /api/ui/queries", s.handleQueriesPartial)
@@ -129,7 +144,8 @@ func New(cfg *Config) *Server {
 	}
 
 	// Apply middleware
-	handler := s.loggingMiddleware(mux)
+	handler := s.rateLimitMiddleware(mux)
+	handler = s.loggingMiddleware(handler)
 	handler = s.corsMiddleware(handler)
 
 	s.handler = handler
@@ -179,6 +195,24 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	}
 
 	return s.httpServer.Shutdown(ctx)
+}
+
+// SetCache updates the cache reference used by cache-related handlers.
+func (s *Server) SetCache(c cache.Interface) {
+	s.cache = c
+}
+
+// SetHTTPRateLimiter configures the HTTP rate limiter middleware.
+func (s *Server) SetHTTPRateLimiter(rl *ratelimit.Manager) {
+	s.rateLimiter = rl
+}
+
+// SetLogger updates the server logger reference.
+func (s *Server) SetLogger(l *slog.Logger) {
+	if l == nil {
+		return
+	}
+	s.logger = l
 }
 
 // writeJSON writes a JSON response

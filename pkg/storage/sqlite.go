@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 
@@ -510,6 +511,219 @@ func (s *SQLiteStorage) GetQueryCount(ctx context.Context, since time.Time) (int
 	return count, nil
 }
 
+// GetTimeSeriesStats returns aggregated statistics grouped by the specified bucket duration.
+func (s *SQLiteStorage) GetTimeSeriesStats(ctx context.Context, bucket time.Duration, points int) ([]*TimeSeriesPoint, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if s.closed {
+		return nil, ErrClosed
+	}
+
+	if points <= 0 {
+		return nil, fmt.Errorf("points must be greater than zero")
+	}
+
+	bucketSeconds := int64(bucket / time.Second)
+	if bucketSeconds <= 0 {
+		return nil, fmt.Errorf("bucket duration must be at least 1 second")
+	}
+
+	alignedEnd := truncateToBucket(time.Now().UTC(), bucket)
+	start := alignedEnd.Add(-bucket * time.Duration(points-1))
+
+	rows, err := s.db.QueryContext(ctx, `
+		WITH bucketed AS (
+			SELECT
+				datetime((strftime('%s', replace(substr(timestamp, 1, 19), 'T', ' ')) / ?) * ?, 'unixepoch') AS bucket_start,
+				blocked,
+				cached,
+				response_time_ms
+			FROM queries
+			WHERE timestamp >= ?
+		)
+		SELECT
+			bucket_start,
+			COUNT(*) as total,
+			SUM(CASE WHEN blocked THEN 1 ELSE 0 END) as blocked,
+			SUM(CASE WHEN cached THEN 1 ELSE 0 END) as cached,
+			AVG(response_time_ms) as avg_response_time
+		FROM bucketed
+		GROUP BY bucket_start
+		ORDER BY bucket_start ASC
+	`, bucketSeconds, bucketSeconds, start)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrQueryFailed, err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	bucketLayout := "2006-01-02 15:04:05"
+	pointsByBucket := make(map[int64]*TimeSeriesPoint)
+
+	for rows.Next() {
+		var (
+			bucketStr string
+			total     sql.NullInt64
+			blocked   sql.NullInt64
+			cached    sql.NullInt64
+			avg       sql.NullFloat64
+		)
+
+		if err := rows.Scan(&bucketStr, &total, &blocked, &cached, &avg); err != nil {
+			return nil, fmt.Errorf("%w: %v", ErrQueryFailed, err)
+		}
+
+		bucketTime, parseErr := time.ParseInLocation(bucketLayout, bucketStr, time.UTC)
+		if parseErr != nil {
+			return nil, fmt.Errorf("failed to parse bucket timestamp: %w", parseErr)
+		}
+
+		point := &TimeSeriesPoint{
+			Timestamp:         bucketTime,
+			TotalQueries:      total.Int64,
+			BlockedQueries:    blocked.Int64,
+			CachedQueries:     cached.Int64,
+			AvgResponseTimeMs: avg.Float64,
+		}
+
+		pointsByBucket[bucketTime.Unix()] = point
+	}
+
+	result := make([]*TimeSeriesPoint, 0, points)
+	current := start
+	for i := 0; i < points; i++ {
+		if point, ok := pointsByBucket[current.Unix()]; ok {
+			result = append(result, point)
+		} else {
+			result = append(result, &TimeSeriesPoint{
+				Timestamp:         current,
+				TotalQueries:      0,
+				BlockedQueries:    0,
+				CachedQueries:     0,
+				AvgResponseTimeMs: 0,
+			})
+		}
+		current = current.Add(bucket)
+	}
+
+	return result, nil
+}
+
+// GetQueryTypeStats returns aggregated counts grouped by DNS query type.
+func (s *SQLiteStorage) GetQueryTypeStats(ctx context.Context, limit int) ([]*QueryTypeStats, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if s.closed {
+		return nil, ErrClosed
+	}
+
+	if limit <= 0 || limit > 100 {
+		limit = 10
+	}
+
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT
+			COALESCE(NULLIF(UPPER(query_type), ''), 'UNKNOWN') AS type,
+			COUNT(*) AS total,
+			SUM(CASE WHEN blocked THEN 1 ELSE 0 END) AS blocked,
+			SUM(CASE WHEN cached THEN 1 ELSE 0 END) AS cached
+		FROM queries
+		GROUP BY type
+		ORDER BY total DESC
+		LIMIT ?
+	`, limit)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrQueryFailed, err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var stats []*QueryTypeStats
+	for rows.Next() {
+		var stat QueryTypeStats
+		if scanErr := rows.Scan(&stat.QueryType, &stat.Total, &stat.Blocked, &stat.Cached); scanErr != nil {
+			return nil, fmt.Errorf("%w: %v", ErrQueryFailed, scanErr)
+		}
+		stats = append(stats, &stat)
+	}
+
+	return stats, nil
+}
+
+// GetQueriesFiltered returns queries matching the provided filter criteria.
+func (s *SQLiteStorage) GetQueriesFiltered(ctx context.Context, filter QueryFilter, limit, offset int) ([]*QueryLog, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if s.closed {
+		return nil, ErrClosed
+	}
+
+	query := `
+		SELECT id, timestamp, client_ip, domain, query_type, response_code,
+		       blocked, cached, response_time_ms, upstream, block_trace
+		FROM queries
+	`
+	conditions := make([]string, 0)
+	args := make([]any, 0)
+
+	if filter.Domain != "" {
+		conditions = append(conditions, "LOWER(domain) LIKE ?")
+		args = append(args, "%"+strings.ToLower(filter.Domain)+"%")
+	}
+
+	if filter.QueryType != "" {
+		conditions = append(conditions, "UPPER(query_type) = ?")
+		args = append(args, strings.ToUpper(filter.QueryType))
+	}
+
+	if filter.Blocked != nil {
+		conditions = append(conditions, "blocked = ?")
+		if *filter.Blocked {
+			args = append(args, 1)
+		} else {
+			args = append(args, 0)
+		}
+	}
+
+	if filter.Cached != nil {
+		conditions = append(conditions, "cached = ?")
+		if *filter.Cached {
+			args = append(args, 1)
+		} else {
+			args = append(args, 0)
+		}
+	}
+
+	if !filter.Start.IsZero() {
+		conditions = append(conditions, "timestamp >= ?")
+		args = append(args, filter.Start)
+	}
+
+	if !filter.End.IsZero() {
+		conditions = append(conditions, "timestamp <= ?")
+		args = append(args, filter.End)
+	}
+
+	if len(conditions) > 0 {
+		query += " WHERE " + strings.Join(conditions, " AND ")
+	}
+
+	query += `
+		ORDER BY timestamp DESC
+		LIMIT ? OFFSET ?
+	`
+	args = append(args, limit, offset)
+
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrQueryFailed, err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	return scanQueryLogs(rows)
+}
+
 // Cleanup removes old queries based on retention policy
 func (s *SQLiteStorage) Cleanup(ctx context.Context, olderThan time.Time) error {
 	s.mu.RLock()
@@ -550,6 +764,16 @@ func (s *SQLiteStorage) Cleanup(ctx context.Context, olderThan time.Time) error 
 	}
 
 	return nil
+}
+
+func truncateToBucket(t time.Time, bucket time.Duration) time.Time {
+	bucketSeconds := int64(bucket / time.Second)
+	if bucketSeconds <= 0 {
+		return t.UTC()
+	}
+	unix := t.Unix()
+	truncated := (unix / bucketSeconds) * bucketSeconds
+	return time.Unix(truncated, 0).UTC()
 }
 
 // Close closes the storage backend

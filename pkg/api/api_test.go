@@ -5,17 +5,25 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
+	"glory-hole/pkg/config"
 	"glory-hole/pkg/storage"
 )
 
 // mockStorage implements storage.Storage for testing
 type mockStorage struct {
-	stats   *storage.Statistics
-	queries []*storage.QueryLog
-	domains []*storage.DomainStats
+	stats      *storage.Statistics
+	queries    []*storage.QueryLog
+	domains    []*storage.DomainStats
+	timeseries []*storage.TimeSeriesPoint
+	queryTypes []*storage.QueryTypeStats
+	filtered   []*storage.QueryLog
+	lastFilter storage.QueryFilter
 }
 
 func (m *mockStorage) LogQuery(ctx context.Context, query *storage.QueryLog) error {
@@ -62,6 +70,24 @@ func (m *mockStorage) GetQueryCount(ctx context.Context, since time.Time) (int64
 	return 0, nil
 }
 
+func (m *mockStorage) GetQueriesFiltered(ctx context.Context, filter storage.QueryFilter, limit, offset int) ([]*storage.QueryLog, error) {
+	m.lastFilter = filter
+	if len(m.filtered) > 0 {
+		return m.filtered, nil
+	}
+	if len(m.queries) > 0 {
+		return m.queries, nil
+	}
+	return []*storage.QueryLog{}, nil
+}
+
+func (m *mockStorage) GetTimeSeriesStats(ctx context.Context, bucket time.Duration, points int) ([]*storage.TimeSeriesPoint, error) {
+	if len(m.timeseries) == 0 {
+		return []*storage.TimeSeriesPoint{}, nil
+	}
+	return m.timeseries, nil
+}
+
 func (m *mockStorage) GetTraceStatistics(ctx context.Context, since time.Time) (*storage.TraceStatistics, error) {
 	return &storage.TraceStatistics{
 		Since:    since,
@@ -77,6 +103,13 @@ func (m *mockStorage) GetQueriesWithTraceFilter(ctx context.Context, filter stor
 	return m.queries, nil
 }
 
+func (m *mockStorage) GetQueryTypeStats(ctx context.Context, limit int) ([]*storage.QueryTypeStats, error) {
+	if m.queryTypes != nil {
+		return m.queryTypes, nil
+	}
+	return []*storage.QueryTypeStats{}, nil
+}
+
 func (m *mockStorage) Cleanup(ctx context.Context, olderThan time.Time) error {
 	return nil
 }
@@ -87,6 +120,28 @@ func (m *mockStorage) Close() error {
 
 func (m *mockStorage) Ping(ctx context.Context) error {
 	return nil
+}
+
+func newConfigTestServer(t *testing.T, mutate func(*config.Config)) (*Server, string) {
+	t.Helper()
+
+	cfg := config.LoadWithDefaults()
+	if mutate != nil {
+		mutate(cfg)
+	}
+
+	path := filepath.Join(t.TempDir(), "config.yml")
+	if err := config.Save(path, cfg); err != nil {
+		t.Fatalf("failed to write config file: %v", err)
+	}
+
+	server := New(&Config{
+		ListenAddress: ":0",
+		InitialConfig: cfg,
+		ConfigPath:    path,
+	})
+
+	return server, path
 }
 
 func TestHandleHealth(t *testing.T) {
@@ -189,6 +244,38 @@ func TestHandleStats(t *testing.T) {
 	}
 }
 
+func TestHandleQueryTypes(t *testing.T) {
+	mock := &mockStorage{
+		queryTypes: []*storage.QueryTypeStats{
+			{QueryType: "A", Total: 10, Blocked: 2, Cached: 5},
+			{QueryType: "AAAA", Total: 5, Blocked: 1, Cached: 1},
+		},
+	}
+
+	server := New(&Config{
+		ListenAddress: ":8080",
+		Storage:       mock,
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/stats/query-types?limit=5", nil)
+	w := httptest.NewRecorder()
+
+	server.handleQueryTypes(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", w.Code)
+	}
+
+	var resp QueryTypeStatsResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	if len(resp.Types) != 2 || resp.Types[0].QueryType != "A" || resp.Types[0].Total != 10 {
+		t.Fatalf("unexpected response payload: %+v", resp)
+	}
+}
+
 func TestHandleStats_NoStorage(t *testing.T) {
 	server := New(&Config{
 		ListenAddress: ":8080",
@@ -205,10 +292,155 @@ func TestHandleStats_NoStorage(t *testing.T) {
 	}
 }
 
+func TestHandleGetConfig(t *testing.T) {
+	initial := &config.Config{
+		Server: config.ServerConfig{
+			ListenAddress:   ":53",
+			WebUIAddress:    ":8080",
+			TCPEnabled:      true,
+			UDPEnabled:      true,
+			EnableBlocklist: true,
+			EnablePolicies:  false,
+		},
+		Cache: config.CacheConfig{
+			Enabled:     true,
+			MaxEntries:  1000,
+			MinTTL:      time.Minute,
+			MaxTTL:      24 * time.Hour,
+			NegativeTTL: 5 * time.Minute,
+			BlockedTTL:  time.Second,
+			ShardCount:  16,
+		},
+		Policy: config.PolicyConfig{
+			Enabled: true,
+			Rules: []config.PolicyRuleEntry{
+				{Name: "Test", Logic: "true", Action: "BLOCK", Enabled: true},
+			},
+		},
+		RateLimit: config.RateLimitConfig{
+			Enabled:           true,
+			RequestsPerSecond: 200,
+			Burst:             400,
+			Action:            config.RateLimitActionDrop,
+			LogViolations:     true,
+			CleanupInterval:   time.Minute,
+			MaxTrackedClients: 1000,
+		},
+		Logging: config.LoggingConfig{
+			Level:  "info",
+			Format: "json",
+			Output: "stdout",
+		},
+		Telemetry: config.TelemetryConfig{
+			ServiceName:    "glory-hole",
+			ServiceVersion: "0.7.x",
+			Enabled:        true,
+		},
+		UpstreamDNSServers:   []string{"1.1.1.1:53", "8.8.8.8:53"},
+		Blocklists:           []string{"https://example.com/block.txt"},
+		Whitelist:            []string{"allowed.com"},
+		AutoUpdateBlocklists: true,
+		UpdateInterval:       12 * time.Hour,
+	}
+
+	server := New(&Config{
+		ListenAddress: ":8080",
+		InitialConfig: initial,
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/config", nil)
+	w := httptest.NewRecorder()
+
+	server.handleGetConfig(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", w.Code)
+	}
+
+	var resp ConfigResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	if resp.Server.ListenAddress != ":53" {
+		t.Errorf("expected listen address :53, got %s", resp.Server.ListenAddress)
+	}
+	if resp.Cache.MinTTL != (time.Minute).String() {
+		t.Errorf("expected min ttl 1m0s, got %s", resp.Cache.MinTTL)
+	}
+	if len(resp.Policy.Rules) != 1 {
+		t.Fatalf("expected 1 policy rule, got %d", len(resp.Policy.Rules))
+	}
+	if resp.RateLimit.Action != string(config.RateLimitActionDrop) {
+		t.Errorf("expected action drop, got %s", resp.RateLimit.Action)
+	}
+}
+
+func TestHandleGetConfigUnavailable(t *testing.T) {
+	server := New(&Config{
+		ListenAddress: ":8080",
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/config", nil)
+	w := httptest.NewRecorder()
+
+	server.handleGetConfig(w, req)
+
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected status 503, got %d", w.Code)
+	}
+}
+
+func TestHandleStatsTimeSeries(t *testing.T) {
+	now := time.Now().UTC()
+	mock := &mockStorage{
+		timeseries: []*storage.TimeSeriesPoint{
+			{
+				Timestamp:         now,
+				TotalQueries:      100,
+				BlockedQueries:    25,
+				CachedQueries:     40,
+				AvgResponseTimeMs: 4.2,
+			},
+		},
+	}
+
+	server := New(&Config{
+		ListenAddress: ":8080",
+		Storage:       mock,
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/stats/timeseries?period=day&points=10", nil)
+	w := httptest.NewRecorder()
+
+	server.handleStatsTimeSeries(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", w.Code)
+	}
+
+	var response TimeSeriesResponse
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	if response.Period != "day" {
+		t.Errorf("expected period 'day', got %s", response.Period)
+	}
+
+	if len(response.Data) != 1 {
+		t.Fatalf("expected 1 data point, got %d", len(response.Data))
+	}
+
+	if response.Data[0].TotalQueries != 100 {
+		t.Errorf("expected total queries 100, got %d", response.Data[0].TotalQueries)
+	}
+}
+
 func TestHandleQueries(t *testing.T) {
 	now := time.Now()
 	mock := &mockStorage{
-		queries: []*storage.QueryLog{
+		filtered: []*storage.QueryLog{
 			{
 				ID:             1,
 				Timestamp:      now,
@@ -330,6 +562,164 @@ func TestHandleTopDomains(t *testing.T) {
 
 	if !response.Domains[0].Blocked {
 		t.Error("expected blocked domains only")
+	}
+}
+
+func TestHandleQueriesAppliesFilters(t *testing.T) {
+	mock := &mockStorage{
+		filtered: []*storage.QueryLog{},
+	}
+
+	server := New(&Config{
+		ListenAddress: ":8080",
+		Storage:       mock,
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/queries?domain=test&type=AAAA&status=blocked&start=2025-01-01T00:00:00Z&end=2025-01-02T00:00:00Z", nil)
+	w := httptest.NewRecorder()
+
+	server.handleQueries(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", w.Code)
+	}
+
+	if mock.lastFilter.Domain != "test" {
+		t.Errorf("expected domain filter 'test', got %s", mock.lastFilter.Domain)
+	}
+	if strings.ToUpper(mock.lastFilter.QueryType) != "AAAA" {
+		t.Errorf("expected type filter AAAA, got %s", mock.lastFilter.QueryType)
+	}
+	if mock.lastFilter.Blocked == nil || !*mock.lastFilter.Blocked {
+		t.Errorf("expected blocked filter true")
+	}
+	if mock.lastFilter.Start.IsZero() || mock.lastFilter.End.IsZero() {
+		t.Errorf("expected start/end filters to be set")
+	}
+}
+
+func TestHandleUpdateUpstreams_JSON(t *testing.T) {
+	server, configPath := newConfigTestServer(t, func(cfg *config.Config) {
+		cfg.UpstreamDNSServers = []string{"1.1.1.1:53"}
+	})
+
+	body := `{"servers":["9.9.9.9:53","1.0.0.1:53"]}`
+	req := httptest.NewRequest(http.MethodPut, "/api/config/upstreams", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+
+	w := httptest.NewRecorder()
+	server.handleUpdateUpstreams(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", w.Code)
+	}
+
+	var resp ConfigUpdateResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	expected := []string{"9.9.9.9:53", "1.0.0.1:53"}
+	if len(resp.Config.UpstreamDNSServers) != len(expected) {
+		t.Fatalf("expected %d upstreams, got %d", len(expected), len(resp.Config.UpstreamDNSServers))
+	}
+	for i, serverAddr := range expected {
+		if resp.Config.UpstreamDNSServers[i] != serverAddr {
+			t.Fatalf("unexpected upstream[%d]: %s", i, resp.Config.UpstreamDNSServers[i])
+		}
+	}
+
+	reloaded, err := config.Load(configPath)
+	if err != nil {
+		t.Fatalf("failed to reload config: %v", err)
+	}
+	for i, serverAddr := range expected {
+		if reloaded.UpstreamDNSServers[i] != serverAddr {
+			t.Fatalf("config not persisted, expected %s got %s", serverAddr, reloaded.UpstreamDNSServers[i])
+		}
+	}
+}
+
+func TestHandleUpdateCache_InvalidPayload(t *testing.T) {
+	server, _ := newConfigTestServer(t, nil)
+
+	body := `{"enabled":true,"max_entries":1000,"min_ttl":"60s","max_ttl":"30s","negative_ttl":"5m","blocked_ttl":"1s","shard_count":4}`
+	req := httptest.NewRequest(http.MethodPut, "/api/config/cache", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+
+	w := httptest.NewRecorder()
+	server.handleUpdateCache(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected status 400, got %d", w.Code)
+	}
+
+	var resp ErrorResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("failed to decode error response: %v", err)
+	}
+
+	if resp.Message == "" {
+		t.Fatal("expected validation error message")
+	}
+}
+
+func TestHandleUpdateLogging_FormHTMX(t *testing.T) {
+	server, configPath := newConfigTestServer(t, func(cfg *config.Config) {
+		cfg.Logging.Level = "info"
+		cfg.Logging.Format = "text"
+		cfg.Logging.Output = "stdout"
+		cfg.Logging.FilePath = ""
+		cfg.Logging.MaxSize = 100
+		cfg.Logging.MaxBackups = 3
+		cfg.Logging.MaxAge = 7
+	})
+
+	form := url.Values{}
+	form.Set("level", "debug")
+	form.Set("format", "json")
+	form.Set("output", "file")
+	form.Set("file_path", "/var/log/glory-hole.log")
+	form.Set("add_source", "on")
+	form.Set("max_size", "250")
+	form.Set("max_backups", "10")
+	form.Set("max_age", "30")
+
+	req := httptest.NewRequest(http.MethodPut, "/api/config/logging", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("HX-Request", "true")
+
+	w := httptest.NewRecorder()
+	server.handleUpdateLogging(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", w.Code)
+	}
+
+	if ct := w.Header().Get("Content-Type"); !strings.Contains(ct, "text/html") {
+		t.Fatalf("expected HTML content-type, got %s", ct)
+	}
+
+	if !strings.Contains(w.Body.String(), "Logging settings updated") {
+		t.Fatalf("expected success message in HTMX response, got %s", w.Body.String())
+	}
+
+	reloaded, err := config.Load(configPath)
+	if err != nil {
+		t.Fatalf("failed to reload config: %v", err)
+	}
+
+	if reloaded.Logging.Level != "debug" || reloaded.Logging.Format != "json" || reloaded.Logging.Output != "file" {
+		t.Fatalf("logging settings not persisted: %+v", reloaded.Logging)
+	}
+	if reloaded.Logging.FilePath != "/var/log/glory-hole.log" {
+		t.Fatalf("expected file path to update, got %s", reloaded.Logging.FilePath)
+	}
+	if !reloaded.Logging.AddSource {
+		t.Fatal("expected add_source to be true")
+	}
+	if reloaded.Logging.MaxSize != 250 || reloaded.Logging.MaxBackups != 10 || reloaded.Logging.MaxAge != 30 {
+		t.Fatalf("unexpected log retention values: %+v", reloaded.Logging)
 	}
 }
 

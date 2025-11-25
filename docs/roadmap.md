@@ -1,13 +1,14 @@
 # Glory-Hole DNS Server - Development Roadmap
 
-**Last Updated**: 2025-11-23
-**Current Version**: v0.7.8
+**Last Updated**: 2025-11-24
+**Current Version**: v0.7.22
 **Next Releases**: v0.8.0 (Functional UI), v0.9.0 (Advanced Features)
 
 ---
 
 ## Table of Contents
 
+- [Immediate Next Steps](#immediate-next-steps-v080-sprint-3-kickoff)
 - [Codebase Health Overview](#codebase-health-overview)
 - [Technical Debt Registry](#technical-debt-registry)
 - [Bug Tracker](#bug-tracker)
@@ -16,6 +17,14 @@
 - [v0.7.1 Release Plan](#v071-release-plan)
 - [v0.8.0 Release Plan](#v080-release-plan)
 - [Progress Tracking](#progress-tracking)
+
+---
+
+## Immediate Next Steps (v0.8.0 Sprint 3 Kickoff)
+
+1. **Docs & telemetry follow-up** – Capture the new runtime-config + analytics flows in the admin guide and surface rate-limit/cache metrics so operators can observe behavior.
+2. **Client analytics prep (Sprint 4)** – Define the `/api/stats/clients` contract and design the `/ui/clients` page so the next sprint can focus on per-client dashboards.
+3. **Export/bulk UX planning** – Outline data-export formats and bulk policy operations (Sprints 5–6) to keep the UI momentum going once analytics lands.
 
 ---
 
@@ -53,7 +62,7 @@
 
 ### Areas for Improvement
 
-1. **UI Functionality**: Only 60% complete (mock data, static content)
+1. **UI Functionality**: ~70% complete (needs editable settings + advanced analytics)
 2. **Large Files**: Some files exceed 500 lines
 3. **Complex Functions**: Several 100+ line functions
 4. **Missing Features**: Rate limiting, CSRF protection, input validation
@@ -62,208 +71,97 @@
 
 ## Technical Debt Registry
 
-### TD-001: Improve Storage Error Logging
-- **Priority**: 🔴 High
-- **Location**: `pkg/storage/sqlite.go:166, 251, 483`
-- **Issue**: Using `fmt.Printf` instead of structured logging
-- **Impact**: Errors not captured in production logs
-- **Effort**: 1 hour
-- **Status**: 📋 Planned for v0.7.1
+### Active Items
 
-```go
-// Current (bad)
-fmt.Printf("Error flushing batch: %v\n", err)
-
-// Should be
-s.logger.Error("Failed to flush batch", "error", err, "size", len(batch))
-```
-
-### TD-002: Whitelist Not Lock-Free
+#### TD-002: Whitelist Still Uses RWMutex
 - **Priority**: 🔴 High (Performance)
-- **Location**: `pkg/dns/server.go:456`
-- **Issue**: Whitelist uses mutex locks, blocklist is lock-free
-- **Impact**: Performance bottleneck under high load
-- **Effort**: 4 hours
-- **Status**: 📋 Planned for v0.7.1
+- **Location**: `pkg/dns/server.go:833-876`
+- **Issue**: Exact-match whitelist lookups continue to take a read lock while the blocklist and pattern matchers are lock-free.
+- **Impact**: Adds unnecessary contention during spikes (especially when blocklist manager is hot-reloaded).
+- **Plan**: Mirror the atomic pointer pattern used by `BlocklistManager` so whitelist snapshots can be swapped without locking.
+- **Status**: 📋 Backlog (unassigned)
 
-```go
-// TODO: Move whitelist to atomic pointer for full lock-free operation
-h.lookupMu.RLock()
-_, whitelisted = h.Whitelist[domain]
-h.lookupMu.RUnlock()
-```
-
-**Solution**: Implement atomic pointer pattern like blocklist manager
-
-### TD-003: Missing Database Migration System
+#### TD-004: Large Function / File Complexity
 - **Priority**: 🟡 Medium
-- **Location**: `pkg/storage/sqlite.go:119`
-- **Issue**: No formal migration framework
-- **Impact**: Schema changes difficult in production
-- **Effort**: 6 hours
-- **Status**: 📋 Planned for v0.7.1
-
-```go
-// TODO: Add more migrations here as schema evolves
-return nil
-```
-
-**Recommendation**: Implement versioned migrations (e.g., golang-migrate)
-
-### TD-004: Large Function Complexity
-- **Priority**: 🟡 Medium
-- **Locations**:
-  - `pkg/dns/server.go`: 686 lines, avg 76 lines/func
-  - `pkg/config/config.go`: 288 lines, avg 72 lines/func
-  - `pkg/api/handlers_policy.go`: 328 lines, avg 65 lines/func
-- **Impact**: Harder to test and maintain
-- **Effort**: 8 hours
+- **Locations**: `pkg/dns/server.go`, `pkg/config/config.go`, `pkg/api/handlers_policy.go`
+- **Issue**: Core handlers exceed 600 lines with multiple responsibilities, slowing reviews and discouraging targeted tests.
+- **Plan**: Extract reusable helpers (e.g., DNS response writers, policy validation helpers) and split config serialization from validation.
 - **Status**: 📋 Backlog
 
-**Recommendation**: Refactor into smaller, focused units
-
-### TD-005: Ignored Close() Errors
+#### TD-005: Ignored Close() Errors in Tests
 - **Priority**: 🟢 Low
-- **Locations**: 75+ instances in test files
-- **Pattern**: `defer func() { _ = resource.Close() }()`
-- **Impact**: Minor - mostly in tests
-- **Effort**: 2 hours
+- **Scope**: 70+ defer blocks such as `defer func() { _ = resource.Close() }()`
+- **Impact**: Masks intermittent cleanup failures when running integration tests under -race.
+- **Plan**: Introduce a lightweight helper (e.g., `testutil.MustClose(t, c)`) and replace the `_ =` pattern in the few hot test helpers.
 - **Status**: 📋 Backlog
+
+### Recently Cleared (v0.7.4 – v0.7.6)
+
+#### TD-001: Storage Logging Uses slog
+- **Status**: ✅ Completed in v0.7.4
+- **Evidence**: `SQLiteStorage.flushWorker` now emits structured errors via `slog.Default()` instead of `fmt.Printf` (`pkg/storage/sqlite.go:146-205`).
+
+#### TD-003: Versioned Database Migrations
+- **Status**: ✅ Completed in v0.7.4
+- **Evidence**: `pkg/storage/migrations.go` plus embedded SQL files provide forward-only migrations, and `SQLiteStorage` applies them at startup (`pkg/storage/sqlite.go:82-128`).
 
 ---
 
 ## Bug Tracker
 
-### BUG-001: Chart Data Endpoint Missing
-- **Priority**: 🔴 High
-- **Severity**: Critical (Broken Feature)
-- **Location**: `pkg/api/ui/templates/dashboard.html:154`
-- **Symptom**: Dashboard chart shows random mock data
-- **Root Cause**: Backend doesn't expose time-series statistics
-- **Status**: 📋 Planned for v0.8.0
+### Active Issues
 
-```javascript
-// Generate mock data for demonstration
-// In production, fetch from /api/stats/timeseries or similar
-const totalQueries = Math.floor(Math.random() * 1000 + 500);
-```
-
-**Fix**: Implement `/api/stats/timeseries` endpoint with real aggregated data
-
-### BUG-002: No Input Validation for Policy Logic
-- **Priority**: 🔴 High
-- **Severity**: High (Security)
-- **Location**: `pkg/api/handlers_policy.go:139-146`
-- **Issue**: Policy expressions not validated before compilation
-- **Risk**: Invalid expressions could crash policy engine
-- **Status**: 📋 Planned for v0.7.1
-
-**Fix**: Pre-compile expressions and catch errors before saving
-
-### BUG-003: Race Condition Risk in Config Watcher
-- **Priority**: 🟡 Medium
-- **Severity**: Medium
-- **Location**: `pkg/config/watcher.go`
-- **Issue**: Config updates may not be atomic across components
-- **Impact**: Inconsistent state during hot-reload
-- **Status**: 📋 Planned for v0.7.1
-
-**Fix**: Add synchronization or reload coordination
-
-### BUG-004: No Request Rate Limiting
-- **Priority**: 🟡 Medium
-- **Severity**: Medium (Security)
-- **Location**: All API endpoints
-- **Issue**: No rate limiting on API requests
-- **Risk**: Vulnerable to DoS attacks on Web UI/API
-- **Status**: 📋 Planned for v0.8.0
-
-**Fix**: Add rate limiting middleware (100 req/min default)
-
-### BUG-005: No Request Size Limits
-- **Priority**: 🟡 Medium
-- **Severity**: Medium (Security)
-- **Location**: `pkg/api/handlers_policy.go:121`
-- **Issue**: `io.ReadAll(r.Body)` with no size limit
-- **Risk**: Memory exhaustion from large requests
-- **Status**: 📋 Planned for v0.7.1
-
-```go
-// Current (bad)
-body, err := io.ReadAll(r.Body)
-
-// Should be
-r.Body = http.MaxBytesReader(w, r.Body, 10*1024*1024) // 10MB limit
-body, err := io.ReadAll(r.Body)
-```
-
-### BUG-006: Pagination Not Implemented in Queries UI
+#### BUG-007: No CSRF Protection
 - **Priority**: 🟢 Low
-- **Severity**: Low
-- **Location**: `pkg/api/ui/templates/queries.html:28-30`
-- **Issue**: Pagination buttons exist but offset never updates
-- **Impact**: Can't navigate through historical queries
-- **Status**: 📋 Planned for v0.7.1
-
-### BUG-007: No CSRF Protection
-- **Priority**: 🟢 Low
-- **Severity**: Low (mitigated by deployment scenario)
-- **Location**: All POST/PUT/DELETE endpoints
-- **Issue**: No CSRF tokens for state-changing operations
+- **Scope**: All POST/PUT/DELETE endpoints
 - **Status**: 📋 Backlog
+- **Notes**: Not urgent while deployment assumes trusted network, but still required before exposing UI on the open internet.
+
+### Resolved Since v0.7.4
+
+- **BUG-002 – Policy Validation**: `handleAddPolicy` / `handleUpdatePolicy` now compile expressions via `policy.Engine.AddRule` and return parser errors to the client (`pkg/api/handlers_policy.go:121-205`).
+- **BUG-003 – Config Watcher Races**: `pkg/config/watcher.go` applies updates under an RWMutex and debounces fsnotify events, eliminating stale reads during reload.
+- **BUG-005 – Request Size Limits**: Every policy + feature endpoint wraps the body with `http.MaxBytesReader`; 10MB for policies, 1MB for kill-switch routes.
+- **BUG-006 – Query Pagination**: HTMX pagination updates `hx-get` offsets dynamically (`pkg/api/ui/templates/queries.html:15-42`) and the handler honors `limit`/`offset`.
+- **BUG-001 – Dashboard Mock Data**: `/api/stats/timeseries` plus the dashboard fetch loop now deliver live storage data (`pkg/api/handlers.go:159-214`, `pkg/storage/sqlite.go:497-610`, `pkg/api/ui/templates/dashboard.html:120-205`).
+- **BUG-004 – HTTP rate limiting**: API mux now enforces per-IP token buckets via `pkg/ratelimit`, emitting 429 responses when limits trip and logging offenders when configured (`pkg/api/middleware_ratelimit.go`, `cmd/glory-hole/main.go:150-260`).
 
 ---
 
 ## Documentation Gaps
 
-### DOC-001: Missing API Endpoint for Time-Series Data
-- **Priority**: 🔴 High
-- **Location**: Dashboard UI
-- **Issue**: Dashboard uses mock data, real endpoint doesn't exist
-- **Status**: 📋 Planned for v0.8.0
-- **Related**: BUG-001
+### Active
 
-### DOC-002: Settings Page Shows Static Values
-- **Priority**: 🔴 High
-- **Location**: `pkg/api/ui/templates/settings.html:20-190`
-- **Issue**: All configuration values hardcoded in template
-- **Impact**: Settings page doesn't reflect actual config
-- **Status**: 📋 Planned for v0.8.0
-
-**Fix**: Pass config data to template from backend
-
-### DOC-003: Missing Godoc Comments
+#### DOC-003: Godoc Coverage Still Spotty
 - **Priority**: 🟡 Medium
-- **Files Needing Documentation**:
-  - `pkg/storage/sqlite.go`: Unexported functions
-  - `pkg/dns/server.go`: Complex handler logic
-  - `pkg/forwarder/evaluator.go`: Rule evaluation
-- **Status**: 📋 Planned for v0.7.1
+- **Status**: 🚧 Partially addressed
+- **Notes**: Forwarder/telemetry packages now have doc comments, but `pkg/dns/server.go` and several API helpers remain undocumented; need a focused pass before v0.8.0.
 
-### DOC-004: Incomplete README Examples
-- **Priority**: 🟡 Medium
-- **Location**: `README.md:217-230`
-- **Issue**: Download URLs reference placeholder `erfianugrah/gloryhole`
-- **Impact**: Users can't download binaries from these links
-- **Status**: 📋 Planned for v0.7.1
-
-### DOC-005: Missing UI Screenshots
+#### DOC-005: Missing UI Screenshots
 - **Priority**: 🟢 Low
-- **Issue**: No screenshots in `/docs/screenshots/` directory
-- **Impact**: Users can't preview UI
 - **Status**: 📋 Backlog
+- **Notes**: `docs/screenshots/` is still empty; plan to capture updated dashboard/settings views once real data is wired up.
+
+### Resolved
+
+- **DOC-004 – README placeholders**: Operations section now documents kill-switches, hot reload, and telemetry instead of fake download URLs (`README.md:217-226`).
+- **DOC-001 – Time-Series API docs**: `/api/stats/timeseries` is implemented/tested and documented in this roadmap plus API reference (`pkg/api/handlers.go:159-214`, `pkg/api/api_test.go:320-370`).
+- **DOC-002 – Settings data binding**: `/api/config` response + template binding now documented and live (`pkg/api/handlers.go:214-248`, `pkg/api/ui/templates/settings.html:1-220`).
 
 ---
 
 ## UI Assessment
 
-### Current State: 60% Complete
+### Current State: 75% Complete
 
 **Implemented Features** :
 - Dashboard with real-time statistics
 - Query log viewer with auto-refresh
+- Query type distribution visualization
+- Bar charts for top allowed/blocked domains and cache hit-rate trends
 - Policy management CRUD interface
 - Settings review page
+- Kill-switch controls with HTMX timers (blocklist + policy engine)
 - Responsive CSS (833 lines)
 - HTMX integration
 - Chart.js visualizations
@@ -275,29 +173,15 @@ body, err := io.ReadAll(r.Body)
 - Styling: Custom CSS (no frameworks)
 - Charts: Chart.js
 
-### Critical Issues (Broken Features)
+### Recently Resolved
 
-#### UI-001: Chart Shows Mock Data
-- **Priority**: 🔴 Critical
-- **Status**: Non-functional
-- **Evidence**: Lines 153-174 in dashboard.html generate random data
-- **User Impact**: Cannot see actual query trends
-- **Fix**: Backend time-series endpoint + update JavaScript
-- **Planned**: v0.8.0
-
-#### UI-002: Settings Page Is Static
-- **Priority**: 🔴 Major
-- **Status**: Shows hardcoded values not actual config
-- **User Impact**: Settings page essentially useless
-- **Fix**: Pass config object to template
-- **Planned**: v0.8.0
-
-#### UI-003: No Real-Time Query Filtering
-- **Priority**: 🔴 Major
-- **Status**: Filter inputs exist but not wired up
-- **User Impact**: Cannot filter queries by domain or status
-- **Fix**: Wire up filter handlers to backend
-- **Planned**: v0.8.0
+- **UI-001 – Chart Mock Data**: Dashboard now streams `/api/stats/timeseries` results every 30 s (`pkg/api/handlers.go:159-214`, `pkg/api/ui/templates/dashboard.html:120-205`).
+- **UI-002 – Static Settings**: Settings template binds to real config payloads via `/api/config` (`pkg/api/ui/templates/settings.html:1-220`).
+- **UI-003 – Query Filters**: HTMX filters drive `storage.QueryFilter`, enabling domain/type/status/time filtering (`pkg/api/ui/templates/queries.html:1-150`, `pkg/storage/sqlite.go:513-642`).
+- **UI-010 – Editable Settings**: `/api/config/{upstreams,cache,logging}` endpoints plus HTMX forms let operators adjust resolvers, TTLs, and logging without SSH (`pkg/api/handlers_config_update.go`, `pkg/api/settings_page.go`, `pkg/api/ui/templates/settings.html`).
+- **UI-011 – HTTP API rate limiting**: API middleware now throttles per-IP using the existing token bucket manager and shares configuration/live status through `/api/config` (`pkg/api/middleware_ratelimit.go`, `cmd/glory-hole/main.go:150-260`).
+- **UI-012 – Dashboard analytics**: `/api/stats/query-types` powers the doughnut chart and new Chart.js components now render cache hit rate plus top allowed/blocked domains using live API data (`pkg/storage/sqlite.go:514-596`, `pkg/api/handlers.go:189-225`, `pkg/api/ui/templates/dashboard.html`).
+- **CONFIG-001 – Runtime config reloads**: Upstream DNS, cache, and logging edits apply immediately via hot-reload hooks (`cmd/glory-hole/main.go`, `pkg/blocklist/manager.go`).
 
 ### Missing Features
 
@@ -309,7 +193,7 @@ body, err := io.ReadAll(r.Body)
 
 #### UI-005: No Advanced Analytics
 - **Priority**: 🟡 Medium
-- **Missing**: Top clients, query type distribution, time charts
+- **Missing**: Per-client insights, geographic breakdown, historical comparisons
 - **Planned**: v0.8.0
 
 #### UI-006: No Bulk Operations
@@ -334,187 +218,43 @@ body, err := io.ReadAll(r.Body)
 
 ---
 
-## v0.7.1 Release Plan
+## v0.7.x Recap (v0.7.1 – v0.7.22)
 
-**Theme**: Technical Excellence & Bug Fixes
-**Target**: Maintenance release
-**Timeline**: 1-2 weeks
-**Status**: 📋 Planned
+**Theme**: Technical excellence, safety rails, and UX groundwork  
+**Status**: ✅ Delivered (see `CHANGELOG.md`)
 
-### Objectives
+### Shipped Highlights
 
-1.  Production-ready error logging
-2.  Better security posture (input validation)
-3.  Safer policy engine
-4.  Maintainable database schema
-5.  Improved documentation
-6.  Higher test coverage (75%+ target)
+1. **Storage + Telemetry Hardening**
+   - Replaced ad-hoc `fmt.Printf` logging with structured slog output during flush failures (`pkg/storage/sqlite.go`).
+   - Added OpenTelemetry gauges/counters for cache, blocklist, and rate limiting plus end-to-end Prometheus exporter wiring (`pkg/telemetry/telemetry.go`).
 
-### High Priority Tasks
+2. **Security + Validation**
+   - Wrapped every POST/PUT body with `http.MaxBytesReader` (10 MB for policies, 1 MB for kill-switch endpoints) to prevent oversized payload DoS.
+   - Policy API now compiles expressions via `policy.Engine.AddRule`, surfacing syntax errors back to the UI before persisting.
 
-#### Task 1: Storage Layer Improvements
-- **ID**: TD-001
-- **Files**: `pkg/storage/sqlite.go`
-- **Changes**: Replace all `fmt.Printf` with structured logging
-- **Lines**: 166, 251, 483
-- **Effort**: 1 hour
-- **Status**: ⬜ Not Started
+3. **Database Migrations + Tooling**
+   - Introduced an embedded SQL migration runner (`pkg/storage/migrations.go`) so schema upgrades are idempotent and automated.
+   - Pi-hole import CLI (`cmd/glory-hole/import.go`) plus regex/wildcard pattern support (`pkg/pattern/`) eased onboarding.
 
-#### Task 2: Input Validation & Security
-- **ID**: BUG-005
-- **Files**: `pkg/api/handlers_*.go`
-- **Changes**: Add `http.MaxBytesReader` to all POST/PUT endpoints
-- **Default Limit**: 10MB
-- **Effort**: 2 hours
-- **Status**: ⬜ Not Started
+4. **Kill-Switch + Web UI Controls**
+   - Added persistent `enable_blocklist` / `enable_policies` flags, REST endpoints, countdown timers, and HTMX buttons in the Settings page.
+   - KillSwitchManager handles temporary disables with re-enable timers and Prometheus metrics (`pkg/api/killswitch.go`).
 
-#### Task 3: Policy Expression Validation
-- **ID**: BUG-002
-- **Files**: `pkg/api/handlers_policy.go:139-146`
-- **Changes**: Pre-compile policy logic expressions before saving
-- **Validation**: Return syntax errors to user
-- **Effort**: 3 hours
-- **Status**: ⬜ Not Started
+5. **Resolver & DNS Fixes**
+   - Centralized HTTP/DNS resolver usage so blocklist downloads honor configured upstreams.
+   - Forwarder now passes SERVFAIL responses through immediately, matching DNSSEC expectations (v0.7.8).
 
-#### Task 4: Documentation Fixes
-- **ID**: DOC-004
-- **Files**: `README.md:217-230`
-- **Changes**: Update placeholder download URLs
-- **Add**: Real GitHub org/username or templating instructions
-- **Effort**: 30 minutes
-- **Status**: ⬜ Not Started
+6. **Performance & Ops (v0.7.22)**
+   - Cache stats now use `atomic.Uint64` counters and shard cleanup runs in parallel, boosting throughput by ~5% and making cleanup 64× faster.
+   - Added composite SQLite indexes for the analytics path plus struct alignment/field reordering for better cache locality (`docs/FINAL_SUMMARY.md`).
+   - GitHub Actions, release automation, and documentation were finalized in the optimization pass.
 
-### Medium Priority Tasks
+7. **Quality of Life**
+   - README operations guidance now documents hot reload and kill-switch flows instead of placeholder download URLs.
+   - Query log UI pagination works through HTMX offset updates.
 
-#### Task 5: Database Migration System
-- **ID**: TD-003
-- **Files**: `pkg/storage/sqlite.go:119`
-- **Changes**: Add versioned migration framework
-- **Implementation**: Migration runner with version tracking
-- **Effort**: 6 hours
-- **Status**: ⬜ Not Started
-
-#### Task 6: Config Watcher Race Condition
-- **ID**: BUG-003
-- **Files**: `pkg/config/watcher.go`
-- **Changes**: Add synchronization for atomic config reloads
-- **Ensure**: Consistent state across components
-- **Effort**: 4 hours
-- **Status**: ⬜ Not Started
-
-#### Task 7: Query Log Pagination
-- **ID**: BUG-006
-- **Files**: `pkg/api/ui/templates/queries.html:28-30`
-- **Changes**: Fix pagination offset handling
-- **Implement**: Proper page navigation
-- **Effort**: 2 hours
-- **Status**: ⬜ Not Started
-
-#### Task 8: Godoc Improvements
-- **ID**: DOC-003
-- **Files**:
-  - `pkg/storage/sqlite.go` (unexported functions)
-  - `pkg/dns/server.go` (handler logic)
-  - `pkg/forwarder/evaluator.go` (rule evaluation)
-- **Changes**: Add comprehensive godoc comments
-- **Effort**: 3 hours
-- **Status**: ⬜ Not Started
-
-#### Task 9: Kill-Switch Feature
-- **ID**: NEW - Emergency Feature Controls
-- **Priority**: 🟡 Medium (User-requested)
-- **Description**: Runtime toggles for ad-blocking and policy enforcement without restart
-- **Design Document**: `/docs/designs/kill-switch-design.md`
-- **Use Cases**:
-  - Emergency disable during false positives
-  - Troubleshooting and diagnostics
-  - Scheduled maintenance windows
-  - Performance testing
-
-**Implementation**:
-- **Config Changes**:
-  - Add `enable_blocklist: bool` to `ServerConfig`
-  - Add `enable_policies: bool` to `ServerConfig`
-  - Add `config.Save()` function for persistence
-- **DNS Handler** (`pkg/dns/server.go`):
-  - Check `cfg.Server.EnableBlocklist` before blocklist lookup
-  - Check `cfg.Server.EnablePolicies` before policy evaluation
-- **API Endpoints** (new `pkg/api/handlers_features.go`):
-  - `GET /api/features` - Get current kill-switch states
-  - `PUT /api/features` - Toggle kill-switches with JSON body
-- **Web UI** (`pkg/api/ui/templates/settings.html`):
-  - Add toggle switches for each feature
-  - HTMX integration for instant updates
-  - Visual feedback for current state
-- **Thread Safety**:
-  - Use config watcher's existing RWMutex
-  - Atomic config updates
-  - No race conditions
-- **Metrics**:
-  - Prometheus gauges for kill-switch states
-  - Audit logging for all toggles
-
-**Files Modified**:
-- `pkg/config/config.go` - Add fields and Save function
-- `pkg/dns/server.go` - Add kill-switch checks
-- `pkg/api/handlers_features.go` - NEW file
-- `pkg/api/api.go` - Add routes
-- `pkg/api/ui/templates/settings.html` - Add UI controls
-- `pkg/telemetry/metrics.go` - Add gauges
-
-**Testing**:
-- Unit tests for kill-switch logic
-- API endpoint tests
-- Integration tests for hot-reload
-- Thread safety tests
-
-- **Effort**: 11 hours
-  - Phase 1: Core implementation (4h)
-  - Phase 2: API endpoints (2h)
-  - Phase 3: Web UI (2h)
-  - Phase 4: Testing (2h)
-  - Phase 5: Documentation (1h)
-- **Status**: ⬜ Not Started
-
-### Low Priority Tasks
-
-#### Task 10: Test Coverage Improvements
-- **Target**: 75%+ overall coverage
-- **Focus Areas**:
-  - `pkg/dns` (67.6% → 75%)
-  - `pkg/api` (68.6% → 75%)
-  - `pkg/policy` (70.5% → 75%)
-- **Effort**: 8 hours
-- **Status**: ⬜ Not Started
-
-#### Task 11: Code Cleanup
-- **Actions**:
-  - Remove commented-out code
-  - Clean up unused imports
-  - Log Close() errors in production code (not tests)
-- **Effort**: 2 hours
-- **Status**: ⬜ Not Started
-
-### Testing Checklist
-
-- [ ] All tests pass
-- [ ] No new golangci-lint warnings
-- [ ] Test coverage ≥ 75%
-- [ ] No race conditions
-- [ ] Manual testing of policy validation
-- [ ] Manual testing of pagination
-- [ ] Security testing of input limits
-
-### Release Checklist
-
-- [ ] Update version to 0.7.1 in `cmd/glory-hole/main.go`
-- [ ] Update CHANGELOG.md with all changes
-- [ ] Run full test suite
-- [ ] Tag release: `git tag -a v0.7.1 -m "v0.7.1: Technical Excellence"`
-- [ ] Push tag: `git push origin v0.7.1`
-- [ ] Verify CI/CD pipeline success
-- [ ] Verify Docker images published
-- [ ] Verify GitHub release created
+> These milestones close the original v0.7.1 backlog; the remaining roadmap below focuses on the still-missing UI functionality targeted for v0.8.0.
 
 ---
 
@@ -539,14 +279,15 @@ body, err := io.ReadAll(r.Body)
 #### Task 1.1: Implement Time-Series Statistics API
 - **ID**: UI-001, BUG-001
 - **Priority**: 🔴 Critical
-- **Files**: New handler in `pkg/api/handlers_stats.go`
+- **Files**: `pkg/api/handlers.go`, `pkg/storage/sqlite.go`, `pkg/api/api_test.go`
 - **Endpoint**: `GET /api/stats/timeseries?period=hour&points=24`
 - **Returns**: Aggregated query statistics over time
 - **Parameters**:
   - `period`: hour/day/week
   - `points`: number of data points
 - **Effort**: 8 hours
-- **Status**: ⬜ Not Started
+- **Status**: ✅ Completed
+- **Notes**: Storage exposes `GetTimeSeriesStats`, the API handler streams normalized buckets, and tests cover validation + payload shape.
 
 **Response Format**:
 ```json
@@ -571,19 +312,21 @@ body, err := io.ReadAll(r.Body)
 - **Implementation**: Fetch from `/api/stats/timeseries`
 - **Error Handling**: Show loading state, handle errors
 - **Effort**: 2 hours
-- **Status**: ⬜ Not Started
+- **Status**: ✅ Completed
+- **Notes**: `/api/stats/timeseries` now powers the Chart.js dataset; dashboard fetches live data every 30s.
 
 #### Task 1.3: Dynamic Settings Page
 - **ID**: UI-002, DOC-002
 - **Priority**: 🔴 Major
 - **Files**:
-  - `pkg/api/handlers.go` (new handler)
+  - `pkg/api/handlers.go`
   - `pkg/api/ui/templates/settings.html`
 - **Endpoint**: `GET /api/config`
 - **Changes**: Pass actual config to template
 - **Display**: Real values for all settings
 - **Effort**: 4 hours
-- **Status**: ⬜ Not Started
+- **Status**: ✅ Completed
+- **Notes**: Settings UI now binds to `/api/config`; cache/server/blocklist metrics reflect live values and config path is displayed.
 
 #### Task 1.4: Query Filtering Implementation
 - **ID**: UI-003
@@ -598,7 +341,8 @@ body, err := io.ReadAll(r.Body)
   - Status (allowed/blocked/cached)
   - Date range
 - **Effort**: 6 hours
-- **Status**: ⬜ Not Started
+- **Status**: ✅ Completed
+- **Notes**: Storage now supports server-side QueryFilter, `/api/queries` + HTMX UI respect domain/type/status/time inputs, and `/api/ui/queries` refreshes with the active filters.
 
 ### Sprint 2: Advanced Analytics (Week 2)
 
@@ -606,35 +350,39 @@ body, err := io.ReadAll(r.Body)
 - **Endpoint**: `GET /api/stats/top-domains?limit=10&blocked=false`
 - **Returns**: Most queried domains
 - **Effort**: 3 hours
-- **Status**: ⬜ Not Started
+- **Status**: ✅ Completed
+- **Notes**: `/api/top-domains` already exists (`pkg/api/handlers.go:173-214`) with `limit` and `blocked` parameters; only documentation cleanup remains.
 
 #### Task 2.2: Top Blocked Domains Endpoint
 - **Endpoint**: `GET /api/stats/top-blocked?limit=10`
 - **Returns**: Most blocked domains
 - **Effort**: 2 hours
-- **Status**: ⬜ Not Started
+- **Status**: ✅ Completed
+- **Notes**: Covered by `/api/top-domains?blocked=true`; storage already supports the filter.
 
 #### Task 2.3: Query Types Distribution Endpoint
 - **Endpoint**: `GET /api/stats/query-types`
 - **Returns**: Count by query type (A, AAAA, PTR, etc.)
 - **Effort**: 2 hours
-- **Status**: ⬜ Not Started
+- **Status**: ✅ Completed
+- **Notes**: SQLite aggregates per record type and the API handler serves JSON to power the dashboard doughnut chart.
 
 #### Task 2.4: Enhanced Dashboard Charts
 - **ID**: UI-005
-- **Files**: `pkg/api/ui/templates/dashboard.html`
+- **Files**: `pkg/api/ui/templates/dashboard.html`, `pkg/api/ui/static/css/style.css`
 - **New Charts**:
   - Top 10 queried domains (bar chart)
   - Query type distribution (pie chart)
   - Top 10 blocked domains (bar chart)
   - Cache hit rate over time (line chart)
 - **Effort**: 6 hours
-- **Status**: ⬜ Not Started
+- **Status**: ✅ Completed
+- **Notes**: Dashboard renders all charts using live `/api/top-domains`, `/api/stats/query-types`, and `/api/stats/timeseries` data.
 
 ### Sprint 3: Configuration Management (Week 3)
 
 #### Task 3.1: Editable Settings Page (Phase 1)
-- **Files**: `pkg/api/handlers.go`, `pkg/api/ui/templates/settings.html`
+- **Files**: `pkg/api/handlers_config_update.go`, `pkg/api/settings_page.go`, `pkg/api/ui/templates/settings.html`
 - **Endpoints**:
   - `PUT /api/config/upstreams`
   - `PUT /api/config/cache`
@@ -645,14 +393,16 @@ body, err := io.ReadAll(r.Body)
   - Change log level
 - **Validation**: Input validation with error feedback
 - **Effort**: 8 hours
-- **Status**: ⬜ Not Started
+- **Status**: ✅ Completed
+- **Notes**: Settings page now renders HTMX forms backed by `/api/config/{upstreams,cache,logging}` handlers that validate, persist via `config.Save`, and re-render partials with success/error states.
 
 #### Task 3.2: Hot-Reload Configuration
-- **Files**: `pkg/config/watcher.go`
-- **Changes**: Trigger reload after settings save
-- **Ensure**: Atomic updates across components
+- **Files**: `cmd/glory-hole/main.go`, `pkg/blocklist/manager.go`
+- **Changes**: Trigger resolver/cache/logging refresh when config changes
+- **Ensure**: Upstreams update the resolver + HTTP clients, cache settings recreate the cache, and logging swaps loggers without restarts
 - **Effort**: 4 hours
-- **Status**: ⬜ Not Started
+- **Status**: ✅ Completed
+- **Notes**: Config watcher now recreates resolvers, caches, and loggers after both file edits and UI saves; blocklist manager inherits the new HTTP client.
 
 #### Task 3.3: Rate Limiting Middleware
 - **ID**: BUG-004
@@ -662,6 +412,7 @@ body, err := io.ReadAll(r.Body)
 - **Response**: 429 Too Many Requests
 - **Effort**: 4 hours
 - **Status**: ⬜ Not Started
+- **Notes**: No HTTP middleware exists beyond logging/CORS; DNS rate limiting cannot protect the Web UI.
 
 ### Sprint 4: Client Management (Week 4)
 
@@ -749,30 +500,26 @@ body, err := io.ReadAll(r.Body)
 
 ### API Endpoints Summary
 
-#### Statistics Endpoints
+**Available today**
 ```
+GET  /api/stats?since=24h
 GET  /api/stats/timeseries?period=hour&points=24
-GET  /api/stats/top-domains?limit=10&blocked=false
-GET  /api/stats/top-blocked?limit=10
-GET  /api/stats/query-types
-GET  /api/stats/clients?limit=50&offset=0
-```
-
-#### Configuration Endpoints
-```
+GET  /api/top-domains?limit=10&blocked=false
+GET  /api/queries?limit=100&offset=0
+GET  /api/features
 GET  /api/config
 PUT  /api/config/upstreams
 PUT  /api/config/cache
 PUT  /api/config/logging
+POST /api/features/blocklist|policies/(disable|enable)
+POST /api/blocklist/reload
+POST /api/cache/purge
 ```
 
-#### Query Endpoints
+**Planned additions for v0.8.0**
 ```
-GET  /api/queries?domain=&type=&status=&start=&end=&limit=100&offset=0
-```
-
-#### Export Endpoints
-```
+GET  /api/stats/query-types
+GET  /api/stats/clients?limit=50&offset=0
 GET  /api/export/queries?format=csv&start=&end=
 GET  /api/export/stats?format=json
 GET  /api/export/policies?format=yaml
@@ -782,11 +529,11 @@ GET  /api/export/policies?format=yaml
 
 - [ ] All API endpoints return correct data
 - [ ] Dashboard shows real-time data (no mock)
-- [ ] Settings page reflects actual configuration
+- [x] Settings page reflects actual configuration
 - [ ] Query filtering works correctly
 - [ ] Charts render properly with real data
-- [ ] Configuration changes apply correctly
-- [ ] Rate limiting prevents abuse
+- [x] Configuration changes apply correctly
+- [x] Rate limiting prevents abuse
 - [ ] Export functionality works for large datasets
 - [ ] Dark mode toggles correctly
 - [ ] Mobile responsiveness maintained
@@ -813,46 +560,34 @@ GET  /api/export/policies?format=yaml
 
 ## Progress Tracking
 
-### v0.7.1 Progress
+### v0.7.x Progress
 
-**Overall**: ⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜ 0% (0/10 tasks)
+**Overall**: ✅ Completed (delivered across releases v0.7.1 – v0.7.8)
 
-**High Priority** (4 tasks): 0% complete
-- [ ] Storage logging improvements
-- [ ] Input validation & security
-- [ ] Policy expression validation
-- [ ] Documentation fixes
-
-**Medium Priority** (4 tasks): 0% complete
-- [ ] Database migrations
-- [ ] Config watcher fixes
-- [ ] Query pagination
-- [ ] Godoc improvements
-
-**Low Priority** (2 tasks): 0% complete
-- [ ] Test coverage improvements
-- [ ] Code cleanup
+- High-priority fixes (logging, request limits, policy validation, README cleanup) shipped in v0.7.4–v0.7.6.
+- Medium-priority work (database migrations, config watcher safety, query pagination) is live today.
+- Kill-switch and related UI/telemetry landed in v0.7.5.
 
 ### v0.8.0 Progress
 
-**Overall**: ⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜ 0% (0/20 tasks)
+**Overall**: 56% (10/18 tasks)
 
-**Sprint 1** (4 tasks): 0% complete
-- [ ] Time-series API
-- [ ] Dashboard JS updates
-- [ ] Dynamic settings page
-- [ ] Query filtering
+**Sprint 1** (4 tasks): 100% complete
+- [x] Time-series API
+- [x] Dashboard JS updates
+- [x] Dynamic settings page
+- [x] Query filtering
 
-**Sprint 2** (4 tasks): 0% complete
-- [ ] Top domains endpoint
-- [ ] Top blocked endpoint
-- [ ] Query types endpoint
-- [ ] Enhanced charts
+**Sprint 2** (4 tasks): 100% complete
+- [x] Top domains endpoint (`/api/top-domains`)
+- [x] Top blocked endpoint (`/api/top-domains?blocked=true`)
+- [x] Query types endpoint
+- [x] Enhanced charts
 
-**Sprint 3** (3 tasks): 0% complete
-- [ ] Editable settings
+**Sprint 3** (3 tasks): 67% complete
+- [x] Editable settings
 - [ ] Hot-reload config
-- [ ] Rate limiting
+- [x] Rate limiting
 
 **Sprint 4** (2 tasks): 0% complete
 - [ ] Client stats endpoint
@@ -871,20 +606,16 @@ GET  /api/export/policies?format=yaml
 
 ## Version History
 
-### v0.7.0 (2025-11-22) - Current Release 
-- Conditional DNS Forwarding
-- Dual evaluation approach (CIDR + wildcard domains)
-- Sub-200ns rule evaluation, zero allocations
-- Split-DNS, VPN, and reverse DNS support
-- 61 tests passing, 73%+ coverage
+### v0.7.22 (2025-11-24) - Current Release
+- Atomic cache counters and parallel shard cleanup (64× faster maintenance) keep throughput high under load.
+- Composite SQLite indexes plus struct alignment optimizations make dashboard/analytics queries 10‑100× faster.
+- Performance docs, verification checklist, and CI release workflow completed the optimization push.
 
-### v0.7.1 (Planned) - Technical Excellence 📋
-- Production-ready error logging
-- Input validation and security
-- Policy expression validation
-- Database migration system
-- Improved documentation
-- 75%+ test coverage
+### v0.7.8 (2025-11-23)
+- SERVFAIL responses now pass through immediately (DNSSEC-compliant forwarder).
+- Centralized resolver + HTTP client reuse so blocklist downloads honor upstream DNS.
+- Regex/wildcard pattern engine and Pi-hole import CLI.
+- Duration-based kill-switch controls exposed via API + UI.
 
 ### v0.8.0 (Planned) - Functional Web UI 📋
 - Real-time data visualization (no mock data)
@@ -904,5 +635,5 @@ GET  /api/export/policies?format=yaml
 - Community feedback may influence feature prioritization
 - Security issues take precedence over planned features
 
-**Last Review**: 2025-11-22
-**Next Review**: After v0.7.1 release
+**Last Review**: 2025-11-24
+**Next Review**: Mid-way through v0.8.0 execution (after Sprint 3)

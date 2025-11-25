@@ -2,13 +2,16 @@ package api
 
 import (
 	"context"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
+	"glory-hole/pkg/config"
 	"glory-hole/pkg/storage"
 )
 
@@ -129,10 +132,63 @@ func TestHandlePoliciesPage(t *testing.T) {
 func TestHandleSettingsPage(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 
+	defaultCfg := &config.Config{
+		Server: config.ServerConfig{
+			ListenAddress:   ":1053",
+			WebUIAddress:    ":8081",
+			TCPEnabled:      true,
+			UDPEnabled:      true,
+			EnableBlocklist: true,
+			EnablePolicies:  true,
+		},
+		Cache: config.CacheConfig{
+			Enabled:     true,
+			MaxEntries:  2000,
+			MinTTL:      time.Minute,
+			MaxTTL:      12 * time.Hour,
+			NegativeTTL: 10 * time.Minute,
+			BlockedTTL:  2 * time.Second,
+			ShardCount:  8,
+		},
+		Policy: config.PolicyConfig{
+			Enabled: true,
+			Rules: []config.PolicyRuleEntry{
+				{Name: "Test", Logic: "true", Action: "BLOCK", Enabled: true},
+			},
+		},
+		RateLimit: config.RateLimitConfig{
+			Enabled:           true,
+			RequestsPerSecond: 150,
+			Burst:             300,
+			Action:            config.RateLimitActionNXDOMAIN,
+			LogViolations:     true,
+			CleanupInterval:   2 * time.Minute,
+			MaxTrackedClients: 500,
+		},
+		Telemetry: config.TelemetryConfig{
+			ServiceName:       "glory-hole",
+			ServiceVersion:    "test",
+			PrometheusEnabled: true,
+			PrometheusPort:    9100,
+			Enabled:           true,
+		},
+		Database: storage.Config{
+			Backend:       storage.BackendSQLite,
+			BufferSize:    500,
+			RetentionDays: 5,
+		},
+		UpstreamDNSServers:   []string{"9.9.9.9:53"},
+		Blocklists:           []string{"https://example.com/block.txt"},
+		Whitelist:            []string{"allowed.test"},
+		AutoUpdateBlocklists: true,
+		UpdateInterval:       6 * time.Hour,
+	}
 	server := New(&Config{
 		ListenAddress: ":8080",
 		Logger:        logger,
 		Version:       "test-1.0.0",
+		ConfigPath:    "/etc/glory-hole/config.yml",
+		InitialConfig: defaultCfg,
 	})
 
 	req := httptest.NewRequest("GET", "/settings", nil)
@@ -145,6 +201,14 @@ func TestHandleSettingsPage(t *testing.T) {
 
 	if resp.StatusCode != http.StatusOK {
 		t.Errorf("Expected status 200, got %d", resp.StatusCode)
+	}
+
+	body, _ := io.ReadAll(resp.Body)
+	if !strings.Contains(string(body), defaultCfg.Server.ListenAddress) {
+		t.Errorf("expected settings page to include listen address %s", defaultCfg.Server.ListenAddress)
+	}
+	if !strings.Contains(string(body), "/etc/glory-hole/config.yml") {
+		t.Errorf("expected settings page to include config path")
 	}
 }
 
@@ -534,6 +598,14 @@ func (m *mockUIStorage) GetBlockedCount(ctx context.Context, since time.Time) (i
 
 func (m *mockUIStorage) GetQueryCount(ctx context.Context, since time.Time) (int64, error) {
 	return 0, nil
+}
+
+func (m *mockUIStorage) GetTimeSeriesStats(ctx context.Context, bucket time.Duration, points int) ([]*storage.TimeSeriesPoint, error) {
+	return []*storage.TimeSeriesPoint{}, nil
+}
+
+func (m *mockUIStorage) GetQueriesFiltered(ctx context.Context, filter storage.QueryFilter, limit, offset int) ([]*storage.QueryLog, error) {
+	return m.queries, nil
 }
 
 func (m *mockUIStorage) GetTraceStatistics(ctx context.Context, since time.Time) (*storage.TraceStatistics, error) {

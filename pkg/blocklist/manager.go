@@ -164,6 +164,22 @@ func (m *Manager) Update(ctx context.Context) error {
 	return nil
 }
 
+// SetHTTPClient updates the HTTP client used for downloads.
+func (m *Manager) SetHTTPClient(client *http.Client) {
+	m.downloader = NewDownloader(m.logger, client)
+}
+
+// UpdateConfig swaps the configuration reference used for future operations.
+func (m *Manager) UpdateConfig(cfg *config.Config) {
+	m.cfg = cfg
+}
+
+// SetLogger updates the logger used by the manager and downloader.
+func (m *Manager) SetLogger(logger *logging.Logger) {
+	m.logger = logger
+	m.downloader.logger = logger
+}
+
 // Get returns a pointer to the current blocklist (safe for concurrent reads)
 func (m *Manager) Get() *map[string]struct{} {
 	return m.current.Load()

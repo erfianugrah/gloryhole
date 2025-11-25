@@ -53,6 +53,14 @@ func (m *mockStorageForHealth) GetQueryCount(ctx context.Context, since time.Tim
 	return 0, nil
 }
 
+func (m *mockStorageForHealth) GetQueriesFiltered(ctx context.Context, filter storage.QueryFilter, limit, offset int) ([]*storage.QueryLog, error) {
+	return []*storage.QueryLog{}, nil
+}
+
+func (m *mockStorageForHealth) GetTimeSeriesStats(ctx context.Context, bucket time.Duration, points int) ([]*storage.TimeSeriesPoint, error) {
+	return []*storage.TimeSeriesPoint{}, nil
+}
+
 func (m *mockStorageForHealth) GetTraceStatistics(ctx context.Context, since time.Time) (*storage.TraceStatistics, error) {
 	return &storage.TraceStatistics{
 		Since:    since,
@@ -66,6 +74,10 @@ func (m *mockStorageForHealth) GetTraceStatistics(ctx context.Context, since tim
 
 func (m *mockStorageForHealth) GetQueriesWithTraceFilter(ctx context.Context, filter storage.TraceFilter, limit, offset int) ([]*storage.QueryLog, error) {
 	return nil, nil
+}
+
+func (m *mockStorageForHealth) GetQueryTypeStats(ctx context.Context, limit int) ([]*storage.QueryTypeStats, error) {
+	return []*storage.QueryTypeStats{}, nil
 }
 
 func (m *mockStorageForHealth) Cleanup(ctx context.Context, olderThan time.Time) error {

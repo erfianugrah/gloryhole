@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"testing"
 	"time"
@@ -305,6 +306,207 @@ func TestSQLiteStorage_GetStatistics(t *testing.T) {
 	expectedCacheRate := 20.0
 	if stats.CacheHitRate != expectedCacheRate {
 		t.Errorf("expected cache hit rate %.2f%%, got %.2f%%", expectedCacheRate, stats.CacheHitRate)
+	}
+}
+
+func TestSQLiteStorage_GetTimeSeriesStats(t *testing.T) {
+	storage, cleanup := setupTestStorage(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	sqlStorage := storage.(*SQLiteStorage)
+
+	now := time.Now().UTC()
+	aligned := now.Truncate(time.Hour)
+
+	testBuckets := []struct {
+		timestamp time.Time
+		total     int
+		blocked   bool
+	}{
+		{timestamp: aligned.Add(-1 * time.Hour), total: 2, blocked: true},
+		{timestamp: aligned, total: 3, blocked: false},
+	}
+
+	for _, bucket := range testBuckets {
+		for i := 0; i < bucket.total; i++ {
+			_, err := sqlStorage.db.Exec(`
+				INSERT INTO queries
+				(timestamp, client_ip, domain, query_type, response_code, blocked, cached, response_time_ms)
+				VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+			`, bucket.timestamp.Add(time.Duration(i)*time.Minute),
+				"10.0.0.1",
+				fmt.Sprintf("example-%d.com", i),
+				"A",
+				0,
+				bucket.blocked,
+				false,
+				10,
+			)
+			if err != nil {
+				t.Fatalf("Failed to insert test data: %v", err)
+			}
+		}
+	}
+
+	points := 4
+	result, err := storage.GetTimeSeriesStats(ctx, time.Hour, points)
+	if err != nil {
+		t.Fatalf("GetTimeSeriesStats() error = %v", err)
+	}
+
+	if len(result) != points {
+		t.Fatalf("expected %d buckets, got %d", points, len(result))
+	}
+
+	if result[len(result)-1].TotalQueries != 3 {
+		t.Errorf("expected 3 queries in most recent bucket, got %d", result[len(result)-1].TotalQueries)
+	}
+
+	if result[len(result)-2].BlockedQueries != 2 {
+		t.Errorf("expected 2 blocked queries in previous bucket, got %d", result[len(result)-2].BlockedQueries)
+	}
+
+	if result[0].TotalQueries != 0 {
+		t.Errorf("expected zero-filled earliest bucket, got %d", result[0].TotalQueries)
+	}
+}
+
+func TestSQLiteStorage_GetQueryTypeStats(t *testing.T) {
+	storage, cleanup := setupTestStorage(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	sqlStorage := storage.(*SQLiteStorage)
+
+	now := time.Now()
+	samples := []struct {
+		qtype   string
+		blocked bool
+		cached  bool
+		count   int
+	}{
+		{"A", false, true, 5},
+		{"AAAA", true, false, 3},
+		{"TXT", false, false, 2},
+	}
+
+	for _, sample := range samples {
+		for i := 0; i < sample.count; i++ {
+			_, err := sqlStorage.db.Exec(`
+				INSERT INTO queries
+				(timestamp, client_ip, domain, query_type, response_code, blocked, cached, response_time_ms)
+				VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+			`,
+				now.Add(-time.Duration(i)*time.Minute),
+				"192.0.2.1",
+				fmt.Sprintf("example%d.com", i),
+				sample.qtype,
+				dns.RcodeSuccess,
+				sample.blocked,
+				sample.cached,
+				5,
+			)
+			if err != nil {
+				t.Fatalf("failed to insert test query: %v", err)
+			}
+		}
+	}
+
+	stats, err := storage.GetQueryTypeStats(ctx, 10)
+	if err != nil {
+		t.Fatalf("GetQueryTypeStats() error = %v", err)
+	}
+
+	if len(stats) != len(samples) {
+		t.Fatalf("expected %d query types, got %d", len(samples), len(stats))
+	}
+
+	if stats[0].QueryType != "A" || stats[0].Total != 5 || stats[0].Cached != 5 {
+		t.Fatalf("unexpected stats for A: %+v", stats[0])
+	}
+
+	if stats[1].QueryType != "AAAA" || stats[1].Blocked != 3 {
+		t.Fatalf("unexpected stats for AAAA: %+v", stats[1])
+	}
+}
+
+func TestSQLiteStorage_GetQueriesFiltered(t *testing.T) {
+	storage, cleanup := setupTestStorage(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	sqlStorage := storage.(*SQLiteStorage)
+
+	now := time.Now().UTC()
+	entries := []struct {
+		domain  string
+		qtype   string
+		blocked bool
+		cached  bool
+	}{
+		{"allowed.com", "A", false, false},
+		{"blocked.com", "AAAA", true, false},
+		{"cached.com", "A", false, true},
+		{"test.com", "MX", false, false},
+	}
+
+	for _, entry := range entries {
+		_, err := sqlStorage.db.Exec(`
+			INSERT INTO queries
+			(timestamp, client_ip, domain, query_type, response_code, blocked, cached, response_time_ms)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+		`, now, "10.0.0.1", entry.domain, entry.qtype, 0, entry.blocked, entry.cached, 5)
+		if err != nil {
+			t.Fatalf("Failed to insert test data: %v", err)
+		}
+	}
+
+	trueBool := true
+	falseBool := false
+
+	tests := []struct {
+		name     string
+		filter   QueryFilter
+		expected int
+	}{
+		{
+			name:     "domain substring",
+			filter:   QueryFilter{Domain: "block"},
+			expected: 1,
+		},
+		{
+			name:     "type filter",
+			filter:   QueryFilter{QueryType: "a"},
+			expected: 2,
+		},
+		{
+			name:     "blocked status",
+			filter:   QueryFilter{Blocked: &trueBool},
+			expected: 1,
+		},
+		{
+			name:     "allowed status",
+			filter:   QueryFilter{Blocked: &falseBool},
+			expected: 3,
+		},
+		{
+			name:     "cached status",
+			filter:   QueryFilter{Cached: &trueBool},
+			expected: 1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			results, err := storage.GetQueriesFiltered(ctx, tt.filter, 50, 0)
+			if err != nil {
+				t.Fatalf("GetQueriesFiltered() error = %v", err)
+			}
+			if len(results) != tt.expected {
+				t.Fatalf("expected %d results, got %d", tt.expected, len(results))
+			}
+		})
 	}
 }
 

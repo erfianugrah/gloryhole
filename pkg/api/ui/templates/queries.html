@@ -8,12 +8,24 @@
         <h2>Query Log</h2>
         <div class="filters">
             <input type="text" id="filter-domain" placeholder="Filter by domain..." class="filter-input">
+            <select id="filter-type" class="filter-select">
+                <option value="">All Types</option>
+                <option value="A">A</option>
+                <option value="AAAA">AAAA</option>
+                <option value="CNAME">CNAME</option>
+                <option value="MX">MX</option>
+                <option value="PTR">PTR</option>
+                <option value="TXT">TXT</option>
+            </select>
             <select id="filter-status" class="filter-select">
                 <option value="">All Queries</option>
                 <option value="blocked">Blocked Only</option>
                 <option value="allowed">Allowed Only</option>
                 <option value="cached">Cached Only</option>
             </select>
+            <input type="datetime-local" id="filter-start" class="filter-input" placeholder="Start time">
+            <input type="datetime-local" id="filter-end" class="filter-input" placeholder="End time">
+            <button class="btn btn-secondary btn-sm" type="button" onclick="resetFilters()">Reset</button>
         </div>
     </div>
 
@@ -34,19 +46,89 @@
 <script>
     let currentOffset = 0;
     const limit = 100;
+    const currentFilters = {
+        domain: '',
+        type: '',
+        status: '',
+        start: '',
+        end: ''
+    };
+
+    document.addEventListener('DOMContentLoaded', () => {
+        const domainInput = document.getElementById('filter-domain');
+        const typeSelect = document.getElementById('filter-type');
+        const statusSelect = document.getElementById('filter-status');
+        const startInput = document.getElementById('filter-start');
+        const endInput = document.getElementById('filter-end');
+
+        domainInput.addEventListener('input', () => updateFilters());
+        typeSelect.addEventListener('change', () => updateFilters());
+        statusSelect.addEventListener('change', () => updateFilters());
+        startInput.addEventListener('change', () => updateFilters());
+        endInput.addEventListener('change', () => updateFilters());
+
+        refreshQueries();
+    });
 
     function loadPage(offsetDelta) {
         currentOffset = Math.max(0, currentOffset + offsetDelta);
-        const container = document.getElementById('queries-container');
-        container.setAttribute('hx-get', '/api/ui/queries?limit=' + limit + '&offset=' + currentOffset);
-        htmx.trigger(container, 'load');
+        refreshQueries();
+        updatePagination();
+    }
 
-        // Update page number display
+    function buildQueryURL() {
+        const params = new URLSearchParams();
+        params.set('limit', limit);
+        params.set('offset', currentOffset);
+        if (currentFilters.domain) params.set('domain', currentFilters.domain);
+        if (currentFilters.type) params.set('type', currentFilters.type);
+        if (currentFilters.status) params.set('status', currentFilters.status);
+        if (currentFilters.start) params.set('start', currentFilters.start);
+        if (currentFilters.end) params.set('end', currentFilters.end);
+        return `/api/ui/queries?${params.toString()}`;
+    }
+
+    function updateFilters() {
+        currentOffset = 0;
+        currentFilters.domain = document.getElementById('filter-domain').value.trim();
+        currentFilters.type = document.getElementById('filter-type').value;
+        currentFilters.status = document.getElementById('filter-status').value;
+        currentFilters.start = formatDateInput(document.getElementById('filter-start').value);
+        currentFilters.end = formatDateInput(document.getElementById('filter-end').value);
+        refreshQueries();
+        updatePagination();
+    }
+
+    function resetFilters() {
+        document.getElementById('filter-domain').value = '';
+        document.getElementById('filter-type').value = '';
+        document.getElementById('filter-status').value = '';
+        document.getElementById('filter-start').value = '';
+        document.getElementById('filter-end').value = '';
+        updateFilters();
+    }
+
+    function refreshQueries() {
+        const container = document.getElementById('queries-container');
+        container.setAttribute('hx-get', buildQueryURL());
+        htmx.trigger(container, 'load');
+    }
+
+    function updatePagination() {
         const currentPage = Math.floor(currentOffset / limit) + 1;
         document.getElementById('current-page').textContent = currentPage;
-
-        // Disable previous button on first page
         document.getElementById('prev-btn').disabled = currentOffset === 0;
+    }
+
+    function formatDateInput(value) {
+        if (!value) {
+            return '';
+        }
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) {
+            return '';
+        }
+        return date.toISOString();
     }
 </script>
 {{end}}

@@ -15,6 +15,7 @@ import (
 
 	"glory-hole/pkg/api"
 	"glory-hole/pkg/blocklist"
+	"glory-hole/pkg/cache"
 	"glory-hole/pkg/config"
 	"glory-hole/pkg/dns"
 	"glory-hole/pkg/forwarder"
@@ -153,9 +154,12 @@ func main() {
 	// Initialize blocklist manager if configured (lock-free, high performance)
 	var blocklistMgr *blocklist.Manager
 	var rateLimiter *ratelimit.Manager
+	var apiRateLimiter *ratelimit.Manager
+	var dnsCache cache.Interface
 	if len(cfg.Blocklists) > 0 {
 		logger.Info("Initializing blocklist manager", "sources", len(cfg.Blocklists))
 		blocklistMgr = blocklist.NewManager(cfg, logger, metrics, httpClient)
+		blocklistMgr.UpdateConfig(cfg)
 
 		// Start blocklist manager (downloads lists and starts auto-update)
 		err = blocklistMgr.Start(ctx)
@@ -172,15 +176,16 @@ func main() {
 	}
 
 	if cfg.RateLimit.Enabled {
+		logger.Info("Initializing rate limiter",
+			"requests_per_second", cfg.RateLimit.RequestsPerSecond,
+			"burst", cfg.RateLimit.Burst,
+			"action", cfg.RateLimit.Action,
+		)
 		rateLimiter = ratelimit.NewManager(&cfg.RateLimit, logger)
 		if rateLimiter != nil {
 			handler.SetRateLimiter(rateLimiter)
-			logger.Info("Rate limiter enabled",
-				"requests_per_second", cfg.RateLimit.RequestsPerSecond,
-				"burst", cfg.RateLimit.Burst,
-				"action", cfg.RateLimit.Action,
-			)
 		}
+		apiRateLimiter = ratelimit.NewManager(&cfg.RateLimit, logger)
 	}
 
 	// Load whitelist if configured
@@ -508,6 +513,7 @@ func main() {
 
 	// Create DNS server
 	server := dns.NewServer(cfg, handler, logger, metrics)
+	dnsCache = handler.Cache
 
 	// Create API server
 	apiServer := api.New(&api.Config{
@@ -521,7 +527,9 @@ func main() {
 		ConfigWatcher:    cfgWatcher,  // For kill-switch feature
 		ConfigPath:       *configPath, // For persisting kill-switch changes
 		KillSwitch:       killSwitch,  // For duration-based temporary disabling
+		RateLimiter:      apiRateLimiter,
 	})
+	apiServer.SetCache(dnsCache)
 
 	// Setup config change callback now that all components are created
 	// This enables hot-reload for configuration changes
@@ -533,9 +541,23 @@ func main() {
 
 		handler.SetDecisionTrace(newCfg.Server.DecisionTrace)
 
+		if !equalStringSlice(cfg.UpstreamDNSServers, newCfg.UpstreamDNSServers) {
+			logger.Info("Upstream DNS servers changed")
+			dnsResolver = resolver.New(newCfg.UpstreamDNSServers, logger)
+			httpClient = dnsResolver.NewHTTPClient(60 * time.Second)
+
+			handler.SetForwarder(forwarder.NewForwarder(newCfg, logger))
+
+			if blocklistMgr != nil {
+				blocklistMgr.UpdateConfig(newCfg)
+				blocklistMgr.SetHTTPClient(httpClient)
+			}
+		}
+
 		// Hot-reload blocklists if sources changed
 		if blocklistMgr != nil && !equalBlocklistConfig(cfg.Blocklists, newCfg.Blocklists) {
 			logger.Info("Blocklist configuration changed, triggering reload")
+			blocklistMgr.UpdateConfig(newCfg)
 			if err := blocklistMgr.Update(ctx); err != nil {
 				logger.Error("Failed to reload blocklists", "error", err)
 			} else {
@@ -563,6 +585,51 @@ func main() {
 				}
 			}
 			logger.Info("Policy engine reloaded", "total_rules", policyEngine.Count())
+		}
+
+		if !equalCacheConfig(&cfg.Cache, &newCfg.Cache) {
+			logger.Info("Cache configuration changed")
+			if dnsCache != nil {
+				if err := dnsCache.Close(); err != nil {
+					logger.Error("Failed to close old cache", "error", err)
+				}
+				dnsCache = nil
+			}
+			handler.SetCache(nil)
+			apiServer.SetCache(nil)
+
+			if newCfg.Cache.Enabled {
+				newCache, err := cache.New(&newCfg.Cache, logger, metrics)
+				if err != nil {
+					logger.Error("Failed to initialize cache", "error", err)
+				} else {
+					dnsCache = newCache
+					handler.SetCache(dnsCache)
+					apiServer.SetCache(dnsCache)
+					logger.Info("DNS cache reloaded",
+						"max_entries", newCfg.Cache.MaxEntries,
+						"min_ttl", newCfg.Cache.MinTTL,
+						"max_ttl", newCfg.Cache.MaxTTL)
+				}
+			} else {
+				logger.Info("DNS cache disabled")
+			}
+		}
+
+		if !equalLoggingConfig(&cfg.Logging, &newCfg.Logging) {
+			logger.Info("Logging configuration changed")
+			newLogger, err := logging.New(&newCfg.Logging)
+			if err != nil {
+				logger.Error("Failed to reload logger", "error", err)
+			} else {
+				logging.SetGlobal(newLogger)
+				logger = newLogger
+				handler.SetLogger(newLogger)
+				apiServer.SetLogger(newLogger.Logger)
+				if blocklistMgr != nil {
+					blocklistMgr.SetLogger(newLogger)
+				}
+			}
 		}
 
 		// Hot-reload conditional forwarding if changed
@@ -631,10 +698,18 @@ func main() {
 				rateLimiter.Stop()
 				rateLimiter = nil
 			}
+			if apiRateLimiter != nil {
+				apiRateLimiter.Stop()
+				apiRateLimiter = nil
+			}
 
 			if newCfg.RateLimit.Enabled {
 				rateLimiter = ratelimit.NewManager(&newCfg.RateLimit, logger)
 				handler.SetRateLimiter(rateLimiter)
+
+				apiRateLimiter = ratelimit.NewManager(&newCfg.RateLimit, logger)
+				apiServer.SetHTTPRateLimiter(apiRateLimiter)
+
 				logger.Info("Rate limiter reloaded",
 					"requests_per_second", newCfg.RateLimit.RequestsPerSecond,
 					"burst", newCfg.RateLimit.Burst,
@@ -642,6 +717,7 @@ func main() {
 				)
 			} else {
 				handler.SetRateLimiter(nil)
+				apiServer.SetHTTPRateLimiter(nil)
 				logger.Info("Rate limiter disabled")
 			}
 		}
@@ -781,11 +857,9 @@ func main() {
 		// Update the cfg reference for next comparison
 		cfg = newCfg
 
-		// Note: Some config changes require server restart:
+		// Note: Some config changes still require server restart:
 		// - ListenAddress (DNS/API bind addresses)
 		// - Database settings (connection strings)
-		// - Upstream DNS servers (forwarder recreation)
-		// - Cache settings (cache recreation)
 		// These will take effect on next server restart
 	})
 
@@ -847,6 +921,9 @@ func main() {
 		if rateLimiter != nil {
 			rateLimiter.Stop()
 		}
+		if apiRateLimiter != nil {
+			apiRateLimiter.Stop()
+		}
 
 		// Shutdown storage
 		if stor != nil {
@@ -900,6 +977,33 @@ func equalRateLimitConfig(a, b *config.RateLimitConfig) bool {
 		a.LogViolations == b.LogViolations &&
 		a.CleanupInterval == b.CleanupInterval &&
 		a.MaxTrackedClients == b.MaxTrackedClients
+}
+
+func equalCacheConfig(a, b *config.CacheConfig) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return a.Enabled == b.Enabled &&
+		a.MaxEntries == b.MaxEntries &&
+		a.MinTTL == b.MinTTL &&
+		a.MaxTTL == b.MaxTTL &&
+		a.NegativeTTL == b.NegativeTTL &&
+		a.BlockedTTL == b.BlockedTTL &&
+		a.ShardCount == b.ShardCount
+}
+
+func equalLoggingConfig(a, b *config.LoggingConfig) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return a.Level == b.Level &&
+		a.Format == b.Format &&
+		a.Output == b.Output &&
+		a.FilePath == b.FilePath &&
+		a.AddSource == b.AddSource &&
+		a.MaxSize == b.MaxSize &&
+		a.MaxBackups == b.MaxBackups &&
+		a.MaxAge == b.MaxAge
 }
 
 // equalConditionalForwardingConfig compares two conditional forwarding configurations

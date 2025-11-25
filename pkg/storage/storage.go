@@ -13,12 +13,15 @@ type Storage interface {
 	GetRecentQueries(ctx context.Context, limit, offset int) ([]*QueryLog, error)
 	GetQueriesByDomain(ctx context.Context, domain string, limit int) ([]*QueryLog, error)
 	GetQueriesByClientIP(ctx context.Context, clientIP string, limit int) ([]*QueryLog, error)
+	GetQueriesFiltered(ctx context.Context, filter QueryFilter, limit, offset int) ([]*QueryLog, error)
 
 	// Statistics
 	GetStatistics(ctx context.Context, since time.Time) (*Statistics, error)
 	GetTopDomains(ctx context.Context, limit int, blocked bool) ([]*DomainStats, error)
 	GetBlockedCount(ctx context.Context, since time.Time) (int64, error)
 	GetQueryCount(ctx context.Context, since time.Time) (int64, error)
+	GetTimeSeriesStats(ctx context.Context, bucket time.Duration, points int) ([]*TimeSeriesPoint, error)
+	GetQueryTypeStats(ctx context.Context, limit int) ([]*QueryTypeStats, error)
 
 	// Trace Analytics
 	GetTraceStatistics(ctx context.Context, since time.Time) (*TraceStatistics, error)
@@ -32,16 +35,16 @@ type Storage interface {
 
 // QueryLog represents a single DNS query log entry
 type QueryLog struct {
-	Timestamp      time.Time `json:"timestamp"`
-	ClientIP       string    `json:"client_ip"`
-	Domain         string    `json:"domain"`
-	QueryType      string    `json:"query_type"`
-	Upstream       string    `json:"upstream,omitempty"`
-	ID             int64     `json:"id"`
-	ResponseCode   int       `json:"response_code"`
-	ResponseTimeMs float64   `json:"response_time_ms"`
-	Blocked        bool      `json:"blocked"`
-	Cached         bool      `json:"cached"`
+	Timestamp      time.Time         `json:"timestamp"`
+	ClientIP       string            `json:"client_ip"`
+	Domain         string            `json:"domain"`
+	QueryType      string            `json:"query_type"`
+	Upstream       string            `json:"upstream,omitempty"`
+	ID             int64             `json:"id"`
+	ResponseCode   int               `json:"response_code"`
+	ResponseTimeMs float64           `json:"response_time_ms"`
+	Blocked        bool              `json:"blocked"`
+	Cached         bool              `json:"cached"`
 	BlockTrace     []BlockTraceEntry `json:"block_trace,omitempty"`
 }
 
@@ -78,15 +81,23 @@ type DomainStats struct {
 	Blocked      bool      `json:"blocked"`
 }
 
+// QueryTypeStats represents aggregated counts per DNS record type.
+type QueryTypeStats struct {
+	QueryType string `json:"query_type"`
+	Total     int64  `json:"total"`
+	Blocked   int64  `json:"blocked"`
+	Cached    int64  `json:"cached"`
+}
+
 // TraceStatistics represents aggregated trace statistics
 type TraceStatistics struct {
-	Since        time.Time         `json:"since"`
-	Until        time.Time         `json:"until"`
-	TotalBlocked int64             `json:"total_blocked"`
-	ByStage      map[string]int64  `json:"by_stage"`
-	ByAction     map[string]int64  `json:"by_action"`
-	ByRule       map[string]int64  `json:"by_rule"`
-	BySource     map[string]int64  `json:"by_source"`
+	Since        time.Time        `json:"since"`
+	Until        time.Time        `json:"until"`
+	TotalBlocked int64            `json:"total_blocked"`
+	ByStage      map[string]int64 `json:"by_stage"`
+	ByAction     map[string]int64 `json:"by_action"`
+	ByRule       map[string]int64 `json:"by_rule"`
+	BySource     map[string]int64 `json:"by_source"`
 }
 
 // TraceFilter represents filtering options for trace queries
@@ -95,6 +106,21 @@ type TraceFilter struct {
 	Action string
 	Rule   string
 	Source string
+}
+
+// QueryFilter represents filter options for fetching queries.
+type QueryFilter struct {
+	Domain    string
+	QueryType string
+	Blocked   *bool
+	Cached    *bool
+	Start     time.Time
+	End       time.Time
+}
+
+// HasFilters returns true if any filtering criteria is set.
+func (f QueryFilter) HasFilters() bool {
+	return f.Domain != "" || f.QueryType != "" || f.Blocked != nil || f.Cached != nil || !f.Start.IsZero() || !f.End.IsZero()
 }
 
 // BackendType represents the type of storage backend
@@ -184,4 +210,13 @@ func (c *Config) Validate() error {
 	}
 
 	return nil
+}
+
+// TimeSeriesPoint represents aggregated query statistics for a specific time bucket.
+type TimeSeriesPoint struct {
+	Timestamp         time.Time `json:"timestamp"`
+	TotalQueries      int64     `json:"total_queries"`
+	BlockedQueries    int64     `json:"blocked_queries"`
+	CachedQueries     int64     `json:"cached_queries"`
+	AvgResponseTimeMs float64   `json:"avg_response_time_ms"`
 }

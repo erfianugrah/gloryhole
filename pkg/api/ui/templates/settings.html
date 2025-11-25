@@ -2,66 +2,204 @@
 
 {{define "title"}}Settings - Glory-Hole DNS{{end}}
 
+{{define "settings-upstreams"}}
+{{$cfg := .Config}}
+<div class="settings-section" id="upstreams-section">
+    <h3>Upstream DNS Servers</h3>
+    <p class="section-description">Control which recursive resolvers Glory-Hole uses when forwarding client queries.</p>
+
+    {{with index .Flash "upstreams"}}
+        <div class="alert alert-success">{{.}}</div>
+    {{end}}
+    {{with index .Errors "upstreams"}}
+        <div class="alert alert-danger">{{.}}</div>
+    {{end}}
+
+    <form hx-put="/api/config/upstreams" hx-target="#upstreams-section" hx-swap="outerHTML">
+        <div class="form-group">
+            <label for="servers">Resolvers</label>
+            <textarea id="servers" name="servers" rows="4" spellcheck="false">{{join $cfg.UpstreamDNSServers "\n"}}</textarea>
+            <span class="form-help">One host:port per line (e.g., <code>1.1.1.1:53</code>, <code>[2606:4700:4700::1111]:53</code>).</span>
+        </div>
+        <div class="form-actions">
+            <button type="reset" class="btn btn-secondary btn-sm">Reset</button>
+            <button type="submit" class="btn btn-primary btn-sm">Save Upstreams</button>
+        </div>
+    </form>
+</div>
+{{end}}
+
+{{define "settings-cache"}}
+{{$cfg := .Config}}
+<div class="settings-section" id="cache-section">
+    <h3>Cache Configuration</h3>
+    <p class="section-description">Tune TTL bounds and capacity for the in-memory DNS cache.</p>
+
+    {{with index .Flash "cache"}}
+        <div class="alert alert-success">{{.}}</div>
+    {{end}}
+    {{with index .Errors "cache"}}
+        <div class="alert alert-danger">{{.}}</div>
+    {{end}}
+
+    <form hx-put="/api/config/cache" hx-target="#cache-section" hx-swap="outerHTML">
+        <label class="checkbox-label" for="cache-enabled">
+            <input id="cache-enabled" type="checkbox" name="enabled" {{if $cfg.Cache.Enabled}}checked{{end}}>
+            Enable DNS response cache
+        </label>
+
+        <div class="form-group">
+            <label for="cache-max-entries">Maximum Entries</label>
+            <input id="cache-max-entries" type="number" min="1" name="max_entries" value="{{$cfg.Cache.MaxEntries}}">
+            <span class="form-help">Total cached responses retained before eviction.</span>
+        </div>
+
+        <div class="form-grid">
+            <div class="form-group">
+                <label for="cache-min-ttl">Minimum TTL</label>
+                <input id="cache-min-ttl" type="text" name="min_ttl" value="{{$cfg.Cache.MinTTL}}" placeholder="e.g., 30s, 5m">
+                <span class="form-help">Go-style duration string.</span>
+            </div>
+            <div class="form-group">
+                <label for="cache-max-ttl">Maximum TTL</label>
+                <input id="cache-max-ttl" type="text" name="max_ttl" value="{{$cfg.Cache.MaxTTL}}" placeholder="e.g., 12h">
+            </div>
+        </div>
+
+        <div class="form-grid">
+            <div class="form-group">
+                <label for="cache-negative-ttl">Negative TTL</label>
+                <input id="cache-negative-ttl" type="text" name="negative_ttl" value="{{$cfg.Cache.NegativeTTL}}">
+                <span class="form-help">How long NXDOMAIN responses are cached.</span>
+            </div>
+            <div class="form-group">
+                <label for="cache-blocked-ttl">Blocked TTL</label>
+                <input id="cache-blocked-ttl" type="text" name="blocked_ttl" value="{{$cfg.Cache.BlockedTTL}}">
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label for="cache-shards">Shard Count</label>
+            <input id="cache-shards" type="number" min="0" name="shard_count" value="{{$cfg.Cache.ShardCount}}">
+            <span class="form-help">0 lets Glory-Hole auto-size shards based on CPU cores.</span>
+        </div>
+
+        <div class="form-actions">
+            <button type="reset" class="btn btn-secondary btn-sm">Reset</button>
+            <button type="submit" class="btn btn-primary btn-sm">Save Cache Settings</button>
+        </div>
+    </form>
+</div>
+{{end}}
+
+{{define "settings-logging"}}
+{{$cfg := .Config}}
+<div class="settings-section" id="logging-section">
+    <h3>Logging Configuration</h3>
+    <p class="section-description">Control log verbosity, format, output target, and retention.</p>
+
+    {{with index .Flash "logging"}}
+        <div class="alert alert-success">{{.}}</div>
+    {{end}}
+    {{with index .Errors "logging"}}
+        <div class="alert alert-danger">{{.}}</div>
+    {{end}}
+
+    <form hx-put="/api/config/logging" hx-target="#logging-section" hx-swap="outerHTML">
+        <div class="form-grid">
+            <div class="form-group">
+                <label for="logging-level">Log Level</label>
+                <select id="logging-level" name="level">
+                    <option value="debug" {{if eq (lower $cfg.Logging.Level) "debug"}}selected{{end}}>Debug</option>
+                    <option value="info" {{if eq (lower $cfg.Logging.Level) "info"}}selected{{end}}>Info</option>
+                    <option value="warn" {{if eq (lower $cfg.Logging.Level) "warn"}}selected{{end}}>Warn</option>
+                    <option value="error" {{if eq (lower $cfg.Logging.Level) "error"}}selected{{end}}>Error</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="logging-format">Format</label>
+                <select id="logging-format" name="format">
+                    <option value="text" {{if eq (lower $cfg.Logging.Format) "text"}}selected{{end}}>Text</option>
+                    <option value="json" {{if eq (lower $cfg.Logging.Format) "json"}}selected{{end}}>JSON</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="logging-output">Output</label>
+                <select id="logging-output" name="output">
+                    <option value="stdout" {{if eq (lower $cfg.Logging.Output) "stdout"}}selected{{end}}>stdout</option>
+                    <option value="stderr" {{if eq (lower $cfg.Logging.Output) "stderr"}}selected{{end}}>stderr</option>
+                    <option value="file" {{if eq (lower $cfg.Logging.Output) "file"}}selected{{end}}>File</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label for="logging-file">File Path</label>
+            <input id="logging-file" type="text" name="file_path" value="{{$cfg.Logging.FilePath}}" placeholder="/var/log/glory-hole.log">
+            <span class="form-help">Required when output is <code>file</code>.</span>
+        </div>
+
+        <label class="checkbox-label" for="logging-add-source">
+            <input id="logging-add-source" type="checkbox" name="add_source" {{if $cfg.Logging.AddSource}}checked{{end}}>
+            Include source file/line (adds ~1-2µs per log)
+        </label>
+
+        <div class="form-grid">
+            <div class="form-group">
+                <label for="logging-max-size">Max Size (MB)</label>
+                <input id="logging-max-size" type="number" min="1" name="max_size" value="{{$cfg.Logging.MaxSize}}">
+            </div>
+            <div class="form-group">
+                <label for="logging-max-backups">Max Backups</label>
+                <input id="logging-max-backups" type="number" min="0" name="max_backups" value="{{$cfg.Logging.MaxBackups}}">
+            </div>
+            <div class="form-group">
+                <label for="logging-max-age">Max Age (days)</label>
+                <input id="logging-max-age" type="number" min="0" name="max_age" value="{{$cfg.Logging.MaxAge}}">
+            </div>
+        </div>
+
+        <div class="form-actions">
+            <button type="reset" class="btn btn-secondary btn-sm">Reset</button>
+            <button type="submit" class="btn btn-primary btn-sm">Save Logging Settings</button>
+        </div>
+    </form>
+</div>
+{{end}}
+
 {{define "content"}}
+{{$cfg := .Config}}
 <div class="settings-page">
     <div class="page-header">
         <h2>Settings</h2>
+        <p class="section-description">Active configuration file: <code>{{if .ConfigPath}}{{.ConfigPath}}{{else}}config.yml{{end}}</code></p>
     </div>
 
-    <!-- DNS Settings -->
     <div class="settings-section">
-        <h3>DNS Configuration</h3>
+        <h3>DNS Listener</h3>
         <div class="setting-row">
             <div class="setting-label">
                 <h4>DNS Listen Address</h4>
                 <p>UDP and TCP DNS server bind address</p>
             </div>
             <div class="setting-value">
-                <code>:53</code>
+                <code>{{$cfg.Server.ListenAddress}}</code>
             </div>
         </div>
         <div class="setting-row">
             <div class="setting-label">
-                <h4>Upstream DNS Servers</h4>
-                <p>Servers used for forwarding queries</p>
+                <h4>Protocols</h4>
+                <p>Enabled transport protocols</p>
             </div>
             <div class="setting-value">
-                <code>1.1.1.1:53, 8.8.8.8:53</code>
+                <code>{{if $cfg.Server.UDPEnabled}}UDP{{end}}{{if and $cfg.Server.UDPEnabled $cfg.Server.TCPEnabled}}, {{end}}{{if $cfg.Server.TCPEnabled}}TCP{{end}}</code>
             </div>
         </div>
     </div>
 
-    <!-- Cache Settings -->
-    <div class="settings-section">
-        <h3>Cache Configuration</h3>
-        <div class="setting-row">
-            <div class="setting-label">
-                <h4>Cache Size</h4>
-                <p>Maximum number of cached entries</p>
-            </div>
-            <div class="setting-value">
-                <code>10,000</code>
-            </div>
-        </div>
-        <div class="setting-row">
-            <div class="setting-label">
-                <h4>Minimum TTL</h4>
-                <p>Minimum cache time for records</p>
-            </div>
-            <div class="setting-value">
-                <code>1m</code>
-            </div>
-        </div>
-        <div class="setting-row">
-            <div class="setting-label">
-                <h4>Maximum TTL</h4>
-                <p>Maximum cache time for records</p>
-            </div>
-            <div class="setting-value">
-                <code>24h</code>
-            </div>
-        </div>
-    </div>
+    {{template "settings-upstreams" .}}
+
+    {{template "settings-cache" .}}
 
     <!-- Blocklist Settings -->
     <div class="settings-section">
@@ -73,7 +211,7 @@
             </div>
             <div class="setting-value">
                 <label class="toggle-switch">
-                    <input type="checkbox" checked disabled>
+                    <input type="checkbox" {{if $cfg.AutoUpdateBlocklists}}checked{{end}} disabled>
                     <span class="toggle-slider"></span>
                 </label>
             </div>
@@ -84,7 +222,7 @@
                 <p>How often to refresh blocklists</p>
             </div>
             <div class="setting-value">
-                <code>24h</code>
+                <code>{{$cfg.UpdateInterval}}</code>
             </div>
         </div>
         <div class="setting-row">
@@ -93,7 +231,7 @@
                 <p>Active blocklist URLs</p>
             </div>
             <div class="setting-value">
-                <button class="btn btn-secondary btn-sm">View Sources</button>
+                <button class="btn btn-secondary btn-sm">View Sources ({{len $cfg.Blocklists}})</button>
             </div>
         </div>
         <div class="setting-row">
@@ -112,11 +250,10 @@
         <h3>Feature Controls</h3>
         <p class="section-description">Temporarily disable features for troubleshooting or maintenance.</p>
 
-        <!-- Blocklist Control -->
         <div class="feature-control-group">
             <div class="feature-header">
                 <h4>Ad-Blocking (Blocklist)</h4>
-                <span id="blocklist-status" class="status-badge">Enabled</span>
+                <span id="blocklist-status" class="status-badge">{{if $cfg.Server.EnableBlocklist}}Enabled{{else}}Disabled{{end}}</span>
             </div>
             <p class="help-text">Temporarily disable domain blocking for troubleshooting false positives.</p>
 
@@ -134,11 +271,10 @@
             </div>
         </div>
 
-        <!-- Policies Control -->
         <div class="feature-control-group">
             <div class="feature-header">
                 <h4>Policy Engine</h4>
-                <span id="policies-status" class="status-badge">Enabled</span>
+                <span id="policies-status" class="status-badge">{{if $cfg.Server.EnablePolicies}}Enabled{{else}}Disabled{{end}}</span>
             </div>
             <p class="help-text">Temporarily disable all policy rules while keeping basic blocklist active.</p>
 
@@ -166,7 +302,7 @@
                 <p>Query log storage backend</p>
             </div>
             <div class="setting-value">
-                <code>SQLite</code>
+                <code>{{$cfg.Storage.Backend}}</code>
             </div>
         </div>
         <div class="setting-row">
@@ -175,7 +311,7 @@
                 <p>Queries buffered before write</p>
             </div>
             <div class="setting-value">
-                <code>1,000</code>
+                <code>{{$cfg.Storage.BufferSize}}</code>
             </div>
         </div>
         <div class="setting-row">
@@ -184,10 +320,13 @@
                 <p>How long to keep query logs</p>
             </div>
             <div class="setting-value">
-                <code>7 days</code>
+                <code>{{$cfg.Storage.RetentionDays}} days</code>
             </div>
         </div>
     </div>
+
+    <!-- Logging Settings -->
+    {{template "settings-logging" .}}
 
     <!-- API Settings -->
     <div class="settings-section">
@@ -198,7 +337,7 @@
                 <p>HTTP API and Web UI address</p>
             </div>
             <div class="setting-value">
-                <code>:8080</code>
+                <code>{{$cfg.Server.WebUIAddress}}</code>
             </div>
         </div>
         <div class="setting-row">
@@ -225,7 +364,7 @@
             </div>
             <div class="setting-value">
                 <label class="toggle-switch">
-                    <input type="checkbox" checked disabled>
+                    <input type="checkbox" {{if $cfg.Telemetry.PrometheusEnabled}}checked{{end}} disabled>
                     <span class="toggle-slider"></span>
                 </label>
             </div>
@@ -236,7 +375,7 @@
                 <p>Prometheus endpoint port</p>
             </div>
             <div class="setting-value">
-                <code>:9090</code>
+                <code>{{if gt $cfg.Telemetry.PrometheusPort 0}}:{{$cfg.Telemetry.PrometheusPort}}{{else}}Disabled{{end}}</code>
             </div>
         </div>
     </div>
@@ -259,14 +398,14 @@
                 <p>Active configuration file path</p>
             </div>
             <div class="setting-value">
-                <code>config.yml</code>
+                <code>{{if .ConfigPath}}{{.ConfigPath}}{{else}}config.yml{{end}}</code>
             </div>
         </div>
     </div>
 
     <div class="settings-info">
-        <p><strong>Note:</strong> Most settings require a server restart to take effect. Edit <code>config.yml</code> and restart the service.</p>
-        <p>For runtime changes, use the Policies page to add filtering rules.</p>
+        <p><strong>Tip:</strong> Upstreams, cache, and logging settings can be edited live above. Other sections remain read-only and require editing <code>config.yml</code> followed by a restart.</p>
+        <p>Use the Policies page for runtime policy updates.</p>
     </div>
 </div>
 
@@ -296,7 +435,6 @@ async function reloadBlocklists() {
     }
 }
 
-// Kill-switch control functions
 let blocklistCountdownInterval = null;
 let policiesCountdownInterval = null;
 
@@ -316,7 +454,7 @@ async function disableFeature(feature, duration) {
         });
 
         if (response.ok) {
-            const result = await response.json();
+            await response.json();
             updateFeatureStatus();
         } else {
             const error = await response.json();
@@ -336,6 +474,7 @@ async function enableFeature(feature) {
         });
 
         if (response.ok) {
+            await response.json();
             updateFeatureStatus();
         } else {
             const error = await response.json();
@@ -349,200 +488,71 @@ async function enableFeature(feature) {
 async function updateFeatureStatus() {
     try {
         const response = await fetch('/api/features');
-        if (!response.ok) return;
+        if (!response.ok) {
+            throw new Error('Failed to fetch feature status');
+        }
 
         const data = await response.json();
-
-        // Update blocklist status
         const blocklistStatus = document.getElementById('blocklist-status');
-        const blocklistCountdown = document.getElementById('blocklist-countdown');
-        if (data.blocklist_temp_disabled) {
-            blocklistStatus.textContent = 'Disabled';
-            blocklistStatus.className = 'status-badge status-disabled';
-            blocklistCountdown.style.display = 'block';
-            if (blocklistCountdownInterval) clearInterval(blocklistCountdownInterval);
-            startCountdown('blocklist', new Date(data.blocklist_disabled_until));
-        } else {
-            blocklistStatus.textContent = 'Enabled';
-            blocklistStatus.className = 'status-badge status-enabled';
-            blocklistCountdown.style.display = 'none';
-            if (blocklistCountdownInterval) {
-                clearInterval(blocklistCountdownInterval);
-                blocklistCountdownInterval = null;
-            }
-        }
-
-        // Update policies status
         const policiesStatus = document.getElementById('policies-status');
-        const policiesCountdown = document.getElementById('policies-countdown');
-        if (data.policies_temp_disabled) {
-            policiesStatus.textContent = 'Disabled';
-            policiesStatus.className = 'status-badge status-disabled';
-            policiesCountdown.style.display = 'block';
-            if (policiesCountdownInterval) clearInterval(policiesCountdownInterval);
-            startCountdown('policies', new Date(data.policies_disabled_until));
-        } else {
-            policiesStatus.textContent = 'Enabled';
-            policiesStatus.className = 'status-badge status-enabled';
-            policiesCountdown.style.display = 'none';
-            if (policiesCountdownInterval) {
-                clearInterval(policiesCountdownInterval);
-                policiesCountdownInterval = null;
-            }
-        }
+
+        blocklistStatus.textContent = data.blocklist_enabled ? 'Enabled' : 'Disabled';
+        blocklistStatus.className = `status-badge ${data.blocklist_enabled ? 'success' : 'danger'}`;
+
+        policiesStatus.textContent = data.policies_enabled ? 'Enabled' : 'Disabled';
+        policiesStatus.className = `status-badge ${data.policies_enabled ? 'success' : 'danger'}`;
+
+        updateCountdown('blocklist', data.blocklist_temp_disabled, data.blocklist_disabled_until);
+        updateCountdown('policies', data.policies_temp_disabled, data.policies_disabled_until);
     } catch (error) {
         console.error('Failed to update feature status:', error);
     }
 }
 
-function startCountdown(feature, until) {
-    const timeElement = document.getElementById(`${feature}-time`);
-
-    function update() {
-        const now = new Date();
-        const remaining = Math.max(0, Math.floor((until - now) / 1000));
-
-        if (remaining === 0) {
-            updateFeatureStatus();
-            return;
-        }
-
-        timeElement.textContent = formatDuration(remaining);
-    }
-
-    update();
-    if (feature === 'blocklist') {
-        blocklistCountdownInterval = setInterval(update, 1000);
-    } else {
-        policiesCountdownInterval = setInterval(update, 1000);
-    }
-}
-
 function formatDuration(seconds) {
-    if (seconds === 0) return 'indefinitely';
     if (seconds < 60) return `${seconds}s`;
-    const minutes = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    if (minutes < 60) return secs > 0 ? `${minutes}m ${secs}s` : `${minutes}m`;
-    const hours = Math.floor(minutes / 60);
-    const mins = minutes % 60;
-    return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
+    if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
+    return `${Math.floor(seconds / 3600)}h`;
 }
 
-// Update status on page load and every 5 seconds
+function updateCountdown(feature, isDisabled, until) {
+    const countdownElement = document.getElementById(`${feature}-countdown`);
+    const timeElement = document.getElementById(`${feature}-time`);
+    let intervalRef = feature === 'blocklist' ? blocklistCountdownInterval : policiesCountdownInterval;
+
+    if (intervalRef) {
+        clearInterval(intervalRef);
+    }
+
+    if (!isDisabled || !until) {
+        countdownElement.style.display = 'none';
+        return;
+    }
+
+    countdownElement.style.display = 'block';
+
+    function updateTimer() {
+        const remainingSeconds = Math.max(0, Math.floor((new Date(until) - new Date()) / 1000));
+        const minutes = Math.floor(remainingSeconds / 60);
+        const seconds = remainingSeconds % 60;
+        timeElement.textContent = `${minutes}m ${seconds}s`;
+
+        if (remainingSeconds <= 0) {
+            clearInterval(intervalRef);
+            updateFeatureStatus();
+        }
+    }
+
+    updateTimer();
+    intervalRef = setInterval(updateTimer, 1000);
+
+    if (feature === 'blocklist') {
+        blocklistCountdownInterval = intervalRef;
+    } else {
+        policiesCountdownInterval = intervalRef;
+    }
+}
+
 updateFeatureStatus();
-setInterval(updateFeatureStatus, 5000);
 </script>
-
-<style>
-.settings-info {
-    background-color: #fef3c7;
-    border-left: 4px solid #f59e0b;
-    padding: 1rem;
-    border-radius: 0.375rem;
-    font-size: 0.875rem;
-    color: #92400e;
-}
-
-.settings-info p {
-    margin: 0.5rem 0;
-}
-
-.settings-info code {
-    background-color: #fef3c7;
-    padding: 0.125rem 0.25rem;
-    border-radius: 0.25rem;
-    font-family: 'Courier New', Courier, monospace;
-}
-
-.btn-sm {
-    padding: 0.375rem 0.75rem;
-    font-size: 0.875rem;
-}
-
-/* Feature Controls */
-.section-description {
-    color: var(--text-muted);
-    margin-bottom: 1.5rem;
-    font-size: 0.9rem;
-}
-
-.feature-control-group {
-    margin-bottom: 2rem;
-    padding: 1.5rem;
-    border: 1px solid var(--border-color);
-    border-radius: 0.5rem;
-    background-color: var(--card-bg);
-}
-
-.feature-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 0.5rem;
-}
-
-.feature-header h4 {
-    margin: 0;
-    font-size: 1.1rem;
-}
-
-.status-badge {
-    padding: 0.25rem 0.75rem;
-    border-radius: 1rem;
-    font-size: 0.85rem;
-    font-weight: 600;
-}
-
-.status-enabled {
-    background-color: #10b981;
-    color: white;
-}
-
-.status-disabled {
-    background-color: #ef4444;
-    color: white;
-}
-
-.control-buttons {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.5rem;
-    margin-top: 1rem;
-}
-
-.btn-danger {
-    background-color: #ef4444;
-    color: white;
-    border: none;
-}
-
-.btn-danger:hover {
-    background-color: #dc2626;
-}
-
-.btn-success {
-    background-color: #10b981;
-    color: white;
-    border: none;
-}
-
-.btn-success:hover {
-    background-color: #059669;
-}
-
-.countdown-timer {
-    margin-top: 1rem;
-    padding: 0.75rem;
-    background-color: #fef3c7;
-    border-left: 4px solid #f59e0b;
-    border-radius: 0.25rem;
-    font-weight: 500;
-}
-
-.countdown-timer span {
-    font-family: 'Courier New', monospace;
-    color: #92400e;
-}
-</style>
 {{end}}
