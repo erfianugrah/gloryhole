@@ -159,6 +159,10 @@ func (sc *ShardedCache) GetWithTrace(ctx context.Context, r *dns.Msg) (*dns.Msg,
 	}
 
 	// Update last access time (for LRU)
+	// Note: We keep the write lock cost here as it's less frequent than hits
+	// and ensures correct LRU behavior. Optimization: Could use atomic int64
+	// with a separate lastAccessNano field in future if profiling shows this
+	// as a bottleneck.
 	shard.mu.Lock()
 	entry.lastAccess = now
 	shard.mu.Unlock()

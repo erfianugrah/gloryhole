@@ -1,0 +1,35 @@
+goos: linux
+goarch: amd64
+pkg: glory-hole/test/load
+cpu: AMD Ryzen 7 7800X3D 8-Core Processor           
+BenchmarkDNSQuery_LocalRecord-16               	 5875302	       610.5 ns/op	   1638027 qps	     520 B/op	      18 allocs/op
+BenchmarkDNSQuery_BlocklistHit-16              	 5411791	       637.3 ns/op	   1569137 qps	     360 B/op	      13 allocs/op
+BenchmarkDNSQuery_CacheHit-16                  	 5919291	       606.1 ns/op	   1649961 qps	     352 B/op	      13 allocs/op
+BenchmarkDNSQuery_CacheMiss-16                 	 2620063	      1368 ns/op	    730862 qps	     560 B/op	      18 allocs/op
+BenchmarkDNSQuery_PolicyEngine-16              	 4027128	       891.9 ns/op	   1121250 qps	     552 B/op	      16 allocs/op
+BenchmarkDNSQuery_FullStack-16                 	 4034354	       858.7 ns/op	   1164484 qps	     544 B/op	      16 allocs/op
+BenchmarkBlocklistLookup_1K-16                 	418702454	         7.249 ns/op	 137958762 lookups/sec	       0 B/op	       0 allocs/op
+BenchmarkBlocklistLookup_10K-16                	420628650	         8.552 ns/op	 116928440 lookups/sec	       0 B/op	       0 allocs/op
+BenchmarkBlocklistLookup_100K-16               	403429536	         9.363 ns/op	 106801898 lookups/sec	       0 B/op	       0 allocs/op
+BenchmarkBlocklistLookup_1M-16                 	426860020	         8.389 ns/op	 119207936 lookups/sec	       0 B/op	       0 allocs/op
+BenchmarkCache_Set-16                          	51490210	        68.22 ns/op	      40 B/op	       2 allocs/op
+BenchmarkCache_Get-16                          	41976730	        75.70 ns/op	      40 B/op	       2 allocs/op
+BenchmarkCache_Mixed-16                        	 4872896	       735.7 ns/op	     366 B/op	       8 allocs/op
+BenchmarkPolicyEngine_SingleRule-16            	34455266	       101.4 ns/op	     176 B/op	       3 allocs/op
+BenchmarkPolicyEngine_MultipleRules-16         	 3667810	       963.4 ns/op	    1760 B/op	      30 allocs/op
+BenchmarkPolicyEngine_ComplexRule-16           	11108782	       304.2 ns/op	     296 B/op	       9 allocs/op
+BenchmarkLocalRecords_LookupA-16               	59192418	        52.78 ns/op	      24 B/op	       1 allocs/op
+BenchmarkLocalRecords_LookupCNAME-16           	175861939	        20.45 ns/op	       0 B/op	       0 allocs/op
+BenchmarkLocalRecords_ResolveCNAME-16          	27339522	       123.5 ns/op	      24 B/op	       1 allocs/op
+BenchmarkConcurrentQueries_10-16               	 7572601	       481.9 ns/op	   2075005 qps	     520 B/op	      18 allocs/op
+BenchmarkConcurrentQueries_100-16              	 7708101	       471.5 ns/op	   2120936 qps	     520 B/op	      18 allocs/op
+BenchmarkConcurrentQueries_1000-16             	 7541526	       469.4 ns/op	   2130247 qps	     520 B/op	      18 allocs/op
+BenchmarkMemoryAllocation_DNSMessage-16        	 6709412	       529.6 ns/op	     122 B/op	       5 allocs/op
+BenchmarkMemoryAllocation_ResponseWriter-16    	1000000000	         0.2016 ns/op	       0 B/op	       0 allocs/op
+BenchmarkComparison_NoCacheNoBlocklist-16      	 7912906	       438.9 ns/op	   2278561 qps	     320 B/op	      11 allocs/op
+BenchmarkComparison_CacheOnly-16               	 6404976	       556.9 ns/op	   1795660 qps	     520 B/op	      18 allocs/op
+BenchmarkComparison_BlocklistOnly-16           	 7505239	       467.4 ns/op	   2139584 qps	     320 B/op	      11 allocs/op
+BenchmarkComparison_CacheAndBlocklist-16       	 6431082	       556.4 ns/op	   1797375 qps	     520 B/op	      18 allocs/op
+BenchmarkComparison_FullStack-16               	 6261343	       558.4 ns/op	   1790770 qps	     520 B/op	      18 allocs/op
+PASS
+ok  	glory-hole/test/load	158.787s
