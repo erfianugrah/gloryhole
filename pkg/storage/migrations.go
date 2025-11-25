@@ -68,10 +68,35 @@ var migrations = []Migration{
 			CREATE INDEX idx_queries_cached ON queries(cached);
 		`,
 	},
+	{
+		Version:     4,
+		Description: "Add composite indexes for common query patterns and analytics",
+		SQL: `
+			-- Composite index for time-range queries on specific domains
+			-- Speeds up: SELECT * FROM queries WHERE domain = ? AND timestamp BETWEEN ? AND ?
+			CREATE INDEX idx_queries_domain_timestamp ON queries(domain, timestamp);
+
+			-- Composite index for client-specific time-range queries
+			-- Speeds up: SELECT * FROM queries WHERE client_ip = ? AND timestamp BETWEEN ? AND ?
+			CREATE INDEX idx_queries_client_timestamp ON queries(client_ip, timestamp);
+
+			-- Composite index for blocked query analytics over time
+			-- Speeds up: SELECT * FROM queries WHERE blocked = 1 AND timestamp BETWEEN ? AND ?
+			CREATE INDEX idx_queries_blocked_timestamp ON queries(blocked, timestamp);
+
+			-- Composite index for cached query analytics
+			-- Speeds up: SELECT * FROM queries WHERE cached = 1 AND timestamp BETWEEN ? AND ?
+			CREATE INDEX idx_queries_cached_timestamp ON queries(cached, timestamp);
+
+			-- Composite index for response time analysis by domain
+			-- Speeds up: SELECT AVG(response_time_ms) FROM queries WHERE domain = ? GROUP BY timestamp
+			CREATE INDEX idx_queries_domain_response_time ON queries(domain, response_time_ms);
+		`,
+	},
 	// Future migrations will be added here with incrementing version numbers
 	// Example:
 	// {
-	//     Version:     2,
+	//     Version:     5,
 	//     Description: "Add client_name column to queries table",
 	//     SQL:         `ALTER TABLE queries ADD COLUMN client_name TEXT;`,
 	// },
