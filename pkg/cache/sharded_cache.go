@@ -5,6 +5,7 @@ import (
 	"errors"
 	"hash/fnv"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"glory-hole/pkg/config"
@@ -33,13 +34,17 @@ type ShardedCache struct {
 }
 
 // CacheShard represents a single shard of the cache with its own lock and entries.
+// Stats are tracked using atomic operations to avoid lock contention on hot paths.
 type CacheShard struct {
 	cfg         *config.CacheConfig
 	logger      *logging.Logger
 	metrics     *telemetry.Metrics
 	entries     map[string]*cacheEntry
 	maxEntries  int
-	stats       cacheStats
+	statsHits   atomic.Uint64 // Atomic counter for cache hits
+	statsMisses atomic.Uint64 // Atomic counter for cache misses
+	statsEvicts atomic.Uint64 // Atomic counter for evictions
+	statsSets   atomic.Uint64 // Atomic counter for sets
 	mu          sync.RWMutex
 }
 
@@ -143,7 +148,6 @@ func (sc *ShardedCache) GetWithTrace(ctx context.Context, r *dns.Msg) (*dns.Msg,
 		// Remove expired entry (upgrade to write lock)
 		shard.mu.Lock()
 		delete(shard.entries, key)
-		shard.stats.entries--
 
 		// Record cache size decrease
 		if shard.metrics != nil {
@@ -204,8 +208,9 @@ func (sc *ShardedCache) Set(ctx context.Context, r *dns.Msg, resp *dns.Msg) {
 	_, exists := shard.entries[key]
 
 	shard.entries[key] = entry
-	shard.stats.entries = len(shard.entries)
-	shard.stats.sets++
+
+	// Use atomic increment for sets counter (lock-free)
+	shard.statsSets.Add(1)
 
 	// Record cache size change (only increment if new entry)
 	if shard.metrics != nil && !exists {
@@ -253,8 +258,9 @@ func (sc *ShardedCache) SetBlocked(ctx context.Context, r *dns.Msg, resp *dns.Ms
 	_, exists := shard.entries[key]
 
 	shard.entries[key] = entry
-	shard.stats.entries = len(shard.entries)
-	shard.stats.sets++
+
+	// Use atomic increment for sets counter (lock-free)
+	shard.statsSets.Add(1)
 
 	// Record cache size change (only increment if new entry)
 	if shard.metrics != nil && !exists {
@@ -278,7 +284,9 @@ func (sc *ShardedCache) evictLRU(shard *CacheShard) {
 
 	if oldestKey != "" {
 		delete(shard.entries, oldestKey)
-		shard.stats.evictions++
+
+		// Use atomic increment for evictions counter (lock-free)
+		shard.statsEvicts.Add(1)
 
 		// Record cache size decrease
 		if shard.metrics != nil {
@@ -287,17 +295,20 @@ func (sc *ShardedCache) evictLRU(shard *CacheShard) {
 	}
 }
 
-// Stats returns aggregated cache statistics across all shards.
+// Stats returns aggregated cache statistics across all shards using atomic loads.
 func (sc *ShardedCache) Stats() Stats {
 	var aggregated Stats
 
 	for _, shard := range sc.shards {
+		// Read atomic counters without locking (lock-free)
+		aggregated.Hits += shard.statsHits.Load()
+		aggregated.Misses += shard.statsMisses.Load()
+		aggregated.Evictions += shard.statsEvicts.Load()
+		aggregated.Sets += shard.statsSets.Load()
+
+		// Entry count still needs read lock (map access)
 		shard.mu.RLock()
-		aggregated.Hits += shard.stats.hits
-		aggregated.Misses += shard.stats.misses
-		aggregated.Entries += shard.stats.entries
-		aggregated.Evictions += shard.stats.evictions
-		aggregated.Sets += shard.stats.sets
+		aggregated.Entries += len(shard.entries)
 		shard.mu.RUnlock()
 	}
 
@@ -315,7 +326,6 @@ func (sc *ShardedCache) Clear() {
 		shard.mu.Lock()
 		oldSize := len(shard.entries)
 		shard.entries = make(map[string]*cacheEntry, shard.maxEntries)
-		shard.stats.entries = 0
 
 		// Record cache size decrease
 		if shard.metrics != nil && oldSize > 0 {
@@ -361,47 +371,58 @@ func (sc *ShardedCache) cleanupLoop() {
 	}
 }
 
-// cleanup removes all expired entries from all shards.
+// cleanup removes all expired entries from all shards in parallel.
+// By processing shards concurrently, cleanup time is reduced by up to shardCount times.
 func (sc *ShardedCache) cleanup() {
 	now := time.Now()
-	totalRemoved := 0
+	var totalRemoved atomic.Uint64
 
-	for _, shard := range sc.shards {
-		shard.mu.Lock()
-		removed := 0
-		for key, entry := range shard.entries {
-			if now.After(entry.expiresAt) {
-				delete(shard.entries, key)
-				removed++
+	// Process all shards in parallel for maximum throughput
+	var wg sync.WaitGroup
+	wg.Add(sc.shardCount)
+
+	for i := range sc.shards {
+		go func(shard *CacheShard) {
+			defer wg.Done()
+
+			shard.mu.Lock()
+			removed := 0
+			for key, entry := range shard.entries {
+				if now.After(entry.expiresAt) {
+					delete(shard.entries, key)
+					removed++
+				}
 			}
-		}
+			shard.mu.Unlock()
 
-		if removed > 0 {
-			shard.stats.evictions += uint64(removed)
-			shard.stats.entries = len(shard.entries)
-			totalRemoved += removed
-		}
-		shard.mu.Unlock()
+			if removed > 0 {
+				// Use atomic increment for evictions counter (lock-free)
+				shard.statsEvicts.Add(uint64(removed))
+				totalRemoved.Add(uint64(removed))
+			}
+		}(sc.shards[i])
 	}
 
-	if totalRemoved > 0 {
+	// Wait for all shards to complete
+	wg.Wait()
+
+	removed := totalRemoved.Load()
+	if removed > 0 {
 		totalEntries := 0
 		for _, shard := range sc.shards {
 			shard.mu.RLock()
-			totalEntries += shard.stats.entries
+			totalEntries += len(shard.entries)
 			shard.mu.RUnlock()
 		}
 		sc.logger.Debug("Cleaned up expired cache entries",
-			"removed", totalRemoved,
+			"removed", removed,
 			"remaining", totalEntries)
 	}
 }
 
-// recordHit atomically increments the hit counter for a shard.
+// recordHit atomically increments the hit counter for a shard using lock-free operations.
 func (sc *ShardedCache) recordHit(shard *CacheShard) {
-	shard.mu.Lock()
-	shard.stats.hits++
-	shard.mu.Unlock()
+	shard.statsHits.Add(1)
 
 	// Record to Prometheus metrics
 	if shard.metrics != nil {
@@ -409,11 +430,9 @@ func (sc *ShardedCache) recordHit(shard *CacheShard) {
 	}
 }
 
-// recordMiss atomically increments the miss counter for a shard.
+// recordMiss atomically increments the miss counter for a shard using lock-free operations.
 func (sc *ShardedCache) recordMiss(shard *CacheShard) {
-	shard.mu.Lock()
-	shard.stats.misses++
-	shard.mu.Unlock()
+	shard.statsMisses.Add(1)
 
 	// Record to Prometheus metrics
 	if shard.metrics != nil {
