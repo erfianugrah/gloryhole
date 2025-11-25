@@ -145,6 +145,12 @@ nothing to commit, working tree clean
 - Added `pattern: binary-*` artifact filter
 - Prevents release failures from Docker cache timeouts
 
+### 5. Struct Field Alignment
+**Files**: `pkg/cache/cache.go`, `pkg/cache/sharded_cache.go`
+- Reordered struct fields to minimize padding
+- Improved CPU cache locality
+- Better memory access patterns
+
 ## 🎯 Commit History
 
 ```
@@ -153,6 +159,8 @@ c74dff1 - perf: optimize cache with atomic counters and parallel cleanup
 c38da83 - perf: add composite database indexes for common query patterns
 f44d130 - docs: add performance optimization results and benchmarks
 41791df - docs: reorganize performance benchmarks and add documentation
+2f4193b - docs: add final verification checklist
+9ec005d - perf: optimize struct field alignment for better memory layout
 ```
 
 ## 🚀 Deployment Ready
@@ -175,7 +183,7 @@ f44d130 - docs: add performance optimization results and benchmarks
 
 ## ⚠️ Notes
 
-- Struct field alignment optimization available but not critical
-- Can be addressed in future optimization pass (8-16 bytes per struct savings)
+- ✅ Struct field alignment optimized for cacheEntry, CacheShard, and ShardedCache
+- Further alignment improvements possible but provide diminishing returns
 - Current optimizations provide significant performance improvements
 - All changes maintain 100% backward compatibility
