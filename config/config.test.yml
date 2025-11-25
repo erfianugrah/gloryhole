@@ -3,6 +3,8 @@ server:
   listen_address: "127.0.0.1:5354" # Use port 5353 to avoid needing root
   udp_enabled: true
   tcp_enabled: true
+  enable_blocklist: true
+  enable_policies: true
   decision_trace: true  # Enable for test visibility
 
 upstream_dns_servers:
@@ -14,9 +16,11 @@ blocklists: []
 # Optional: whitelist for testing
 whitelist: []
 
-storage:
-  type: "memory"
-  sqlite_path: ""
+database:
+  enabled: false
+  backend: "sqlite"
+  sqlite:
+    path: "./glory-hole.test.db"
 
 cache:
   enabled: true           # Enable DNS caching for better performance

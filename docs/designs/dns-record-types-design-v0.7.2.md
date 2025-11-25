@@ -1651,7 +1651,7 @@ Each section should include:
 1. `pkg/dns/edns.go` - EDNS0 support
 2. `pkg/dns/edns_test.go` - EDNS0 tests
 3. `docs/configuration/record-types.md` - Complete reference
-4. `docs/development/dns-record-types-design-v0.7.2.md` - This document
+4. `docs/designs/dns-record-types-design-v0.7.2.md` - This document
 
 ### Files to Update
 1. `docs/configuration/local-records.md`

@@ -3,6 +3,8 @@ server:
   listen_address: "127.0.0.1:5354"
   udp_enabled: true
   tcp_enabled: true
+  enable_blocklist: true
+  enable_policies: true
   decision_trace: true  # Enable for test visibility
 
 upstream_dns_servers:
@@ -21,9 +23,12 @@ update_interval: 24h
 # Optional: whitelist for testing
 whitelist: []
 
-storage:
-  type: "memory"
-  sqlite_path: ""
+# Disable persistent query logging for perf-focused tests
+database:
+  enabled: false
+  backend: "sqlite"
+  sqlite:
+    path: "./glory-hole.blocklist-test.db"
 
 cache:
   enabled: true

@@ -424,7 +424,7 @@ body, err := io.ReadAll(r.Body)
 - **ID**: NEW - Emergency Feature Controls
 - **Priority**: 🟡 Medium (User-requested)
 - **Description**: Runtime toggles for ad-blocking and policy enforcement without restart
-- **Design Document**: `/docs/kill-switch-design.md`
+- **Design Document**: `/docs/designs/kill-switch-design.md`
 - **Use Cases**:
   - Emergency disable during false positives
   - Troubleshooting and diagnostics

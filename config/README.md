@@ -60,17 +60,25 @@ Minimal configuration for automated testing.
      max_entries: 10000
    ```
 
-3. Test your configuration:
+3. Test the configuration (choose either):
    ```bash
-   ./glory-hole -config my-config.yml -validate
+   # Quick validation without binding sockets
+   ./glory-hole --config my-config.yml --validate-config
+
+   # Or start the server (Ctrl+C after it confirms startup)
+   ./glory-hole --config my-config.yml
    ```
 
 ## Configuration Sections
 
 ### Server
 - **listen_address**: IP and port to bind (default: ":53")
-- **api_address**: HTTP API endpoint (default: ":8080")
+- **web_ui_address**: HTTP API/UI endpoint (default: ":8080")
 - **tcp_enabled**: Enable TCP DNS queries (default: true)
+- **udp_enabled**: Enable UDP DNS queries (default: true)
+- **enable_blocklist**: Runtime kill-switch for blocklist evaluation (default: true)
+- **enable_policies**: Runtime kill-switch for the policy engine (default: true)
+- **decision_trace**: Include per-stage breadcrumbs for blocked queries (default: false)
 
 ### Upstreams
 List of upstream DNS servers to forward queries to.
@@ -100,20 +108,22 @@ OpenTelemetry and Prometheus metrics configuration.
 
 ## Validation
 
-Validate your configuration before starting:
+Use `--validate-config` for a dry-run check (no sockets opened):
 
 ```bash
-./glory-hole -config my-config.yml -validate
+./glory-hole --config my-config.yml --validate-config
 ```
+
+Starting the server without that flag also validates the configuration and exits with an error if anything is invalid.
 
 ## Environment Variables
 
 Override config values with environment variables:
 
 ```bash
-export GLORYHOLE_LISTEN_ADDRESS=":5353"
-export GLORYHOLE_API_ADDRESS=":8081"
-./glory-hole -config config.yml
+export GLORY_HOLE_LISTEN_ADDRESS=":5353"
+export GLORY_HOLE_WEB_UI_ADDRESS=":8081"
+./glory-hole --config config.yml
 ```
 
 ## See Also

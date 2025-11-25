@@ -77,10 +77,17 @@ test-coverage:
 	go tool cover -html=coverage.out -o coverage.html
 	@echo "Coverage report: coverage.html"
 
+LINT_DIRS := $(shell go list -f '{{.Dir}}' ./... | sed -e 's#$(CURDIR)/##')
+
 ## lint: Run golangci-lint
 lint:
 	@echo "Running linter..."
-	golangci-lint run --timeout=5m ./...
+	@golangci-lint cache clean
+	@set -e; \
+	for dir in $(LINT_DIRS); do \
+		echo "  • $$dir"; \
+		golangci-lint run --timeout=5m ./$$dir; \
+	done
 
 ## fmt: Format Go code
 fmt:

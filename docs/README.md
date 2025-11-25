@@ -27,6 +27,7 @@ Understand how Glory-Hole works internally.
 - **[Component Details](architecture/components.md)** - Deep dive into each component
 - **[Performance](architecture/performance.md)** - Benchmarks and optimizations
 - **[Design Decisions](architecture/design-decisions.md)** - Architecture decision records
+- **[Design Library](designs/)** - Feature-level architecture docs (kill-switch, conditional forwarding, metrics, DNSSEC, etc.)
 
 ### [Development](development/)
 Contributing to Glory-Hole development.
@@ -34,6 +35,9 @@ Contributing to Glory-Hole development.
 - **[Development Setup](development/setup.md)** - Set up your dev environment
 - **[Testing Guide](development/testing.md)** - Running and writing tests
 - **[Roadmap](roadmap.md)** - Future plans and milestones
+
+### [Working & Implementation Docs](../working-docs/README.md)
+Status reports, in-progress release plans, verification/cleanup logs, and raw benchmark artifacts for contributors. Finalized feature designs live under [docs/designs/](designs/).
 
 ### [Deployment](deployment/)
 Deploy Glory-Hole in production.
@@ -63,7 +67,7 @@ API and integration documentation.
 - [Architecture Overview](architecture/overview.md)
 
 ### For Operators
-- [Kubernetes Deployment](deployment/kubernetes.md)
+- [Kubernetes Deployment](../deploy/kubernetes/README.md)
 - [Monitoring Setup](deployment/monitoring.md)
 - [Troubleshooting](guide/troubleshooting.md)
 

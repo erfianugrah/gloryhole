@@ -29,10 +29,11 @@ import (
 )
 
 var (
-	configPath  = flag.String("config", "config.yml", "Path to configuration file")
-	showVersion = flag.Bool("version", false, "Show version information and exit")
-	healthCheck = flag.Bool("health-check", false, "Perform health check and exit (for Docker HEALTHCHECK)")
-	apiAddress  = flag.String("api-address", "", "Override API address for health check (default: from config)")
+	configPath     = flag.String("config", "config.yml", "Path to configuration file")
+	showVersion    = flag.Bool("version", false, "Show version information and exit")
+	validateConfig = flag.Bool("validate-config", false, "Validate configuration file and exit")
+	healthCheck    = flag.Bool("health-check", false, "Perform health check and exit (for Docker HEALTHCHECK)")
+	apiAddress     = flag.String("api-address", "", "Override API address for health check (default: from config)")
 
 	// Build-time variables set via ldflags
 	// Example: go build -ldflags "-X main.version=0.7.2 -X main.buildTime=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -58,6 +59,16 @@ func main() {
 		fmt.Printf("Build Time:  %s\n", buildTime)
 		fmt.Printf("Go Version:  %s\n", runtime.Version())
 		os.Exit(0)
+	}
+
+	// Handle --validate-config flag
+	if *validateConfig {
+		if _, err := config.Load(*configPath); err != nil {
+			fmt.Fprintf(os.Stderr, "Configuration invalid: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Println("Configuration valid.")
+		return
 	}
 
 	// Handle --health-check flag

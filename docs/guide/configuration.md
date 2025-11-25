@@ -6,7 +6,9 @@ This guide provides comprehensive documentation for all Glory-Hole DNS Server co
 
 - [Configuration File](#configuration-file)
 - [Server Configuration](#server-configuration)
+- [Feature Kill Switches](#feature-kill-switches)
 - [Upstream DNS Servers](#upstream-dns-servers)
+- [Rate Limiting](#rate-limiting)
 - [Blocklists](#blocklists)
 - [Cache Configuration](#cache-configuration)
 - [Database Configuration](#database-configuration)
@@ -29,10 +31,13 @@ Glory-Hole uses YAML for configuration. By default, it looks for `config.yml` in
 glory-hole
 
 # Custom location
-glory-hole -config /etc/glory-hole/config.yml
+glory-hole --config /etc/glory-hole/config.yml
 
 # Alternative flag
 glory-hole --config /path/to/config.yml
+
+# Validate without binding ports
+glory-hole --config /path/to/config.yml --validate-config
 ```
 
 ### Basic Configuration Template
@@ -86,6 +91,8 @@ server:
 | `tcp_enabled` | bool | `true` | Enable TCP DNS queries (RFC requirement) |
 | `udp_enabled` | bool | `true` | Enable UDP DNS queries (most common) |
 | `web_ui_address` | string | `:8080` | Web UI and REST API address |
+| `enable_blocklist` | bool | `true` | Runtime kill switch for blocklists (used by Web UI/API). |
+| `enable_policies` | bool | `true` | Runtime kill switch for the policy engine. |
 | `decision_trace` | bool | `false` | Capture multi-stage breadcrumbs for blocked queries (higher storage/log volume) |
 
 ### Examples
@@ -122,7 +129,25 @@ server:
 ```
 > Enabling this generates richer query logs (and larger DB rows) but makes it easy to audit every blocking stage directly from the UI/API.
 
-## Upstream DNS Servers
+## Feature Kill Switches
+
+Glory-Hole exposes runtime kill switches (persisted back to `config.yml`) so operators can disable blocklists or policies instantly for troubleshooting. Both default to `true`.
+
+```yaml
+server:
+  enable_blocklist: true   # Disable to allow every domain (bypasses blocklists only)
+  enable_policies: true    # Disable to bypass policy engine decisions
+```
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `enable_blocklist` | bool | `true` | Master toggle for blocklist evaluation in the DNS handler and API/UI. |
+| `enable_policies` | bool | `true` | Master toggle for the policy engine. |
+
+**Operational tips**
+- The Web UI and `/api/features` endpoint flip these values and write them back via `pkg/config.Save`.
+- Blocklists and policies remain in memory; re-enabling is instantaneous.
+- Use kill switches rather than editing `blocklists`/`policy.enabled` when you need a temporary bypass.
 
 ## Rate Limiting
 
@@ -1209,10 +1234,16 @@ Environment variables can override config file settings:
 
 ## Configuration Validation
 
-Glory-Hole validates configuration on startup:
+Use `--validate-config` to run the validator without binding network sockets:
 
 ```bash
-glory-hole -config config.yml
+glory-hole --config config.yml --validate-config
+```
+
+Starting the server normally performs the same validation (Ctrl+C after seeing “server started”):
+
+```bash
+glory-hole --config config.yml
 ```
 
 Common validation errors:
@@ -1230,13 +1261,6 @@ Error: invalid logging level: "trace" (must be debug, info, warn, or error)
 **Port conflicts:**
 ```
 Error: bind: address already in use
-```
-
-### Validate Without Starting
-
-```bash
-# Dry-run validation (future feature)
-glory-hole -config config.yml --validate
 ```
 
 ## Common Patterns

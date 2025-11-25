@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `cmd/glory-hole`: `--validate-config` flag that loads `config.yml`, reports validation errors, and exits without binding sockets.
+
+### Changed
+- Documentation + sample configs now describe the new validation flag, kill-switch defaults, and modern database layout so users have accurate, deduplicated guidance.
+- `make lint` now runs `golangci-lint` per package directory to avoid toolchain path-resolution bugs and ensure the target passes reliably.
+
 ### Phase 3 - Advanced Features (Future)
 - DoH/DoT support (DNS over HTTPS/TLS)
 - DNSSEC validation
@@ -63,8 +70,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Performance validated with load tests
 
 #### Documentation
-- `docs/development/v0.7.8-dnssec-metrics-plan.md` - Implementation plan and design decisions
-- `docs/development/v0.7.8-test-report.md` - Complete test results and validation
+- `docs/designs/v0.7.8-dnssec-metrics-plan.md` - Implementation plan and design decisions
+- `working-docs/reports/v0.7.8-test-report.md` - Complete test results and validation
 
 ---
 
@@ -450,8 +457,8 @@ conditional_forwarding:
 
 ### Documentation
 - Added comprehensive conditional forwarding section to README
-- Created implementation guide: `docs/development/v0.7.0-conditional-forwarding-implementation.md`
-- Created roadmap: `docs/development/ROADMAP.md`
+- Created implementation guide: `docs/designs/v0.7.0-conditional-forwarding-implementation.md`
+- Created roadmap: `docs/roadmap.md`
 - Updated example configuration with detailed comments
 - Added migration guide for new users
 
@@ -769,7 +776,7 @@ PERFORMANCE.md
 # New paths (0.6.0)
 config/config.example.yml
 docs/README.md
-docs/development/roadmap.md
+docs/roadmap.md
 docs/architecture/overview.md
 docs/architecture/performance.md
 ```

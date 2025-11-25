@@ -13,9 +13,11 @@ Comprehensive performance optimization results from the v0.7.22 optimization wor
 
 ### Benchmark Data Files
 
-- **baseline_cache.txt** - Initial cache benchmarks before optimizations
-- **baseline_load.txt** - Initial load test benchmarks before optimizations
-- **phase2_benchmarks.txt** - Benchmarks after implementing all optimizations
+Raw datasets now live in [`../working-docs/performance-data/`](../working-docs/performance-data/):
+
+- **[baseline_cache.txt](../working-docs/performance-data/baseline_cache.txt)** - Initial cache benchmarks before optimizations
+- **[baseline_load.txt](../working-docs/performance-data/baseline_load.txt)** - Initial load test benchmarks before optimizations
+- **[phase2_benchmarks.txt](../working-docs/performance-data/phase2_benchmarks.txt)** - Benchmarks after implementing all optimizations
 
 ## Key Optimizations Implemented
 
