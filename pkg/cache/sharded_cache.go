@@ -25,27 +25,29 @@ var (
 
 // ShardedCache is a thread-safe DNS response cache with multiple shards to reduce lock contention.
 // Each shard operates independently with its own mutex, allowing concurrent access to different shards.
+// Fields ordered for optimal memory alignment
 type ShardedCache struct {
-	shards      []*CacheShard
-	shardCount  int
-	logger      *logging.Logger
-	stopCleanup chan struct{}
-	cleanupDone chan struct{}
+	shards      []*CacheShard    // Slice of cache shards (24 bytes)
+	logger      *logging.Logger  // Logger instance (8 bytes)
+	stopCleanup chan struct{}    // Channel to stop cleanup (8 bytes)
+	cleanupDone chan struct{}    // Channel signaling cleanup done (8 bytes)
+	shardCount  int              // Number of shards (8 bytes)
 }
 
 // CacheShard represents a single shard of the cache with its own lock and entries.
 // Stats are tracked using atomic operations to avoid lock contention on hot paths.
+// Fields ordered for optimal memory alignment (reduces padding from 56 to 32 bytes)
 type CacheShard struct {
-	cfg         *config.CacheConfig
-	logger      *logging.Logger
-	metrics     *telemetry.Metrics
-	entries     map[string]*cacheEntry
-	maxEntries  int
-	statsHits   atomic.Uint64 // Atomic counter for cache hits
-	statsMisses atomic.Uint64 // Atomic counter for cache misses
-	statsEvicts atomic.Uint64 // Atomic counter for evictions
-	statsSets   atomic.Uint64 // Atomic counter for sets
-	mu          sync.RWMutex
+	mu          sync.RWMutex              // Lock for entries map (largest field first)
+	entries     map[string]*cacheEntry    // Cache entries map
+	cfg         *config.CacheConfig       // Cache configuration
+	logger      *logging.Logger           // Logger instance
+	metrics     *telemetry.Metrics        // Metrics recorder
+	statsHits   atomic.Uint64             // Atomic counter for cache hits
+	statsMisses atomic.Uint64             // Atomic counter for cache misses
+	statsEvicts atomic.Uint64             // Atomic counter for evictions
+	statsSets   atomic.Uint64             // Atomic counter for sets
+	maxEntries  int                       // Maximum entries per shard
 }
 
 // NewSharded creates a new sharded DNS cache with the specified number of shards.

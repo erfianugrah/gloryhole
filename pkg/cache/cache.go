@@ -28,21 +28,22 @@ type Cache struct {
 }
 
 // cacheEntry holds a cached DNS response with metadata
+// Fields ordered for optimal memory alignment (reduces padding from 72 to 64 bytes)
 type cacheEntry struct {
-	// The cached DNS response (deep copy to avoid mutations)
-	msg *dns.Msg
+	// Block trace metadata (for blocked responses) - 24 bytes
+	blockTrace []storage.BlockTraceEntry
 
-	// When this entry expires (based on DNS TTL)
+	// When this entry expires (based on DNS TTL) - 16 bytes
 	expiresAt time.Time
 
-	// When this entry was last accessed (for LRU eviction)
+	// When this entry was last accessed (for LRU eviction) - 16 bytes
 	lastAccess time.Time
 
-	// Size in bytes (for memory tracking)
-	size int
+	// The cached DNS response (deep copy to avoid mutations) - 8 bytes
+	msg *dns.Msg
 
-	// Block trace metadata (for blocked responses)
-	blockTrace []storage.BlockTraceEntry
+	// Size in bytes (for memory tracking) - 8 bytes
+	size int
 }
 
 // cacheStats tracks cache performance metrics
