@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"html/template"
 	"io"
 	"log/slog"
 	"net/http"
@@ -497,27 +498,35 @@ func TestInitTemplates(t *testing.T) {
 		t.Fatalf("initTemplates() failed: %v", err)
 	}
 
-	if templates == nil {
-		t.Error("templates should not be nil after initialization")
+	pageTemplates := map[string]*template.Template{
+		"dashboard.html": dashboardTemplate,
+		"queries.html":   queriesTemplate,
+		"policies.html":  policiesTemplate,
+		"settings.html":  settingsTemplate,
 	}
 
-	// Test that all expected templates exist
-	expectedTemplates := []string{
-		"base.html",
-		"dashboard.html",
-		"queries.html",
-		"policies.html",
-		"settings.html",
-		"stats_partial.html",
-		"queries_partial.html",
-		"top_domains_partial.html",
-		"policies_partial.html",
-	}
-
-	for _, name := range expectedTemplates {
-		tmpl := templates.Lookup(name)
+	for name, tmpl := range pageTemplates {
 		if tmpl == nil {
-			t.Errorf("Expected template %s not found", name)
+			t.Fatalf("Expected %s template to be initialized", name)
+		}
+		if tmpl.Lookup(name) == nil {
+			t.Errorf("Template %s missing entrypoint %s", name, name)
+		}
+	}
+
+	partialTemplates := map[string]*template.Template{
+		"stats_partial.html":   statsPartialTemplate,
+		"queries_partial.html": queriesPartialTemplate,
+		"top_domains_partial.html": topDomainsTemplate,
+		"policies_partial.html":    policiesPartialTemplate,
+	}
+
+	for name, tmpl := range partialTemplates {
+		if tmpl == nil {
+			t.Fatalf("Expected %s template to be initialized", name)
+		}
+		if tmpl.Lookup(name) == nil {
+			t.Errorf("Standalone template %s missing definition", name)
 		}
 	}
 }
@@ -532,12 +541,15 @@ func TestGetStaticFS(t *testing.T) {
 		t.Error("staticFS should not be nil")
 	}
 
-	// Try to open a known file
-	file, err := fs.Open("css/style.css")
-	if err != nil {
-		t.Errorf("Failed to open static file css/style.css: %v", err)
-	} else {
-		defer func() { _ = file.Close() }()
+	// Try to open known files
+	files := []string{"css/style.css", "js/mini-htmx.js"}
+	for _, path := range files {
+		f, err := fs.Open(path)
+		if err != nil {
+			t.Errorf("Failed to open static file %s: %v", path, err)
+			continue
+		}
+		_ = f.Close()
 	}
 }
 

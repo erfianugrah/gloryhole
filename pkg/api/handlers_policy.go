@@ -65,7 +65,7 @@ func (s *Server) handleGetPolicies(w http.ResponseWriter, r *http.Request) {
 			Policies: policies,
 		}
 
-		if err := templates.ExecuteTemplate(w, "policies_partial.html", data); err != nil {
+		if err := policiesPartialTemplate.ExecuteTemplate(w, "policies_partial.html", data); err != nil {
 			s.logger.Error("Failed to render policies partial", "error", err)
 			http.Error(w, "Internal server error", http.StatusInternalServerError)
 		}

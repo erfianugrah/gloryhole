@@ -37,7 +37,7 @@ func (s *Server) newSettingsPageData(cfg *config.Config) *SettingsPageData {
 
 func (s *Server) renderSettingsPartial(w http.ResponseWriter, tmpl string, data *SettingsPageData, status int) {
 	var buf bytes.Buffer
-	if err := templates.ExecuteTemplate(&buf, tmpl, data); err != nil {
+	if err := settingsTemplate.ExecuteTemplate(&buf, tmpl, data); err != nil {
 		s.logger.Error("Failed to render settings partial", "template", tmpl, "error", err)
 		http.Error(w, "Failed to render template", http.StatusInternalServerError)
 		return

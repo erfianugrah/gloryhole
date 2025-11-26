@@ -18,8 +18,17 @@ var templatesFS embed.FS
 //go:embed ui/static/*
 var staticFS embed.FS
 
-// UI templates
-var templates *template.Template
+// UI templates grouped per page/partial to prevent block collisions.
+var (
+	dashboardTemplate      *template.Template
+	queriesTemplate        *template.Template
+	policiesTemplate       *template.Template
+	settingsTemplate       *template.Template
+	statsPartialTemplate   *template.Template
+	queriesPartialTemplate *template.Template
+	topDomainsTemplate     *template.Template
+	policiesPartialTemplate *template.Template
+)
 
 func formatVersionLabel(version string) string {
 	v := strings.TrimSpace(version)
@@ -39,17 +48,14 @@ func (s *Server) uiVersion() string {
 // initTemplates initializes the HTML templates
 func initTemplates() error {
 	var err error
-	// Parse templates from embedded filesystem
+
 	tmplFS, err := fs.Sub(templatesFS, "ui/templates")
 	if err != nil {
 		return err
 	}
 
-	// Add template functions
 	funcMap := template.FuncMap{
-		"lower": func(s string) string {
-			return strings.ToLower(s)
-		},
+		"lower": strings.ToLower,
 		"json": func(v interface{}) string {
 			b, _ := json.Marshal(v)
 			return string(b)
@@ -60,8 +66,53 @@ func initTemplates() error {
 		"join": strings.Join,
 	}
 
-	templates, err = template.New("").Funcs(funcMap).ParseFS(tmplFS, "*.html")
-	return err
+	baseTemplate, err := template.New("base.html").Funcs(funcMap).ParseFS(tmplFS, "base.html")
+	if err != nil {
+		return err
+	}
+
+	parsePage := func(name string) (*template.Template, error) {
+		clone, err := baseTemplate.Clone()
+		if err != nil {
+			return nil, err
+		}
+		if _, err := clone.ParseFS(tmplFS, name); err != nil {
+			return nil, err
+		}
+		return clone, nil
+	}
+
+	if dashboardTemplate, err = parsePage("dashboard.html"); err != nil {
+		return err
+	}
+	if queriesTemplate, err = parsePage("queries.html"); err != nil {
+		return err
+	}
+	if policiesTemplate, err = parsePage("policies.html"); err != nil {
+		return err
+	}
+	if settingsTemplate, err = parsePage("settings.html"); err != nil {
+		return err
+	}
+
+	parseStandalone := func(name string) (*template.Template, error) {
+		return template.New(name).Funcs(funcMap).ParseFS(tmplFS, name)
+	}
+
+	if statsPartialTemplate, err = parseStandalone("stats_partial.html"); err != nil {
+		return err
+	}
+	if queriesPartialTemplate, err = parseStandalone("queries_partial.html"); err != nil {
+		return err
+	}
+	if topDomainsTemplate, err = parseStandalone("top_domains_partial.html"); err != nil {
+		return err
+	}
+	if policiesPartialTemplate, err = parseStandalone("policies_partial.html"); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // getStaticFS returns the static files filesystem
@@ -88,7 +139,7 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 		Uptime:  s.getUptime(),
 	}
 
-	if err := templates.ExecuteTemplate(w, "dashboard.html", data); err != nil {
+	if err := dashboardTemplate.ExecuteTemplate(w, "dashboard.html", data); err != nil {
 		s.logger.Error("Failed to render dashboard template", "error", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
@@ -108,7 +159,7 @@ func (s *Server) handleQueriesPage(w http.ResponseWriter, r *http.Request) {
 		Version: s.uiVersion(),
 	}
 
-	if err := templates.ExecuteTemplate(w, "queries.html", data); err != nil {
+	if err := queriesTemplate.ExecuteTemplate(w, "queries.html", data); err != nil {
 		s.logger.Error("Failed to render queries template", "error", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
@@ -142,7 +193,7 @@ func (s *Server) handleStatsPartial(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if err := templates.ExecuteTemplate(w, "stats_partial.html", stats); err != nil {
+	if err := statsPartialTemplate.ExecuteTemplate(w, "stats_partial.html", stats); err != nil {
 		s.logger.Error("Failed to render stats partial", "error", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
@@ -162,7 +213,7 @@ func (s *Server) handlePoliciesPage(w http.ResponseWriter, r *http.Request) {
 		Version: s.uiVersion(),
 	}
 
-	if err := templates.ExecuteTemplate(w, "policies.html", data); err != nil {
+	if err := policiesTemplate.ExecuteTemplate(w, "policies.html", data); err != nil {
 		s.logger.Error("Failed to render policies template", "error", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
@@ -185,7 +236,7 @@ func (s *Server) handleSettingsPage(w http.ResponseWriter, r *http.Request) {
 
 	data := s.newSettingsPageData(cfg)
 
-	if err := templates.ExecuteTemplate(w, "settings.html", data); err != nil {
+	if err := settingsTemplate.ExecuteTemplate(w, "settings.html", data); err != nil {
 		s.logger.Error("Failed to render settings template", "error", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
@@ -242,7 +293,7 @@ func (s *Server) handleTopDomainsPartial(w http.ResponseWriter, r *http.Request)
 		Domains: domains,
 	}
 
-	if err := templates.ExecuteTemplate(w, "top_domains_partial.html", data); err != nil {
+	if err := topDomainsTemplate.ExecuteTemplate(w, "top_domains_partial.html", data); err != nil {
 		s.logger.Error("Failed to render top domains partial", "error", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
@@ -315,7 +366,7 @@ func (s *Server) handleQueriesPartial(w http.ResponseWriter, r *http.Request) {
 		Queries: queries,
 	}
 
-	if err := templates.ExecuteTemplate(w, "queries_partial.html", data); err != nil {
+	if err := queriesPartialTemplate.ExecuteTemplate(w, "queries_partial.html", data); err != nil {
 		s.logger.Error("Failed to render queries partial", "error", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
