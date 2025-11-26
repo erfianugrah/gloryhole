@@ -13,7 +13,8 @@ Glory-Hole is a self-contained DNS resolver that combines blocklists, an express
 - Expr-powered policy engine that can BLOCK/ALLOW/REDIRECT/FORWARD queries per domain, client, or schedule.
 - Authoritative local records (A/AAAA/CNAME/TXT/MX/PTR/SRV/NS/SOA/CAA) plus conditional forwarding, whitelist patterns, and kill-switches.
 - LRU/sharded DNS cache, per-client token-bucket rate limiting, query logging with SQLite, and OpenTelemetry + Prometheus metrics.
-- REST API + HTMX Web UI for live stats, query log, policies, and feature toggles, plus a Pi-hole import tool for fast migrations.
+- REST API + HTMX Web UI for live stats, query log, policies, blocklists, client roster, and feature toggles, plus a Pi-hole import tool for fast migrations.
+- Guided policy builder with on-the-fly rule tester, JSON export, and live query latency breakdowns (total vs upstream) to quickly debug bottlenecks.
 
 ## Architecture Overview
 
@@ -190,14 +191,14 @@ Refer to `config/config.example.yml` and `docs/guide/configuration.md` for exhau
 
 ### Storage, Telemetry, and Monitoring
 
-- Query logs are written asynchronously through `pkg/storage` (SQLite via modernc, WAL enabled, batched inserts, retention cleanup). Query entries include client IP, response code, cache/block flags, upstream, and optional block trace.
-- `pkg/telemetry` exposes Prometheus metrics on `:9090/metrics` (configurable) and seeds OpenTelemetry meters for counters/histograms used throughout the codebase.
+- Query logs are written asynchronously through `pkg/storage` (SQLite via modernc, WAL enabled, batched inserts, retention cleanup). Query entries include client IP, response code, cache/block flags, upstream, upstream response time, and optional block trace.
+- `pkg/telemetry` exposes Prometheus metrics on `:9090/metrics` (configurable) and seeds OpenTelemetry meters for counters/histograms used throughout the codebase. The dashboard augments those stats with host-level CPU%, memory usage, and temperature readings collected via gopsutil.
 - Health checks: `--health-check` CLI flag hits `/api/health`, Kubernetes/Compose manifests already wire them up.
 
 ### Web UI & REST API
 
 - The API listens on `server.web_ui_address` (default `:8080`) and exposes `/api/health`, `/api/stats`, `/api/queries`, `/api/top-domains`, `/api/policies`, `/api/features`, `/api/cache/purge`, etc. HTMX endpoints under `/api/ui/*` feed the dashboard.
-- Pages: `/` (dashboard), `/queries`, `/policies`, `/settings`. UI actions include policy CRUD, blocklist reloads, cache flush, and feature kill-switches with temporary disable timers.
+- Pages: `/` (dashboard with live charts + system metrics), `/queries` (filters, traces, total/upstream latency), `/policies` (guided builder + export + inline tester), `/settings`, `/clients`, and `/blocklists` (source inventory plus tester). UI actions include policy CRUD, blocklist reloads, cache flush, JSON export, client annotations/groups, and feature kill-switches with temporary disable timers.
 - CORS is enabled for API routes so you can embed metrics elsewhere.
 
 ### Pi-hole Import Tool

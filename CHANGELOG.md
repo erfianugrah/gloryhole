@@ -9,10 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - `cmd/glory-hole`: `--validate-config` flag that loads `config.yml`, reports validation errors, and exits without binding sockets.
+- REST/UI: Guided policy builder with builder/expression toggle, inline rule tester, and `/api/policies/export` for downloading the active rule set.
+- REST/UI: Dedicated `/clients` and `/blocklists` pages for viewing client summaries, grouping/notes, and verifying blocklist decisions.
+- Dashboard: Host telemetry cards (CPU %, memory usage, temperature) plus per-query latency breakdowns (total vs upstream) backed by a new `upstream_time_ms` column in SQLite.
 
 ### Changed
 - Documentation + sample configs now describe the new validation flag, kill-switch defaults, and modern database layout so users have accurate, deduplicated guidance.
 - `make lint` now runs `golangci-lint` per package directory to avoid toolchain path-resolution bugs and ensure the target passes reliably.
+- Top-domain analytics now stream directly from query logs which fixes inaccurate allowed/blocked listings and preserves first/last seen timestamps for both domains and clients.
 
 ### Phase 3 - Advanced Features (Future)
 - DoH/DoT support (DNS over HTTPS/TLS)

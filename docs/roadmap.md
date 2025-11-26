@@ -182,39 +182,34 @@
 - **UI-011 – HTTP API rate limiting**: API middleware now throttles per-IP using the existing token bucket manager and shares configuration/live status through `/api/config` (`pkg/api/middleware_ratelimit.go`, `cmd/glory-hole/main.go:150-260`).
 - **UI-012 – Dashboard analytics**: `/api/stats/query-types` powers the doughnut chart and new Chart.js components now render cache hit rate plus top allowed/blocked domains using live API data (`pkg/storage/sqlite.go:514-596`, `pkg/api/handlers.go:189-225`, `pkg/api/ui/templates/dashboard.html`).
 - **CONFIG-001 – Runtime config reloads**: Upstream DNS, cache, and logging edits apply immediately via hot-reload hooks (`cmd/glory-hole/main.go`, `pkg/blocklist/manager.go`).
+- **UI-004 – Client Management**: `/clients` surfaces auto-discovered clients, last/first seen timestamps, blocked/NXDOMAIN counts, and editable names/notes/groups (`pkg/api/handlers_clients.go`, `pkg/api/ui/templates/clients.html`, `pkg/storage/sqlite_clients.go`).
+- **UI-005 – Advanced Analytics (Phase 1)**: Dashboard cards now include CPU%, memory, and temperature alongside per-query total vs upstream latency, backed by `github.com/shirou/gopsutil` and the new `upstream_time_ms` column (`pkg/api/system_metrics.go`, `pkg/api/handlers.go`, `pkg/dns/server.go`, `pkg/storage/migrations.go`).
+- **UI-008 – Export Functionality**: Operators can download the current rule set via `/api/policies/export` and the UI export button (`pkg/api/handlers_policy.go`, `pkg/api/ui/templates/policies.html`).
+- **UI-013 – Guided Policy Builder**: Policies modal now offers a condition builder with presets, expression toggle, and inline tester to safely author expr rules (`pkg/api/ui/templates/policies.html`).
+- **UI-014 – Blocklist Inspector**: `/blocklists` inventories sources, shows live counts, last-update time, and includes a tester against the active blocklist (`pkg/api/handlers_blocklists.go`, `pkg/api/ui/templates/blocklists.html`).
 
 ### Missing Features
 
-#### UI-004: No Client Management
-- **Priority**: 🟡 Medium
-- **Status**: Missing (roadmap Phase 3 feature)
-- **Impact**: Cannot see per-client statistics
-- **Planned**: v0.8.0
-
 #### UI-005: No Advanced Analytics
 - **Priority**: 🟡 Medium
-- **Missing**: Per-client insights, geographic breakdown, historical comparisons
-- **Planned**: v0.8.0
+- **Status**: 🚧 Partially delivered (system metrics + latency drill-down shipped)
+- **Next**: Per-client drill-downs (top domains, policy hits), rolling comparisons, exportable CSVs
+- **Planned**: v0.8.x
 
 #### UI-006: No Bulk Operations
 - **Priority**: 🟡 Medium
 - **Missing**: Cannot enable/disable multiple policies
 - **Planned**: v0.8.0
 
-#### UI-007: No Dark Mode
-- **Priority**: 🟢 Low
-- **Status**: Only light theme available
-- **Planned**: v0.8.0
-
-#### UI-008: No Export Functionality
-- **Priority**: 🟢 Low
-- **Status**: Cannot export query logs or statistics
-- **Planned**: v0.8.0
-
 #### UI-009: No Search in Policy List
 - **Priority**: 🟢 Low
 - **Status**: No filtering when policy list grows
 - **Planned**: v0.8.0
+
+#### UI-015: Bulk Policy & Client Actions
+- **Priority**: 🟡 Medium
+- **Missing**: Multi-select toggles/export/import for policies and client annotations
+- **Planned**: v0.8.x
 
 ---
 
