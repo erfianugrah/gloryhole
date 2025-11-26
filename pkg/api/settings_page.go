@@ -29,7 +29,7 @@ type SettingsPageData struct {
 
 func (s *Server) newSettingsPageData(cfg *config.Config) *SettingsPageData {
 	return &SettingsPageData{
-		Version:    s.version,
+		Version:    s.uiVersion(),
 		Config:     convertConfigResponse(cfg),
 		ConfigPath: s.configPath,
 	}

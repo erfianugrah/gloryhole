@@ -21,6 +21,21 @@ var staticFS embed.FS
 // UI templates
 var templates *template.Template
 
+func formatVersionLabel(version string) string {
+	v := strings.TrimSpace(version)
+	if v == "" {
+		return "vdev"
+	}
+	if strings.HasPrefix(strings.ToLower(v), "v") {
+		return v
+	}
+	return "v" + v
+}
+
+func (s *Server) uiVersion() string {
+	return formatVersionLabel(s.version)
+}
+
 // initTemplates initializes the HTML templates
 func initTemplates() error {
 	var err error
@@ -43,16 +58,6 @@ func initTemplates() error {
 			return a + b
 		},
 		"join": strings.Join,
-		"versionLabel": func(version string) string {
-			v := strings.TrimSpace(version)
-			if v == "" {
-				return "vdev"
-			}
-			if strings.HasPrefix(strings.ToLower(v), "v") {
-				return v
-			}
-			return "v" + v
-		},
 	}
 
 	templates, err = template.New("").Funcs(funcMap).ParseFS(tmplFS, "*.html")
@@ -79,7 +84,7 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 		Version string
 		Uptime  string
 	}{
-		Version: s.version,
+		Version: s.uiVersion(),
 		Uptime:  s.getUptime(),
 	}
 
@@ -100,7 +105,7 @@ func (s *Server) handleQueriesPage(w http.ResponseWriter, r *http.Request) {
 	data := struct {
 		Version string
 	}{
-		Version: s.version,
+		Version: s.uiVersion(),
 	}
 
 	if err := templates.ExecuteTemplate(w, "queries.html", data); err != nil {
@@ -154,7 +159,7 @@ func (s *Server) handlePoliciesPage(w http.ResponseWriter, r *http.Request) {
 	data := struct {
 		Version string
 	}{
-		Version: s.version,
+		Version: s.uiVersion(),
 	}
 
 	if err := templates.ExecuteTemplate(w, "policies.html", data); err != nil {
