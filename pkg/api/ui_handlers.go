@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"glory-hole/pkg/storage"
 )
 
 //go:embed ui/templates/*
@@ -20,15 +22,19 @@ var staticFS embed.FS
 
 // UI templates grouped per page/partial to prevent block collisions.
 var (
-	dashboardTemplate      *template.Template
-	queriesTemplate        *template.Template
-	policiesTemplate       *template.Template
-	settingsTemplate       *template.Template
-	statsPartialTemplate   *template.Template
-	queriesPartialTemplate *template.Template
-	topDomainsTemplate     *template.Template
+	dashboardTemplate       *template.Template
+	queriesTemplate         *template.Template
+	policiesTemplate        *template.Template
+	settingsTemplate        *template.Template
+	clientsTemplate         *template.Template
+	blocklistsTemplate      *template.Template
+	statsPartialTemplate    *template.Template
+	queriesPartialTemplate  *template.Template
+	topDomainsTemplate      *template.Template
 	policiesPartialTemplate *template.Template
 )
+
+const dnsRcodeNameError = 3
 
 func formatVersionLabel(version string) string {
 	v := strings.TrimSpace(version)
@@ -92,6 +98,12 @@ func initTemplates() error {
 		return err
 	}
 	if settingsTemplate, err = parsePage("settings.html"); err != nil {
+		return err
+	}
+	if clientsTemplate, err = parsePage("clients.html"); err != nil {
+		return err
+	}
+	if blocklistsTemplate, err = parsePage("blocklists.html"); err != nil {
 		return err
 	}
 
@@ -333,6 +345,10 @@ func (s *Server) handleQueriesPartial(w http.ResponseWriter, r *http.Request) {
 		QueryType      string
 		Blocked        bool
 		Cached         bool
+		ResponseCode   int
+		Status         string
+		StatusLabel    string
+		BlockTrace     []storage.BlockTraceEntry
 		ResponseTimeMs float64
 	}
 
@@ -347,6 +363,7 @@ func (s *Server) handleQueriesPartial(w http.ResponseWriter, r *http.Request) {
 		dbQueries, err := s.storage.GetQueriesFiltered(ctx, filter, limit, offset)
 		if err == nil {
 			for _, q := range dbQueries {
+				status, label := classifyQuery(q)
 				queries = append(queries, QueryData{
 					Timestamp:      q.Timestamp,
 					ClientIP:       q.ClientIP,
@@ -354,6 +371,10 @@ func (s *Server) handleQueriesPartial(w http.ResponseWriter, r *http.Request) {
 					QueryType:      q.QueryType,
 					Blocked:        q.Blocked,
 					Cached:         q.Cached,
+					ResponseCode:   q.ResponseCode,
+					Status:         status,
+					StatusLabel:    label,
+					BlockTrace:     q.BlockTrace,
 					ResponseTimeMs: q.ResponseTimeMs,
 				})
 			}
@@ -370,5 +391,21 @@ func (s *Server) handleQueriesPartial(w http.ResponseWriter, r *http.Request) {
 		s.logger.Error("Failed to render queries partial", "error", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
+	}
+}
+
+func classifyQuery(q *storage.QueryLog) (string, string) {
+	if q == nil {
+		return "allowed", "Allowed"
+	}
+	switch {
+	case q.Blocked:
+		return "blocked", "Blocked"
+	case q.ResponseCode == dnsRcodeNameError:
+		return "nxdomain", "NXDOMAIN"
+	case q.Cached:
+		return "cached", "Cached"
+	default:
+		return "allowed", "Allowed"
 	}
 }

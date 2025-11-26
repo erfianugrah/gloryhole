@@ -7,29 +7,38 @@
             <th>Type</th>
             <th>Status</th>
             <th>Response Time</th>
+            <th>Trace</th>
         </tr>
     </thead>
     <tbody>
         {{range .Queries}}
-        <tr class="{{if .Blocked}}blocked{{else}}allowed{{end}}">
+        <tr class="status-row status-{{.Status}}">
             <td>{{.Timestamp.Format "15:04:05"}}</td>
             <td>{{.ClientIP}}</td>
             <td>{{.Domain}}</td>
             <td>{{.QueryType}}</td>
             <td>
-                {{if .Blocked}}
-                    <span class="badge badge-blocked">BLOCKED</span>
-                {{else if .Cached}}
-                    <span class="badge badge-cached">CACHED</span>
+                <span class="status-chip status-{{.Status}}">{{.StatusLabel}}</span>
+            </td>
+            <td>{{printf "%.2f" .ResponseTimeMs}} ms</td>
+            <td>
+                {{if .BlockTrace}}
+                <button class="btn btn-secondary btn-xs"
+                        type="button"
+                        data-trace-btn
+                        data-domain="{{.Domain}}"
+                        data-client="{{.ClientIP}}"
+                        data-trace='{{json .BlockTrace | html}}'>
+                    View
+                </button>
                 {{else}}
-                    <span class="badge badge-allowed">ALLOWED</span>
+                <span class="text-muted">--</span>
                 {{end}}
             </td>
-            <td>{{.ResponseTimeMs}}ms</td>
         </tr>
         {{else}}
         <tr>
-            <td colspan="6" class="no-data">No queries yet</td>
+            <td colspan="7" class="no-data">No queries yet</td>
         </tr>
         {{end}}
     </tbody>

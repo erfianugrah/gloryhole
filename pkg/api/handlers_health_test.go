@@ -95,6 +95,26 @@ func (m *mockStorageForHealth) Ping(ctx context.Context) error {
 	return nil
 }
 
+func (m *mockStorageForHealth) GetClientSummaries(ctx context.Context, limit, offset int) ([]*storage.ClientSummary, error) {
+	return []*storage.ClientSummary{}, nil
+}
+
+func (m *mockStorageForHealth) UpdateClientProfile(ctx context.Context, profile *storage.ClientProfile) error {
+	return nil
+}
+
+func (m *mockStorageForHealth) GetClientGroups(ctx context.Context) ([]*storage.ClientGroup, error) {
+	return []*storage.ClientGroup{}, nil
+}
+
+func (m *mockStorageForHealth) UpsertClientGroup(ctx context.Context, group *storage.ClientGroup) error {
+	return nil
+}
+
+func (m *mockStorageForHealth) DeleteClientGroup(ctx context.Context, name string) error {
+	return nil
+}
+
 // TestHandleLiveness tests the liveness probe endpoint
 func TestHandleLiveness(t *testing.T) {
 	server := New(&Config{

@@ -143,6 +143,26 @@ func (n *NoOpStorage) GetQueryTypeStats(ctx context.Context, limit int) ([]*Quer
 	return []*QueryTypeStats{}, nil
 }
 
+func (n *NoOpStorage) GetClientSummaries(ctx context.Context, limit, offset int) ([]*ClientSummary, error) {
+	return []*ClientSummary{}, nil
+}
+
+func (n *NoOpStorage) UpdateClientProfile(ctx context.Context, profile *ClientProfile) error {
+	return ErrNotEnabled
+}
+
+func (n *NoOpStorage) GetClientGroups(ctx context.Context) ([]*ClientGroup, error) {
+	return []*ClientGroup{}, nil
+}
+
+func (n *NoOpStorage) UpsertClientGroup(ctx context.Context, group *ClientGroup) error {
+	return ErrNotEnabled
+}
+
+func (n *NoOpStorage) DeleteClientGroup(ctx context.Context, name string) error {
+	return ErrNotEnabled
+}
+
 // Cleanup does nothing
 func (n *NoOpStorage) Cleanup(ctx context.Context, olderThan time.Time) error {
 	return nil

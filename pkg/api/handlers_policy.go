@@ -4,8 +4,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"strconv"
+	"strings"
+	"time"
 
 	"glory-hole/pkg/policy"
 )
@@ -330,5 +333,83 @@ func (s *Server) handleDeletePolicy(w http.ResponseWriter, r *http.Request) {
 		"message": "Policy deleted successfully",
 		"id":      id,
 		"name":    rule.Name,
+	})
+}
+
+type policyTestRequest struct {
+	Logic     string `json:"logic"`
+	Domain    string `json:"domain"`
+	ClientIP  string `json:"client_ip"`
+	QueryType string `json:"query_type"`
+}
+
+func (s *Server) handleTestPolicy(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		s.writeError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		return
+	}
+
+	var req policyTestRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		s.writeError(w, http.StatusBadRequest, fmt.Sprintf("Invalid payload: %v", err))
+		return
+	}
+
+	req.Logic = strings.TrimSpace(req.Logic)
+	if req.Logic == "" {
+		s.writeError(w, http.StatusBadRequest, "Logic expression is required")
+		return
+	}
+
+	req.Domain = strings.TrimSpace(req.Domain)
+	if req.Domain == "" {
+		s.writeError(w, http.StatusBadRequest, "Domain sample is required")
+		return
+	}
+
+	req.ClientIP = strings.TrimSpace(req.ClientIP)
+	if req.ClientIP == "" {
+		req.ClientIP = "127.0.0.1"
+	}
+
+	if net.ParseIP(req.ClientIP) == nil {
+		s.writeError(w, http.StatusBadRequest, "Client IP must be a valid address")
+		return
+	}
+
+	req.QueryType = strings.ToUpper(strings.TrimSpace(req.QueryType))
+	if req.QueryType == "" {
+		req.QueryType = "A"
+	}
+
+	engine := policy.NewEngine()
+	rule := &policy.Rule{
+		Name:    "tester",
+		Logic:   req.Logic,
+		Action:  policy.ActionBlock,
+		Enabled: true,
+	}
+
+	if err := engine.AddRule(rule); err != nil {
+		s.writeError(w, http.StatusBadRequest, fmt.Sprintf("Failed to compile rule: %v", err))
+		return
+	}
+
+	now := time.Now()
+	ctx := policy.Context{
+		Time:      now,
+		Domain:    req.Domain,
+		ClientIP:  req.ClientIP,
+		QueryType: req.QueryType,
+		Hour:      now.Hour(),
+		Minute:    now.Minute(),
+		Day:       now.Day(),
+		Month:     int(now.Month()),
+		Weekday:   int(now.Weekday()),
+	}
+
+	matched, _ := engine.Evaluate(ctx)
+	s.writeJSON(w, http.StatusOK, map[string]any{
+		"matched": matched,
 	})
 }

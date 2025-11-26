@@ -1,0 +1,321 @@
+{{template "base.html" .}}
+
+{{define "title"}}Clients - Glory-Hole DNS{{end}}
+
+{{define "content"}}
+<div class="clients-page">
+    <div class="page-header">
+        <div>
+            <h2>Clients</h2>
+            <p class="section-description">Per-client activity derived from query logs. Edit names or assign groups to organize devices.</p>
+        </div>
+        <div class="clients-actions">
+            <input type="text" id="client-search" class="filter-input" placeholder="Search by name, IP, or group">
+            <button class="btn btn-primary" type="button" data-open-group-modal>Manage Groups</button>
+        </div>
+    </div>
+
+    <div class="clients-table-wrapper">
+        <table class="clients-table">
+            <thead>
+                <tr>
+                    <th>Client</th>
+                    <th>Group</th>
+                    <th>Total</th>
+                    <th>Blocked</th>
+                    <th>NXDOMAIN</th>
+                    <th>Last Seen</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody id="clients-body">
+                {{range .Clients}}
+                <tr data-client-row data-client="{{.ClientIP}}" data-group="{{.GroupName}}" data-name="{{.DisplayName}}" data-notes="{{.Notes}}">
+                    <td>
+                        <div class="client-name">{{.DisplayName}}</div>
+                        <div class="client-ip">{{.ClientIP}}</div>
+                    </td>
+                    <td>
+                        {{if .GroupName}}
+                        <span class="group-chip" style="--chip-color: {{if .GroupColor}}{{.GroupColor}}{{else}}#3b82f6{{end}}">{{.GroupName}}</span>
+                        {{else}}
+                        <span class="group-chip group-chip-empty">Unassigned</span>
+                        {{end}}
+                    </td>
+                    <td>{{.TotalQueries}}</td>
+                    <td>{{.BlockedQueries}}</td>
+                    <td>{{.NXDomainCount}}</td>
+                    <td><time datetime="{{.LastSeen.Format "2006-01-02T15:04:05Z07:00"}}">{{.LastSeen.Format "Jan 2, 15:04"}}</time></td>
+                    <td>
+                        <button class="btn btn-secondary btn-sm" type="button" data-edit-client="{{.ClientIP}}">Edit</button>
+                    </td>
+                </tr>
+                {{else}}
+                <tr>
+                    <td colspan="7" class="no-data">No clients captured yet.</td>
+                </tr>
+                {{end}}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Client Modal -->
+<div id="client-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="client-modal-title" style="display:none;">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3 id="client-modal-title">Edit Client</h3>
+            <button class="modal-close" data-close-modal>&times;</button>
+        </div>
+        <form id="client-form">
+            <input type="hidden" id="client-ip">
+            <div class="form-group">
+                <label for="client-name">Display Name</label>
+                <input type="text" id="client-name" placeholder="Friendly name (e.g., Living Room Apple TV)">
+            </div>
+            <div class="form-group">
+                <label for="client-group">Group</label>
+                <select id="client-group"></select>
+            </div>
+            <div class="form-group">
+                <label for="client-notes">Notes</label>
+                <textarea id="client-notes" rows="3" placeholder="Optional notes"></textarea>
+            </div>
+            <div class="form-actions">
+                <button type="button" class="btn btn-secondary" data-close-modal>Cancel</button>
+                <button type="submit" class="btn btn-primary">Save Client</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Group Modal -->
+<div id="group-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="group-modal-title" style="display:none;">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3 id="group-modal-title">Client Groups</h3>
+            <button class="modal-close" data-close-modal>&times;</button>
+        </div>
+        <div class="group-list" id="group-list"></div>
+        <form id="group-form" class="group-form">
+            <input type="hidden" id="group-original-name">
+            <div class="form-group">
+                <label for="group-name">Group Name</label>
+                <input type="text" id="group-name" required placeholder="e.g., Kids, Guests">
+            </div>
+            <div class="form-group">
+                <label for="group-color">Color</label>
+                <input type="color" id="group-color" value="#3b82f6">
+            </div>
+            <div class="form-group">
+                <label for="group-description">Description</label>
+                <textarea id="group-description" rows="2" placeholder="Optional description"></textarea>
+            </div>
+            <div class="form-actions">
+                <button type="button" class="btn btn-secondary" data-reset-group>Reset</button>
+                <button type="submit" class="btn btn-primary">Save Group</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<template id="group-row-template">
+    <div class="group-row">
+        <div class="group-meta">
+            <span class="group-chip"></span>
+            <div class="group-text">
+                <div class="group-name"></div>
+                <div class="group-description"></div>
+            </div>
+        </div>
+        <div class="group-actions">
+            <button class="btn btn-secondary btn-sm" data-edit-group>Edit</button>
+            <button class="btn btn-danger btn-sm" data-delete-group>Delete</button>
+        </div>
+    </div>
+</template>
+
+<script>
+(function() {
+    const clients = document.getElementById('clients-body');
+    const searchInput = document.getElementById('client-search');
+    const modal = document.getElementById('client-modal');
+    const groupModal = document.getElementById('group-modal');
+    const groupList = document.getElementById('group-list');
+    const groupTemplate = document.getElementById('group-row-template');
+    const clientGroupSelect = document.getElementById('client-group');
+
+    function closeModal(target) {
+        if (target) {
+            target.style.display = 'none';
+        }
+    }
+
+    function openModal(target) {
+        if (target) {
+            target.style.display = 'flex';
+        }
+    }
+
+    function fetchJSON(url, options) {
+        return fetch(url, options).then(async (res) => {
+            if (!res.ok) {
+                const text = await res.text();
+                throw new Error(text || res.statusText);
+            }
+            if (res.status === 204) {
+                return {};
+            }
+            return res.json();
+        });
+    }
+
+    function refreshGroups() {
+        fetchJSON('/api/client-groups')
+            .then((data) => {
+                const groups = data.groups || [];
+                groupList.innerHTML = '';
+                clientGroupSelect.innerHTML = '<option value="">Unassigned</option>';
+                groups.forEach((group) => {
+                    const option = document.createElement('option');
+                    option.value = group.name;
+                    option.textContent = group.name;
+                    clientGroupSelect.appendChild(option);
+
+                    const clone = groupTemplate.content.cloneNode(true);
+                    const chip = clone.querySelector('.group-chip');
+                    chip.textContent = group.name;
+                    chip.style.setProperty('--chip-color', group.color || '#3b82f6');
+                    clone.querySelector('.group-name').textContent = group.name;
+                    clone.querySelector('.group-description').textContent = group.description || 'No description';
+                    clone.querySelector('[data-edit-group]').dataset.group = group.name;
+                    clone.querySelector('[data-delete-group]').dataset.group = group.name;
+                    clone.querySelector('[data-delete-group]').dataset.color = group.color || '#3b82f6';
+                    clone.querySelector('[data-delete-group]').dataset.description = group.description || '';
+                    clone.querySelector('[data-edit-group]').dataset.color = group.color || '#3b82f6';
+                    clone.querySelector('[data-edit-group]').dataset.description = group.description || '';
+                    groupList.appendChild(clone);
+                });
+            })
+            .catch((err) => console.error('Failed to load groups', err));
+    }
+
+    function openClientModal(row) {
+        const ip = row.dataset.client;
+        const name = row.dataset.name;
+        const notes = row.dataset.notes || '';
+        const group = row.dataset.group || '';
+
+        document.getElementById('client-ip').value = ip;
+        document.getElementById('client-name').value = name === ip ? '' : name;
+        document.getElementById('client-notes').value = notes;
+        clientGroupSelect.value = group;
+
+        openModal(modal);
+    }
+
+    clients?.addEventListener('click', (event) => {
+        const target = event.target;
+        if (!(target instanceof HTMLElement)) return;
+        if (target.dataset.editClient) {
+            const row = target.closest('[data-client-row]');
+            if (row) {
+                openClientModal(row);
+            }
+        }
+    });
+
+    document.querySelectorAll('[data-close-modal]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+            closeModal(btn.closest('.modal'));
+        });
+    });
+
+    document.querySelector('[data-open-group-modal]')?.addEventListener('click', () => {
+        openModal(groupModal);
+        refreshGroups();
+    });
+
+    document.getElementById('client-form')?.addEventListener('submit', (event) => {
+        event.preventDefault();
+        const ip = document.getElementById('client-ip').value;
+        const payload = {
+            display_name: document.getElementById('client-name').value,
+            group_name: clientGroupSelect.value,
+            notes: document.getElementById('client-notes').value,
+        };
+        fetchJSON(`/api/clients/${encodeURIComponent(ip)}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        })
+            .then(() => window.location.reload())
+            .catch((err) => alert(err.message || 'Failed to update client'));
+    });
+
+    groupList?.addEventListener('click', (event) => {
+        const target = event.target;
+        if (!(target instanceof HTMLElement)) return;
+        const name = target.dataset.group;
+        if (target.dataset.editGroup) {
+            document.getElementById('group-original-name').value = name;
+            document.getElementById('group-name').value = name || '';
+            document.getElementById('group-description').value = target.dataset.description || '';
+            document.getElementById('group-color').value = target.dataset.color || '#3b82f6';
+        }
+        if (target.dataset.deleteGroup && name) {
+            if (confirm(`Delete group "${name}"? Clients will be unassigned.`)) {
+                fetchJSON(`/api/client-groups/${encodeURIComponent(name)}`, { method: 'DELETE' })
+                    .then(() => {
+                        refreshGroups();
+                        window.location.reload();
+                    })
+                    .catch((err) => alert(err.message || 'Failed to delete group'));
+            }
+        }
+    });
+
+    document.getElementById('group-form')?.addEventListener('submit', (event) => {
+        event.preventDefault();
+        const original = document.getElementById('group-original-name').value;
+        const payload = {
+            name: document.getElementById('group-name').value,
+            description: document.getElementById('group-description').value,
+            color: document.getElementById('group-color').value,
+        };
+        const url = original
+            ? `/api/client-groups/${encodeURIComponent(original)}`
+            : '/api/client-groups';
+        const method = original ? 'PUT' : 'POST';
+        fetchJSON(url, {
+            method,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        })
+            .then(() => {
+                document.getElementById('group-form').reset();
+                document.getElementById('group-original-name').value = '';
+                refreshGroups();
+            })
+            .catch((err) => alert(err.message || 'Failed to save group'));
+    });
+
+    document.querySelector('[data-reset-group]')?.addEventListener('click', () => {
+        document.getElementById('group-form').reset();
+        document.getElementById('group-original-name').value = '';
+    });
+
+    searchInput?.addEventListener('input', () => {
+        const value = searchInput.value.toLowerCase();
+        clients.querySelectorAll('[data-client-row]').forEach((row) => {
+            const name = row.dataset.name?.toLowerCase() || '';
+            const ip = row.dataset.client?.toLowerCase() || '';
+            const group = row.dataset.group?.toLowerCase() || '';
+            row.style.display = name.includes(value) || ip.includes(value) || group.includes(value) ? '' : 'none';
+        });
+    });
+
+    refreshGroups();
+})();
+</script>
+{{end}}

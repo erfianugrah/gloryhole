@@ -122,6 +122,26 @@ func (m *mockStorage) Ping(ctx context.Context) error {
 	return nil
 }
 
+func (m *mockStorage) GetClientSummaries(ctx context.Context, limit, offset int) ([]*storage.ClientSummary, error) {
+	return []*storage.ClientSummary{}, nil
+}
+
+func (m *mockStorage) UpdateClientProfile(ctx context.Context, profile *storage.ClientProfile) error {
+	return nil
+}
+
+func (m *mockStorage) GetClientGroups(ctx context.Context) ([]*storage.ClientGroup, error) {
+	return []*storage.ClientGroup{}, nil
+}
+
+func (m *mockStorage) UpsertClientGroup(ctx context.Context, group *storage.ClientGroup) error {
+	return nil
+}
+
+func (m *mockStorage) DeleteClientGroup(ctx context.Context, name string) error {
+	return nil
+}
+
 func newConfigTestServer(t *testing.T, mutate func(*config.Config)) (*Server, string) {
 	t.Helper()
 

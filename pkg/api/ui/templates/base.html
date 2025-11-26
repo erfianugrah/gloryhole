@@ -19,7 +19,13 @@
                 <a href="/" class="nav-link">Dashboard</a>
                 <a href="/queries" class="nav-link">Queries</a>
                 <a href="/policies" class="nav-link">Policies</a>
+                <a href="/clients" class="nav-link">Clients</a>
+                <a href="/blocklists" class="nav-link">Blocklists</a>
                 <a href="/settings" class="nav-link">Settings</a>
+                <button type="button" class="theme-toggle" data-theme-toggle aria-pressed="false" title="Toggle theme">
+                    <span class="icon-light" aria-hidden="true">☀️</span>
+                    <span class="icon-dark" aria-hidden="true">🌙</span>
+                </button>
             </div>
         </div>
     </nav>
@@ -33,5 +39,74 @@
             <p>Glory-Hole DNS Server - High-Performance Ad Blocking</p>
         </div>
     </footer>
+    <script>
+    (function() {
+        const STORAGE_KEY = "gloryhole-theme";
+        const toggle = document.querySelector("[data-theme-toggle]");
+        const media = window.matchMedia("(prefers-color-scheme: dark)");
+
+        const safeStorage = {
+            get() {
+                try {
+                    return localStorage.getItem(STORAGE_KEY);
+                } catch (_) {
+                    return null;
+                }
+            },
+            set(value) {
+                try {
+                    localStorage.setItem(STORAGE_KEY, value);
+                } catch (_) {
+                    /* ignore */
+                }
+            },
+            clear() {
+                try {
+                    localStorage.removeItem(STORAGE_KEY);
+                } catch (_) {
+                    /* ignore */
+                }
+            }
+        };
+
+        function applyTheme(theme, emit) {
+            const next = theme === "dark" ? "dark" : "light";
+            document.body.dataset.theme = next;
+            document.documentElement.style.colorScheme = next;
+            if (toggle) {
+                toggle.setAttribute("aria-pressed", next === "dark" ? "true" : "false");
+            }
+            if (emit) {
+                window.dispatchEvent(new CustomEvent("gh-theme-change", { detail: { theme: next }}));
+            }
+        }
+
+        const stored = safeStorage.get();
+        const initial = stored || (media.matches ? "dark" : "light");
+        applyTheme(initial, false);
+
+        if (toggle) {
+            toggle.addEventListener("click", function() {
+                const current = document.body.dataset.theme === "dark" ? "dark" : "light";
+                const next = current === "dark" ? "light" : "dark";
+                applyTheme(next, true);
+                safeStorage.set(next);
+            });
+        }
+
+        function handleMedia(event) {
+            if (safeStorage.get()) {
+                return;
+            }
+            applyTheme(event.matches ? "dark" : "light", true);
+        }
+
+        if (typeof media.addEventListener === "function") {
+            media.addEventListener("change", handleMedia);
+        } else if (typeof media.addListener === "function") {
+            media.addListener(handleMedia);
+        }
+    })();
+    </script>
 </body>
 </html>

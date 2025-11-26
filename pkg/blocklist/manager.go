@@ -26,6 +26,8 @@ type Manager struct {
 	// Pattern-based blocklist (wildcard and regex)
 	patterns atomic.Pointer[pattern.Matcher]
 
+	lastUpdated atomic.Value
+
 	// Lifecycle management
 	updateTicker *time.Ticker
 	stopChan     chan struct{}
@@ -48,6 +50,7 @@ func NewManager(cfg *config.Config, logger *logging.Logger, metrics *telemetry.M
 	// Initialize with empty blocklist
 	empty := make(map[string]struct{})
 	m.current.Store(&empty)
+	m.lastUpdated.Store(time.Time{})
 
 	return m
 }
@@ -133,6 +136,7 @@ func (m *Manager) Update(ctx context.Context) error {
 
 	// Atomically update current blocklist (zero-copy read for all DNS queries)
 	m.current.Store(&blocklist)
+	m.lastUpdated.Store(time.Now())
 
 	// Record blocklist size change to Prometheus metrics if available
 	if m.metrics != nil {
@@ -240,6 +244,16 @@ func (m *Manager) SetPatterns(patternList []string) error {
 		"total", stats["total"])
 
 	return nil
+}
+
+// LastUpdated returns the timestamp of the most recent successful update.
+func (m *Manager) LastUpdated() time.Time {
+	if v := m.lastUpdated.Load(); v != nil {
+		if ts, ok := v.(time.Time); ok {
+			return ts
+		}
+	}
+	return time.Time{}
 }
 
 // Stats returns statistics about the blocklist

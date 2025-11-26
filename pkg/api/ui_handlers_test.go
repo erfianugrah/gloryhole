@@ -499,10 +499,12 @@ func TestInitTemplates(t *testing.T) {
 	}
 
 	pageTemplates := map[string]*template.Template{
-		"dashboard.html": dashboardTemplate,
-		"queries.html":   queriesTemplate,
-		"policies.html":  policiesTemplate,
-		"settings.html":  settingsTemplate,
+		"dashboard.html":  dashboardTemplate,
+		"queries.html":    queriesTemplate,
+		"policies.html":   policiesTemplate,
+		"settings.html":   settingsTemplate,
+		"clients.html":    clientsTemplate,
+		"blocklists.html": blocklistsTemplate,
 	}
 
 	for name, tmpl := range pageTemplates {
@@ -515,8 +517,8 @@ func TestInitTemplates(t *testing.T) {
 	}
 
 	partialTemplates := map[string]*template.Template{
-		"stats_partial.html":   statsPartialTemplate,
-		"queries_partial.html": queriesPartialTemplate,
+		"stats_partial.html":       statsPartialTemplate,
+		"queries_partial.html":     queriesPartialTemplate,
 		"top_domains_partial.html": topDomainsTemplate,
 		"policies_partial.html":    policiesPartialTemplate,
 	}

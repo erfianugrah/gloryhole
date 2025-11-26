@@ -1,0 +1,107 @@
+{{template "base.html" .}}
+
+{{define "title"}}Blocklists - Glory-Hole DNS{{end}}
+
+{{define "content"}}
+<div class="blocklists-page">
+    <div class="page-header">
+        <div>
+            <h2>Blocklists</h2>
+            <p class="section-description">Review configured sources, monitor update status, and test whether a domain is blocked.</p>
+        </div>
+        <div>
+            <a class="btn btn-secondary" href="/settings#blocklists">Manage in Settings</a>
+        </div>
+    </div>
+
+    <div class="blocklist-stats">
+        <div class="stat-card">
+            <div class="stat-label">Status</div>
+            <div class="stat-value">{{if .Summary.Enabled}}Enabled{{else}}Disabled{{end}}</div>
+            <div class="stat-percent">Auto-update: {{if .Summary.AutoUpdate}}On{{else}}Off{{end}}</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Total Domains</div>
+            <div class="stat-value">{{.Summary.TotalDomains}}</div>
+            <div class="stat-percent">Exact: {{.Summary.ExactDomains}}</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Patterns</div>
+            <div class="stat-value">{{index .Summary.PatternStats "wildcard"}}</div>
+            <div class="stat-percent">Regex: {{index .Summary.PatternStats "regex"}}</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Last Update</div>
+            <div class="stat-value">
+                {{if .Summary.LastUpdated}}
+                    <time datetime="{{.Summary.LastUpdated}}">{{.Summary.LastUpdated}}</time>
+                {{else}}
+                    Never
+                {{end}}
+            </div>
+            <div class="stat-percent">
+                Interval: {{if .Summary.UpdateInterval}}{{.Summary.UpdateInterval}}{{else}}N/A{{end}}
+            </div>
+        </div>
+    </div>
+
+    <div class="blocklist-sources">
+        <h3>Sources</h3>
+        <ul>
+            {{range .Summary.Sources}}
+            <li><code>{{.}}</code></li>
+            {{else}}
+            <li>No blocklists configured.</li>
+            {{end}}
+        </ul>
+    </div>
+
+    <div class="blocklist-tester">
+        <h3>Domain Tester</h3>
+        <form id="blocklist-test-form">
+            <input type="text" id="test-domain" class="filter-input" placeholder="example.com" required>
+            <button type="submit" class="btn btn-primary">Check</button>
+        </form>
+        <div id="blocklist-test-result" class="test-result"></div>
+    </div>
+</div>
+
+<script>
+(function() {
+    const form = document.getElementById('blocklist-test-form');
+    const result = document.getElementById('blocklist-test-result');
+
+    function renderResult(data) {
+        if (!result) {
+            return;
+        }
+        if (!data.enabled) {
+            result.textContent = 'Blocklist is disabled.';
+            result.className = 'test-result warning';
+            return;
+        }
+        result.textContent = data.blocked
+            ? `${data.domain} is BLOCKED`
+            : `${data.domain} is allowed`;
+        result.className = `test-result ${data.blocked ? 'danger' : 'success'}`;
+    }
+
+    form?.addEventListener('submit', (event) => {
+        event.preventDefault();
+        const domain = document.getElementById('test-domain').value.trim();
+        if (!domain) {
+            return;
+        }
+        result.textContent = 'Checking...';
+        result.className = 'test-result';
+        fetch(`/api/blocklists/check?domain=${encodeURIComponent(domain)}`)
+            .then((res) => res.json())
+            .then(renderResult)
+            .catch((err) => {
+                result.textContent = err.message || 'Failed to check domain';
+                result.className = 'test-result danger';
+            });
+    });
+})();
+</script>
+{{end}}

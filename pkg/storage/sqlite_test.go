@@ -696,6 +696,78 @@ func TestSQLiteStorage_Close(t *testing.T) {
 	}
 }
 
+func TestSQLiteStorage_ClientSummaries(t *testing.T) {
+	storage, cleanup := setupTestStorage(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	sqlStorage := storage.(*SQLiteStorage)
+
+	now := time.Now()
+	entries := []struct {
+		ip      string
+		blocked bool
+		rcode   int
+		domain  string
+	}{
+		{"192.168.1.10", true, dns.RcodeNameError, "blocked.local"},
+		{"192.168.1.10", false, dns.RcodeSuccess, "allowed.local"},
+		{"192.168.1.20", false, dns.RcodeNameError, "nx.local"},
+	}
+
+	for _, e := range entries {
+		if _, err := sqlStorage.db.Exec(`
+			INSERT INTO queries
+				(timestamp, client_ip, domain, query_type, response_code, blocked, cached, response_time_ms)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+		`, now, e.ip, e.domain, "A", e.rcode, e.blocked, false, 5); err != nil {
+			t.Fatalf("failed to insert query: %v", err)
+		}
+	}
+
+	if _, err := sqlStorage.db.Exec(`INSERT INTO client_groups (name, description, color) VALUES ('Kids', 'Kid devices', '#f472b6')`); err != nil {
+		t.Fatalf("failed to insert client group: %v", err)
+	}
+
+	if err := storage.UpdateClientProfile(ctx, &ClientProfile{
+		ClientIP:    "192.168.1.10",
+		DisplayName: "Living Room Apple TV",
+		GroupName:   "Kids",
+	}); err != nil {
+		t.Fatalf("UpdateClientProfile() error = %v", err)
+	}
+
+	summaries, err := storage.GetClientSummaries(ctx, 10, 0)
+	if err != nil {
+		t.Fatalf("GetClientSummaries() error = %v", err)
+	}
+
+	if len(summaries) != 2 {
+		t.Fatalf("expected 2 summaries, got %d", len(summaries))
+	}
+
+	for _, summary := range summaries {
+		switch summary.ClientIP {
+		case "192.168.1.10":
+			if summary.DisplayName != "Living Room Apple TV" {
+				t.Errorf("unexpected display name %s", summary.DisplayName)
+			}
+			if summary.GroupName != "Kids" {
+				t.Errorf("expected group Kids, got %s", summary.GroupName)
+			}
+			if summary.BlockedQueries != 1 {
+				t.Errorf("expected 1 blocked query, got %d", summary.BlockedQueries)
+			}
+		case "192.168.1.20":
+			if summary.NXDomainCount != 1 {
+				t.Errorf("expected 1 NXDOMAIN count, got %d", summary.NXDomainCount)
+			}
+		default:
+			t.Fatalf("unexpected client summary for %s", summary.ClientIP)
+		}
+	}
+}
+
 func TestSQLiteStorage_Persistence(t *testing.T) {
 	// Create a temporary database file
 	tmpfile, err := os.CreateTemp("", "test-*.db")

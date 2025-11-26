@@ -66,6 +66,22 @@
                 </label>
             </div>
 
+            <div class="form-group">
+                <label>Rule Tester</label>
+                <div class="policy-tester">
+                    <input type="text" id="policy-test-domain" placeholder="Domain (example.com)" class="filter-input">
+                    <input type="text" id="policy-test-client" placeholder="Client IP (optional)" class="filter-input">
+                    <select id="policy-test-type" class="filter-select">
+                        <option value="A">A</option>
+                        <option value="AAAA">AAAA</option>
+                        <option value="CNAME">CNAME</option>
+                        <option value="MX">MX</option>
+                    </select>
+                    <button type="button" class="btn btn-secondary btn-sm" onclick="testPolicyRule()">Test Rule</button>
+                </div>
+                <p id="policy-test-result" class="text-muted small-text"></p>
+            </div>
+
             <div class="form-actions">
                 <button type="button" class="btn btn-secondary" onclick="closePolicyModal()">Cancel</button>
                 <button type="submit" class="btn btn-primary">Save Policy</button>
@@ -180,5 +196,42 @@ document.getElementById('policy-modal')?.addEventListener('click', function(e) {
         closePolicyModal();
     }
 });
+
+async function testPolicyRule() {
+    const logic = document.getElementById('policy-logic').value.trim();
+    const domain = document.getElementById('policy-test-domain').value.trim();
+    const client = document.getElementById('policy-test-client').value.trim();
+    const type = document.getElementById('policy-test-type').value;
+    const resultEl = document.getElementById('policy-test-result');
+
+    if (!logic || !domain) {
+        resultEl.textContent = 'Provide both logic and a sample domain.';
+        return;
+    }
+
+    resultEl.textContent = 'Testing...';
+    try {
+        const response = await fetch('/api/policies/test', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                logic,
+                domain,
+                client_ip: client,
+                query_type: type,
+            })
+        });
+        if (!response.ok) {
+            const payload = await response.json();
+            throw new Error(payload.message || 'Rule failed to compile');
+        }
+        const payload = await response.json();
+        resultEl.textContent = payload.matched ? 'Matched (rule would trigger).' : 'No match.';
+        resultEl.className = payload.matched ? 'text-muted success-text' : 'text-muted';
+    } catch (error) {
+        resultEl.textContent = error.message || 'Failed to test rule.';
+        resultEl.className = 'text-muted danger-text';
+    }
+}
 </script>
 {{end}}

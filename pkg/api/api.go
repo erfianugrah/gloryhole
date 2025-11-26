@@ -110,6 +110,7 @@ func New(cfg *Config) *Server {
 	mux.HandleFunc("GET /api/policies/{id}", s.handleGetPolicy)
 	mux.HandleFunc("PUT /api/policies/{id}", s.handleUpdatePolicy)
 	mux.HandleFunc("DELETE /api/policies/{id}", s.handleDeletePolicy)
+	mux.HandleFunc("POST /api/policies/test", s.handleTestPolicy)
 
 	// Feature kill-switches
 	mux.HandleFunc("GET /api/features", s.handleGetFeatures)
@@ -134,7 +135,21 @@ func New(cfg *Config) *Server {
 	mux.HandleFunc("GET /queries", s.handleQueriesPage)
 	mux.HandleFunc("GET /policies", s.handlePoliciesPage)
 	mux.HandleFunc("GET /settings", s.handleSettingsPage)
+	mux.HandleFunc("GET /clients", s.handleClientsPage)
+	mux.HandleFunc("GET /blocklists", s.handleBlocklistsPage)
 	mux.HandleFunc("GET /{$}", s.handleDashboard) // {$} matches exact path only
+
+	// Client management APIs
+	mux.HandleFunc("GET /api/clients", s.handleGetClients)
+	mux.HandleFunc("PUT /api/clients/{client}", s.handleUpdateClient)
+	mux.HandleFunc("GET /api/client-groups", s.handleGetClientGroups)
+	mux.HandleFunc("POST /api/client-groups", s.handleCreateClientGroup)
+	mux.HandleFunc("PUT /api/client-groups/{group}", s.handleUpdateClientGroup)
+	mux.HandleFunc("DELETE /api/client-groups/{group}", s.handleDeleteClientGroup)
+
+	// Blocklist summary APIs
+	mux.HandleFunc("GET /api/blocklists", s.handleGetBlocklists)
+	mux.HandleFunc("GET /api/blocklists/check", s.handleCheckBlocklist)
 
 	// Static files
 	if staticFS, err := getStaticFS(); err == nil {

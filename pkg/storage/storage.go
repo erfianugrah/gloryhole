@@ -27,6 +27,13 @@ type Storage interface {
 	GetTraceStatistics(ctx context.Context, since time.Time) (*TraceStatistics, error)
 	GetQueriesWithTraceFilter(ctx context.Context, filter TraceFilter, limit, offset int) ([]*QueryLog, error)
 
+	// Client Management
+	GetClientSummaries(ctx context.Context, limit, offset int) ([]*ClientSummary, error)
+	UpdateClientProfile(ctx context.Context, profile *ClientProfile) error
+	GetClientGroups(ctx context.Context) ([]*ClientGroup, error)
+	UpsertClientGroup(ctx context.Context, group *ClientGroup) error
+	DeleteClientGroup(ctx context.Context, name string) error
+
 	// Maintenance
 	Cleanup(ctx context.Context, olderThan time.Time) error
 	Close() error
@@ -116,6 +123,35 @@ type QueryFilter struct {
 	Cached    *bool
 	Start     time.Time
 	End       time.Time
+}
+
+// ClientSummary aggregates per-client statistics for display.
+type ClientSummary struct {
+	ClientIP       string    `json:"client_ip"`
+	DisplayName    string    `json:"display_name"`
+	GroupName      string    `json:"group_name,omitempty"`
+	GroupColor     string    `json:"group_color,omitempty"`
+	Notes          string    `json:"notes,omitempty"`
+	TotalQueries   int64     `json:"total_queries"`
+	BlockedQueries int64     `json:"blocked_queries"`
+	NXDomainCount  int64     `json:"nxdomain_queries"`
+	LastSeen       time.Time `json:"last_seen"`
+	FirstSeen      time.Time `json:"first_seen"`
+}
+
+// ClientProfile stores metadata maintained by operators.
+type ClientProfile struct {
+	ClientIP    string
+	DisplayName string
+	GroupName   string
+	Notes       string
+}
+
+// ClientGroup represents a logical grouping of clients.
+type ClientGroup struct {
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
+	Color       string `json:"color,omitempty"`
 }
 
 // HasFilters returns true if any filtering criteria is set.

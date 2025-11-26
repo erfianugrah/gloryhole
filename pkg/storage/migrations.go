@@ -91,6 +91,30 @@ var migrations = []Migration{
 			-- Composite index for response time analysis by domain
 			-- Speeds up: SELECT AVG(response_time_ms) FROM queries WHERE domain = ? GROUP BY timestamp
 			CREATE INDEX idx_queries_domain_response_time ON queries(domain, response_time_ms);
+	`,
+	},
+	{
+		Version:     5,
+		Description: "Introduce client profiles and groups for UI management",
+		SQL: `
+			CREATE TABLE IF NOT EXISTS client_groups (
+				name TEXT PRIMARY KEY,
+				description TEXT,
+				color TEXT DEFAULT '#3b82f6',
+				created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+				updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+			);
+
+			CREATE TABLE IF NOT EXISTS client_profiles (
+				client_ip TEXT PRIMARY KEY,
+				display_name TEXT,
+				notes TEXT,
+				group_name TEXT,
+				created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+				updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+				FOREIGN KEY (group_name) REFERENCES client_groups(name) ON DELETE SET NULL
+			);
+
 		`,
 	},
 	// Future migrations will be added here with incrementing version numbers
