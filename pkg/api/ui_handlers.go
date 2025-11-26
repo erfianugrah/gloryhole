@@ -43,6 +43,16 @@ func initTemplates() error {
 			return a + b
 		},
 		"join": strings.Join,
+		"versionLabel": func(version string) string {
+			v := strings.TrimSpace(version)
+			if v == "" {
+				return "vdev"
+			}
+			if strings.HasPrefix(strings.ToLower(v), "v") {
+				return v
+			}
+			return "v" + v
+		},
 	}
 
 	templates, err = template.New("").Funcs(funcMap).ParseFS(tmplFS, "*.html")
