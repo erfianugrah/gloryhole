@@ -20,4 +20,22 @@
         <div class="stat-label">Avg Response</div>
         <div class="stat-value">{{printf "%.2f" .AvgResponseMs}}ms</div>
     </div>
+
+    <div class="stat-card">
+        <div class="stat-label">CPU Usage</div>
+        <div class="stat-value">{{printf "%.1f" .CPUUsagePercent}}%</div>
+    </div>
+
+    <div class="stat-card">
+        <div class="stat-label">Memory Usage</div>
+        <div class="stat-value">{{humanBytes .MemoryUsageBytes}}</div>
+        <div class="stat-percent">{{printf "%.1f" .MemoryUsagePercent}}% of {{humanBytes .MemoryTotalBytes}}</div>
+    </div>
+
+    {{if .TemperatureAvailable}}
+    <div class="stat-card">
+        <div class="stat-label">Temperature</div>
+        <div class="stat-value">{{printf "%.1f" .TemperatureCelsius}}°C</div>
+    </div>
+    {{end}}
 </div>

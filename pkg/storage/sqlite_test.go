@@ -754,6 +754,9 @@ func TestSQLiteStorage_ClientSummaries(t *testing.T) {
 			if summary.DisplayName != "Living Room Apple TV" {
 				t.Errorf("unexpected display name %s", summary.DisplayName)
 			}
+			if summary.LastSeen.IsZero() || summary.FirstSeen.IsZero() {
+				t.Errorf("expected timestamps for %s, got zero values", summary.ClientIP)
+			}
 			if summary.GroupName != "Kids" {
 				t.Errorf("expected group Kids, got %s", summary.GroupName)
 			}
@@ -761,6 +764,9 @@ func TestSQLiteStorage_ClientSummaries(t *testing.T) {
 				t.Errorf("expected 1 blocked query, got %d", summary.BlockedQueries)
 			}
 		case "192.168.1.20":
+			if summary.LastSeen.IsZero() || summary.FirstSeen.IsZero() {
+				t.Errorf("expected timestamps for %s, got zero values", summary.ClientIP)
+			}
 			if summary.NXDomainCount != 1 {
 				t.Errorf("expected 1 NXDOMAIN count, got %d", summary.NXDomainCount)
 			}

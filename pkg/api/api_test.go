@@ -307,8 +307,13 @@ func TestHandleStats_NoStorage(t *testing.T) {
 
 	server.handleStats(w, req)
 
-	if w.Code != http.StatusServiceUnavailable {
-		t.Errorf("expected status 503, got %d", w.Code)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", w.Code)
+	}
+
+	var resp StatsResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
 	}
 }
 

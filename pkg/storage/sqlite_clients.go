@@ -26,8 +26,8 @@ func (s *SQLiteStorage) GetClientSummaries(ctx context.Context, limit, offset in
 		WITH aggregated AS (
 			SELECT
 				client_ip,
-				MIN(timestamp) AS first_seen,
-				MAX(timestamp) AS last_seen,
+				MIN(id) AS first_id,
+				MAX(id) AS last_id,
 				COUNT(*) AS total_queries,
 				SUM(CASE WHEN blocked = 1 THEN 1 ELSE 0 END) AS blocked_queries,
 				SUM(CASE WHEN response_code = 3 THEN 1 ELSE 0 END) AS nxdomain_queries
@@ -40,15 +40,17 @@ func (s *SQLiteStorage) GetClientSummaries(ctx context.Context, limit, offset in
 			COALESCE(p.notes, '') AS notes,
 			p.group_name,
 			COALESCE(g.color, '') AS group_color,
-			a.first_seen,
-			a.last_seen,
+			first_q.timestamp AS first_seen_raw,
+			last_q.timestamp AS last_seen_raw,
 			a.total_queries,
 			a.blocked_queries,
 			a.nxdomain_queries
 		FROM aggregated a
 		LEFT JOIN client_profiles p ON p.client_ip = a.client_ip
 		LEFT JOIN client_groups g ON p.group_name = g.name
-		ORDER BY a.last_seen DESC
+		LEFT JOIN queries first_q ON first_q.id = a.first_id
+		LEFT JOIN queries last_q ON last_q.id = a.last_id
+		ORDER BY last_q.timestamp DESC
 		LIMIT ? OFFSET ?;
 	`
 
@@ -61,18 +63,19 @@ func (s *SQLiteStorage) GetClientSummaries(ctx context.Context, limit, offset in
 	var clients []*ClientSummary
 	for rows.Next() {
 		var summary ClientSummary
-		var firstSeenStr, lastSeenStr string
 		var notes string
 		var groupName sql.NullString
 		var groupColor sql.NullString
+		var firstRaw sql.NullString
+		var lastRaw sql.NullString
 		if err := rows.Scan(
 			&summary.ClientIP,
 			&summary.DisplayName,
 			&notes,
 			&groupName,
 			&groupColor,
-			&firstSeenStr,
-			&lastSeenStr,
+			&firstRaw,
+			&lastRaw,
 			&summary.TotalQueries,
 			&summary.BlockedQueries,
 			&summary.NXDomainCount,
@@ -86,8 +89,12 @@ func (s *SQLiteStorage) GetClientSummaries(ctx context.Context, limit, offset in
 		if groupColor.Valid {
 			summary.GroupColor = groupColor.String
 		}
-		summary.FirstSeen = parseSQLiteTime(firstSeenStr)
-		summary.LastSeen = parseSQLiteTime(lastSeenStr)
+		if firstRaw.Valid {
+			summary.FirstSeen = parseSQLiteTime(firstRaw.String)
+		}
+		if lastRaw.Valid {
+			summary.LastSeen = parseSQLiteTime(lastRaw.String)
+		}
 		clients = append(clients, &summary)
 	}
 

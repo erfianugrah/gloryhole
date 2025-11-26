@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 
 	"glory-hole/pkg/policy"
@@ -54,6 +55,41 @@ func TestHandleGetPolicies_Empty(t *testing.T) {
 
 	if len(result.Policies) != 0 {
 		t.Errorf("Expected empty policies list, got %d items", len(result.Policies))
+	}
+}
+
+func TestHandleExportPolicies(t *testing.T) {
+	server := setupTestAPIServer()
+	_ = server.policyEngine.AddRule(&policy.Rule{
+		Name:    "Export Rule",
+		Logic:   `Domain == "export.com"`,
+		Action:  policy.ActionBlock,
+		Enabled: true,
+	})
+
+	req := httptest.NewRequest("GET", "/api/policies/export", nil)
+	w := httptest.NewRecorder()
+
+	server.handleExportPolicies(w, req)
+
+	resp := w.Result()
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("Expected status 200, got %d", resp.StatusCode)
+	}
+
+	if cd := resp.Header.Get("Content-Disposition"); !strings.Contains(cd, "policies-export.json") {
+		t.Errorf("Expected content disposition to include filename, got %s", cd)
+	}
+
+	var payload PolicyListResponse
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		t.Fatalf("Failed to decode export payload: %v", err)
+	}
+
+	if payload.Total != 1 {
+		t.Fatalf("Expected 1 policy in export, got %d", payload.Total)
 	}
 }
 

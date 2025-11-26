@@ -110,6 +110,7 @@ func New(cfg *Config) *Server {
 	mux.HandleFunc("GET /api/policies/{id}", s.handleGetPolicy)
 	mux.HandleFunc("PUT /api/policies/{id}", s.handleUpdatePolicy)
 	mux.HandleFunc("DELETE /api/policies/{id}", s.handleDeletePolicy)
+	mux.HandleFunc("GET /api/policies/export", s.handleExportPolicies)
 	mux.HandleFunc("POST /api/policies/test", s.handleTestPolicy)
 
 	// Feature kill-switches

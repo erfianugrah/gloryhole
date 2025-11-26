@@ -89,8 +89,8 @@ func NewSQLiteStorage(cfg *Config, metrics MetricsRecorder) (Storage, error) {
 	// Prepare statements
 	stmtInsert, err := db.Prepare(`
 		INSERT INTO queries
-		(timestamp, client_ip, domain, query_type, response_code, blocked, cached, response_time_ms, upstream, block_trace)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		(timestamp, client_ip, domain, query_type, response_code, blocked, cached, response_time_ms, upstream, upstream_time_ms, block_trace)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`)
 	if err != nil {
 		_ = db.Close()
@@ -264,6 +264,7 @@ func (s *SQLiteStorage) flushBatch(queries []*QueryLog) error {
 			query.Cached,
 			query.ResponseTimeMs,
 			query.Upstream,
+			query.UpstreamTimeMs,
 			traceValue,
 		)
 		if err != nil {
@@ -327,7 +328,7 @@ func (s *SQLiteStorage) GetRecentQueries(ctx context.Context, limit, offset int)
 
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, timestamp, client_ip, domain, query_type, response_code,
-		       blocked, cached, response_time_ms, upstream, block_trace
+		       blocked, cached, response_time_ms, upstream, upstream_time_ms, block_trace
 		FROM queries
 		ORDER BY timestamp DESC
 		LIMIT ? OFFSET ?
@@ -351,7 +352,7 @@ func (s *SQLiteStorage) GetQueriesByDomain(ctx context.Context, domain string, l
 
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, timestamp, client_ip, domain, query_type, response_code,
-		       blocked, cached, response_time_ms, upstream, block_trace
+		       blocked, cached, response_time_ms, upstream, upstream_time_ms, block_trace
 		FROM queries
 		WHERE domain = ?
 		ORDER BY timestamp DESC
@@ -376,7 +377,7 @@ func (s *SQLiteStorage) GetQueriesByClientIP(ctx context.Context, clientIP strin
 
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, timestamp, client_ip, domain, query_type, response_code,
-		       blocked, cached, response_time_ms, upstream, block_trace
+		       blocked, cached, response_time_ms, upstream, upstream_time_ms, block_trace
 		FROM queries
 		WHERE client_ip = ?
 		ORDER BY timestamp DESC
@@ -451,15 +452,25 @@ func (s *SQLiteStorage) GetTopDomains(ctx context.Context, limit int, blocked bo
 	}
 
 	rows, err := s.db.QueryContext(ctx, `
+		WITH aggregated AS (
+			SELECT
+				domain,
+				MIN(id) AS first_id,
+				MAX(id) AS last_id,
+				COUNT(*) AS total_queries
+			FROM queries
+			WHERE blocked = ?
+			GROUP BY domain
+		)
 		SELECT
-			domain,
-			COUNT(*) AS query_count,
-			MAX(timestamp) AS last_queried,
-			MIN(timestamp) AS first_queried
-		FROM queries
-		WHERE blocked = ?
-		GROUP BY domain
-		ORDER BY query_count DESC
+			a.domain,
+			a.total_queries,
+			first_q.timestamp AS first_seen_raw,
+			last_q.timestamp AS last_seen_raw
+		FROM aggregated a
+		LEFT JOIN queries first_q ON first_q.id = a.first_id
+		LEFT JOIN queries last_q ON last_q.id = a.last_id
+		ORDER BY a.total_queries DESC
 		LIMIT ?
 	`, blockedValue, limit)
 	if err != nil {
@@ -470,12 +481,16 @@ func (s *SQLiteStorage) GetTopDomains(ctx context.Context, limit int, blocked bo
 	var domains []*DomainStats
 	for rows.Next() {
 		var d DomainStats
-		var lastStr, firstStr string
-		if err := rows.Scan(&d.Domain, &d.QueryCount, &lastStr, &firstStr); err != nil {
+		var lastRaw, firstRaw sql.NullString
+		if err := rows.Scan(&d.Domain, &d.QueryCount, &firstRaw, &lastRaw); err != nil {
 			return nil, fmt.Errorf("%w: %v", ErrQueryFailed, err)
 		}
-		d.LastQueried = parseSQLiteTime(lastStr)
-		d.FirstQueried = parseSQLiteTime(firstStr)
+		if firstRaw.Valid {
+			d.FirstQueried = parseSQLiteTime(firstRaw.String)
+		}
+		if lastRaw.Valid {
+			d.LastQueried = parseSQLiteTime(lastRaw.String)
+		}
 		d.Blocked = blocked
 		domains = append(domains, &d)
 	}
@@ -675,7 +690,7 @@ func (s *SQLiteStorage) GetQueriesFiltered(ctx context.Context, filter QueryFilt
 
 	query := `
 		SELECT id, timestamp, client_ip, domain, query_type, response_code,
-		       blocked, cached, response_time_ms, upstream, block_trace
+		       blocked, cached, response_time_ms, upstream, upstream_time_ms, block_trace
 		FROM queries
 	`
 	conditions := make([]string, 0)
@@ -884,6 +899,7 @@ func scanQueryLogs(rows *sql.Rows) ([]*QueryLog, error) {
 			&q.Cached,
 			&q.ResponseTimeMs,
 			&upstream,
+			&q.UpstreamTimeMs,
 			&trace,
 		)
 		if err != nil {

@@ -120,37 +120,48 @@ func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check if storage is available
-	if s.storage == nil {
-		s.writeError(w, http.StatusServiceUnavailable, "Storage not available")
-		return
-	}
-
 	// Parse 'since' query parameter (default: 24 hours)
 	sinceParam := r.URL.Query().Get("since")
 	since := parseDuration(sinceParam, 24*time.Hour)
 	sinceTime := time.Now().Add(-since)
 
-	// Get statistics from storage
-	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
-	defer cancel()
+	sysMetrics := collectSystemMetrics(r.Context())
 
-	stats, err := s.storage.GetStatistics(ctx, sinceTime)
-	if err != nil {
-		s.logger.Error("Failed to get statistics", "error", err)
-		s.writeError(w, http.StatusInternalServerError, "Failed to retrieve statistics")
-		return
+	var stats *storage.Statistics
+	if s.storage != nil {
+		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+		defer cancel()
+
+		storageStats, err := s.storage.GetStatistics(ctx, sinceTime)
+		if err != nil {
+			s.logger.Error("Failed to get statistics", "error", err)
+			s.writeError(w, http.StatusInternalServerError, "Failed to retrieve statistics")
+			return
+		}
+		stats = storageStats
 	}
 
 	response := StatsResponse{
-		TotalQueries:   stats.TotalQueries,
-		BlockedQueries: stats.BlockedQueries,
-		CachedQueries:  stats.CachedQueries,
-		BlockRate:      stats.BlockRate,
-		CacheHitRate:   stats.CacheHitRate,
-		AvgResponseMs:  stats.AvgResponseTimeMs,
-		Period:         since.String(),
-		Timestamp:      time.Now().Format(time.RFC3339),
+		Period:             since.String(),
+		Timestamp:          time.Now().Format(time.RFC3339),
+		CPUUsagePercent:    sysMetrics.CPUPercent,
+		MemoryUsageBytes:   sysMetrics.MemUsed,
+		MemoryTotalBytes:   sysMetrics.MemTotal,
+		MemoryUsagePercent: sysMetrics.MemPercent,
+	}
+
+	if sysMetrics.TemperatureAvailable() {
+		response.TemperatureCelsius = sysMetrics.TemperatureC
+		response.TemperatureAvailable = true
+	}
+
+	if stats != nil {
+		response.TotalQueries = stats.TotalQueries
+		response.BlockedQueries = stats.BlockedQueries
+		response.CachedQueries = stats.CachedQueries
+		response.BlockRate = stats.BlockRate
+		response.CacheHitRate = stats.CacheHitRate
+		response.AvgResponseMs = stats.AvgResponseTimeMs
 	}
 
 	s.writeJSON(w, http.StatusOK, response)

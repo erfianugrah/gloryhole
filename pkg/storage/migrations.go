@@ -124,6 +124,13 @@ var migrations = []Migration{
 	//     Description: "Add client_name column to queries table",
 	//     SQL:         `ALTER TABLE queries ADD COLUMN client_name TEXT;`,
 	// },
+	{
+		Version:     6,
+		Description: "Add upstream response time tracking for queries",
+		SQL: `
+			ALTER TABLE queries ADD COLUMN upstream_time_ms REAL NOT NULL DEFAULT 0;
+		`,
+	},
 }
 
 // getMigrations returns all migrations sorted by version

@@ -6,7 +6,7 @@
             <th>Domain</th>
             <th>Type</th>
             <th>Status</th>
-            <th>Response Time</th>
+            <th>Latency (total/upstream)</th>
             <th>Trace</th>
         </tr>
     </thead>
@@ -20,7 +20,7 @@
             <td>
                 <span class="status-chip status-{{.Status}}">{{.StatusLabel}}</span>
             </td>
-            <td>{{printf "%.2f" .ResponseTimeMs}} ms</td>
+            <td>{{printf "%.2f" .ResponseTimeMs}} / {{printf "%.2f" .UpstreamTimeMs}} ms</td>
             <td>
                 {{if .BlockTrace}}
                 <button class="btn btn-secondary btn-xs"

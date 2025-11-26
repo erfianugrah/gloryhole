@@ -35,6 +35,12 @@ type StatsResponse struct {
 	BlockRate      float64 `json:"block_rate"`
 	CacheHitRate   float64 `json:"cache_hit_rate"`
 	AvgResponseMs  float64 `json:"avg_response_ms"`
+	CPUUsagePercent    float64 `json:"cpu_usage_percent,omitempty"`
+	MemoryUsageBytes   uint64  `json:"memory_usage_bytes,omitempty"`
+	MemoryTotalBytes   uint64  `json:"memory_total_bytes,omitempty"`
+	MemoryUsagePercent float64 `json:"memory_usage_percent,omitempty"`
+	TemperatureCelsius float64 `json:"temperature_celsius,omitempty"`
+	TemperatureAvailable bool  `json:"temperature_available,omitempty"`
 }
 
 // TimeSeriesResponse represents time-series statistics data
@@ -63,6 +69,7 @@ type QueryResponse struct {
 	ID             int64                     `json:"id"`
 	ResponseCode   int                       `json:"response_code"`
 	ResponseTimeMs float64                   `json:"response_time_ms"`
+	UpstreamTimeMs float64                   `json:"upstream_response_ms"`
 	Blocked        bool                      `json:"blocked"`
 	Cached         bool                      `json:"cached"`
 	BlockTrace     []storage.BlockTraceEntry `json:"block_trace,omitempty"`
@@ -153,6 +160,7 @@ func convertQueryLog(q *storage.QueryLog) QueryResponse {
 		Blocked:        q.Blocked,
 		Cached:         q.Cached,
 		ResponseTimeMs: q.ResponseTimeMs,
+		UpstreamTimeMs: q.UpstreamTimeMs,
 		Upstream:       q.Upstream,
 		BlockTrace:     q.BlockTrace,
 	}

@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/dustin/go-humanize"
+
 	"glory-hole/pkg/storage"
 )
 
@@ -69,7 +71,8 @@ func initTemplates() error {
 		"add": func(a, b int) int {
 			return a + b
 		},
-		"join": strings.Join,
+		"join":       strings.Join,
+		"humanBytes": humanize.Bytes,
 	}
 
 	baseTemplate, err := template.New("base.html").Funcs(funcMap).ParseFS(tmplFS, "base.html")
@@ -350,6 +353,7 @@ func (s *Server) handleQueriesPartial(w http.ResponseWriter, r *http.Request) {
 		StatusLabel    string
 		BlockTrace     []storage.BlockTraceEntry
 		ResponseTimeMs float64
+		UpstreamTimeMs float64
 	}
 
 	queries := []QueryData{}
@@ -376,6 +380,7 @@ func (s *Server) handleQueriesPartial(w http.ResponseWriter, r *http.Request) {
 					StatusLabel:    label,
 					BlockTrace:     q.BlockTrace,
 					ResponseTimeMs: q.ResponseTimeMs,
+					UpstreamTimeMs: q.UpstreamTimeMs,
 				})
 			}
 		}

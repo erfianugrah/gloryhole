@@ -50,6 +50,7 @@ type QueryLog struct {
 	ID             int64             `json:"id"`
 	ResponseCode   int               `json:"response_code"`
 	ResponseTimeMs float64           `json:"response_time_ms"`
+	UpstreamTimeMs float64           `json:"upstream_response_ms"`
 	Blocked        bool              `json:"blocked"`
 	Cached         bool              `json:"cached"`
 	BlockTrace     []BlockTraceEntry `json:"block_trace,omitempty"`

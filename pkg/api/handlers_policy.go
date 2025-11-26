@@ -336,6 +336,43 @@ func (s *Server) handleDeletePolicy(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// handleExportPolicies returns the current policies as a downloadable JSON file.
+func (s *Server) handleExportPolicies(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		s.writeError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		return
+	}
+
+	if s.policyEngine == nil {
+		s.writeError(w, http.StatusServiceUnavailable, "Policy engine not configured")
+		return
+	}
+
+	rules := s.policyEngine.GetRules()
+	policies := make([]PolicyResponse, 0, len(rules))
+	for i, rule := range rules {
+		policies = append(policies, PolicyResponse{
+			ID:         i,
+			Name:       rule.Name,
+			Logic:      rule.Logic,
+			Action:     rule.Action,
+			ActionData: rule.ActionData,
+			Enabled:    rule.Enabled,
+		})
+	}
+
+	payload := PolicyListResponse{
+		Policies: policies,
+		Total:    len(policies),
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Disposition", `attachment; filename="policies-export.json"`)
+	if err := json.NewEncoder(w).Encode(payload); err != nil {
+		s.logger.Error("Failed to export policies", "error", err)
+	}
+}
+
 type policyTestRequest struct {
 	Logic     string `json:"logic"`
 	Domain    string `json:"domain"`

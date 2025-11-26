@@ -145,6 +145,7 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 	var blocked, cached bool
 	var upstream string
 	var responseCode int
+	var upstreamDuration time.Duration
 	trace := newBlockTraceRecorder(h.DecisionTrace)
 	clientIP := getClientIP(w)
 
@@ -173,6 +174,7 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 					Blocked:        blocked,
 					Cached:         cached,
 					ResponseTimeMs: time.Since(startTime).Seconds() * 1000,
+					UpstreamTimeMs: upstreamDuration.Seconds() * 1000,
 					Upstream:       upstream,
 					BlockTrace:     trace.Entries(),
 				}
@@ -651,7 +653,9 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 							"bypasses_blocklist", true)
 					}
 
+					forwardStart := time.Now()
 					resp, err := h.Forwarder.Forward(ctx, r)
+					upstreamDuration = time.Since(forwardStart)
 					if err != nil {
 						// Log forward error
 						if h.Logger != nil {
@@ -794,7 +798,9 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 				}
 
 				// Forward to conditional upstreams
+				forwardStart := time.Now()
 				resp, err := h.Forwarder.ForwardWithUpstreams(ctx, r, upstreams)
+				upstreamDuration = time.Since(forwardStart)
 				if err != nil {
 					if h.Logger != nil {
 						h.Logger.Error("Failed to forward query to policy upstreams",
@@ -1079,7 +1085,9 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 			}
 
 			// Rule matched - forward to conditional upstreams
+			forwardStart := time.Now()
 			resp, err := h.Forwarder.ForwardWithUpstreams(ctx, r, upstreams)
+			upstreamDuration = time.Since(forwardStart)
 			if err != nil {
 				// Forwarding failed, return SERVFAIL
 				if h.Logger != nil {
@@ -1115,7 +1123,9 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 
 	// Forward to upstream DNS
 	if h.Forwarder != nil {
+		forwardStart := time.Now()
 		resp, err := h.Forwarder.Forward(ctx, r)
+		upstreamDuration = time.Since(forwardStart)
 		if err != nil {
 			// Forwarding failed, return SERVFAIL
 			responseCode = dns.RcodeServerFailure

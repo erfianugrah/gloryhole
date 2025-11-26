@@ -11,7 +11,8 @@ CREATE TABLE IF NOT EXISTS queries (
     blocked BOOLEAN NOT NULL,
     cached BOOLEAN NOT NULL,
     response_time_ms INTEGER NOT NULL,
-    upstream TEXT
+    upstream TEXT,
+    upstream_time_ms REAL NOT NULL DEFAULT 0
 );
 
 -- Indexes for fast lookups

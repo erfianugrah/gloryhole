@@ -580,6 +580,89 @@ main {
     gap: 2rem;
 }
 
+.policy-actions {
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.logic-mode-toggle {
+    display: flex;
+    gap: 1rem;
+    margin: 1rem 0;
+    font-size: 0.95rem;
+}
+
+.logic-mode-toggle label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+
+.builder-panel {
+    border: 1px dashed var(--border);
+    border-radius: 0.5rem;
+    padding: 1rem;
+    margin-bottom: 1rem;
+    background-color: var(--background);
+}
+
+.builder-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    align-items: center;
+    margin-bottom: 0.75rem;
+}
+
+.builder-row:last-child {
+    margin-bottom: 0;
+}
+
+.builder-combinator {
+    min-width: 180px;
+}
+
+#builder-value-select {
+    min-width: 200px;
+}
+
+.builder-conditions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    min-height: 2rem;
+}
+
+.builder-conditions.empty {
+    color: var(--text-muted);
+    font-style: italic;
+}
+
+.condition-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    background-color: rgba(59, 130, 246, 0.12);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 0.2rem 0.75rem;
+    font-size: 0.85rem;
+}
+
+.condition-chip button {
+    border: none;
+    background: none;
+    cursor: pointer;
+    font-size: 0.9rem;
+    color: var(--danger);
+}
+
+#policy-logic.readonly {
+    background-color: var(--background);
+    color: var(--text-muted);
+}
+
 .clients-page,
 .blocklists-page {
     display: flex;

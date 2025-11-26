@@ -6,9 +6,14 @@
 <div class="policies-page">
     <div class="page-header">
         <h2>DNS Policies</h2>
-        <button class="btn btn-primary" onclick="showAddPolicyModal()">
-            ➕ Add Policy
-        </button>
+        <div class="policy-actions">
+            <a class="btn btn-secondary" href="/api/policies/export" download>
+                ⬇️ Export
+            </a>
+            <button class="btn btn-primary" onclick="showAddPolicyModal()">
+                ➕ Add Policy
+            </button>
+        </div>
     </div>
 
     <div class="policies-info">
@@ -40,13 +45,46 @@
                        placeholder="e.g., Block Social Media After Hours">
             </div>
 
+            <div class="logic-mode-toggle">
+                <label>
+                    <input type="radio" name="logic-mode" value="builder" checked>
+                    Guided builder
+                </label>
+                <label>
+                    <input type="radio" name="logic-mode" value="expression">
+                    Advanced expression
+                </label>
+            </div>
+
+            <div id="builder-panel" class="builder-panel">
+                <div class="builder-row">
+                    <select id="builder-field" class="filter-select"></select>
+                    <select id="builder-operator" class="filter-select"></select>
+                    <input type="text" id="builder-value" class="filter-input" placeholder="Value">
+                    <select id="builder-value-select" class="filter-select" style="display:none;"></select>
+                    <button type="button" class="btn btn-secondary btn-sm" onclick="addPolicyCondition()">Add</button>
+                </div>
+                <div class="builder-row">
+                    <label>Match
+                        <select id="builder-combinator" class="filter-select builder-combinator">
+                            <option value="&&">ALL conditions</option>
+                            <option value="||">ANY condition</option>
+                        </select>
+                    </label>
+                </div>
+                <div id="builder-conditions" class="builder-conditions empty">
+                    No conditions yet. Select a field above to begin.
+                </div>
+            </div>
+
             <div class="form-group">
                 <label for="policy-logic">Rule Logic *</label>
                 <textarea id="policy-logic" name="logic" required rows="4"
-                          placeholder="e.g., Hour >= 22 && DomainMatches(Domain, 'facebook')"></textarea>
+                          placeholder="e.g., Hour >= 22 && DomainMatches(Domain, 'facebook.com')"></textarea>
                 <small class="form-help">
-                    Available: Hour, Minute, Day, Month, Weekday, Domain, ClientIP, QueryType<br>
-                    Functions: DomainMatches(), DomainEndsWith(), DomainStartsWith(), IPInCIDR()
+                    Switch to <strong>Advanced expression</strong> mode to edit this field manually.<br>
+                    Available context: Hour, Minute, Day, Month, Weekday, Domain, ClientIP, QueryType<br>
+                    Helper functions: DomainMatches(), DomainEndsWith(), DomainStartsWith(), IPInCIDR(), QueryTypeIn()
                 </small>
             </div>
 
@@ -92,12 +130,73 @@
 
 <script>
 let editingPolicyId = null;
+const POLICY_BUILDER_FIELDS = [
+    {
+        key: 'domain',
+        label: 'Domain',
+        operators: [
+            { key: 'equals', label: 'equals', inputType: 'text', build: (value) => `Domain == ${quoteValue(value)}` },
+            { key: 'starts_with', label: 'starts with', inputType: 'text', build: (value) => `DomainStartsWith(Domain, ${quoteValue(value)})` },
+            { key: 'ends_with', label: 'ends with', inputType: 'text', build: (value) => `DomainEndsWith(Domain, ${quoteValue(value)})` },
+            { key: 'contains', label: 'contains', inputType: 'text', build: (value) => `DomainMatches(Domain, ${quoteValue('.*' + escapeRegex(value) + '.*')})` },
+            { key: 'matches_regex', label: 'matches regex', inputType: 'text', build: (value) => `DomainMatches(Domain, ${quoteValue(value)})` },
+        ],
+    },
+    {
+        key: 'client_ip',
+        label: 'Client IP',
+        operators: [
+            { key: 'equals', label: 'equals', inputType: 'text', build: (value) => `ClientIP == ${quoteValue(value)}` },
+            { key: 'in_cidr', label: 'in CIDR', inputType: 'text', placeholder: '10.0.0.0/8', build: (value) => `IPInCIDR(ClientIP, ${quoteValue(value)})` },
+        ],
+    },
+    {
+        key: 'query_type',
+        label: 'Query Type',
+        operators: [
+            {
+                key: 'equals',
+                label: 'equals',
+                inputType: 'select',
+                options: ['A', 'AAAA', 'CNAME', 'MX', 'TXT', 'PTR', 'ANY'],
+                build: (value) => `QueryType == ${quoteValue(value.toUpperCase())}`,
+            },
+        ],
+    },
+    {
+        key: 'hour',
+        label: 'Hour',
+        operators: [
+            { key: 'equals', label: 'equals', inputType: 'number', min: 0, max: 23, build: (value) => `Hour == ${value}` },
+            { key: 'after', label: 'after or equal', inputType: 'number', min: 0, max: 23, build: (value) => `Hour >= ${value}` },
+            { key: 'before', label: 'before or equal', inputType: 'number', min: 0, max: 23, build: (value) => `Hour <= ${value}` },
+        ],
+    },
+    {
+        key: 'response_time',
+        label: 'Response Time (ms)',
+        operators: [
+            { key: 'greater', label: 'greater than', inputType: 'number', min: 0, build: (value) => `ResponseTimeMs >= ${value}` },
+            { key: 'less', label: 'less than', inputType: 'number', min: 0, build: (value) => `ResponseTimeMs <= ${value}` },
+        ],
+    },
+];
+
+const builderState = {
+    mode: 'builder',
+    combinator: '&&',
+    conditions: [],
+};
+
+document.addEventListener('DOMContentLoaded', initPolicyBuilder);
 
 function showAddPolicyModal() {
     editingPolicyId = null;
     document.getElementById('modal-title').textContent = 'Add Policy';
     document.getElementById('policy-form').reset();
     document.getElementById('policy-id').value = '';
+    resetPolicyBuilder();
+    setLogicMode('builder');
     document.getElementById('policy-modal').style.display = 'flex';
 }
 
@@ -109,12 +208,14 @@ function showEditPolicyModal(policy) {
     document.getElementById('policy-logic').value = policy.logic;
     document.getElementById('policy-action').value = policy.action;
     document.getElementById('policy-enabled').checked = policy.enabled;
+    setLogicMode('expression');
     document.getElementById('policy-modal').style.display = 'flex';
 }
 
 function closePolicyModal() {
     document.getElementById('policy-modal').style.display = 'none';
     editingPolicyId = null;
+    resetPolicyBuilder();
 }
 
 async function submitPolicy(event) {
@@ -231,6 +332,215 @@ async function testPolicyRule() {
     } catch (error) {
         resultEl.textContent = error.message || 'Failed to test rule.';
         resultEl.className = 'text-muted danger-text';
+    }
+}
+
+function initPolicyBuilder() {
+    populateFieldOptions();
+    document.querySelectorAll('input[name="logic-mode"]').forEach((radio) => {
+        radio.addEventListener('change', (event) => setLogicMode(event.target.value));
+    });
+    document.getElementById('builder-field')?.addEventListener('change', () => {
+        updateOperatorOptions();
+    });
+    document.getElementById('builder-operator')?.addEventListener('change', () => {
+        updateValueInput();
+    });
+    document.getElementById('builder-combinator')?.addEventListener('change', (event) => {
+        builderState.combinator = event.target.value === '||' ? '||' : '&&';
+        updateLogicFromBuilder();
+    });
+    updateOperatorOptions();
+    setLogicMode('builder');
+    renderPolicyConditions();
+}
+
+function populateFieldOptions() {
+    const fieldSelect = document.getElementById('builder-field');
+    if (!fieldSelect) return;
+    fieldSelect.innerHTML = '';
+    POLICY_BUILDER_FIELDS.forEach((field) => {
+        const option = document.createElement('option');
+        option.value = field.key;
+        option.textContent = field.label;
+        fieldSelect.appendChild(option);
+    });
+}
+
+function getSelectedField() {
+    const key = document.getElementById('builder-field')?.value;
+    return POLICY_BUILDER_FIELDS.find((field) => field.key === key) || POLICY_BUILDER_FIELDS[0];
+}
+
+function getSelectedOperator(field) {
+    const key = document.getElementById('builder-operator')?.value;
+    return field.operators.find((op) => op.key === key) || field.operators[0];
+}
+
+function updateOperatorOptions() {
+    const operatorSelect = document.getElementById('builder-operator');
+    if (!operatorSelect) return;
+
+    const field = getSelectedField();
+    operatorSelect.innerHTML = '';
+    field.operators.forEach((op) => {
+        const option = document.createElement('option');
+        option.value = op.key;
+        option.textContent = op.label;
+        operatorSelect.appendChild(option);
+    });
+    updateValueInput();
+}
+
+function updateValueInput() {
+    const field = getSelectedField();
+    const operator = getSelectedOperator(field);
+    const valueInput = document.getElementById('builder-value');
+    const valueSelect = document.getElementById('builder-value-select');
+    if (!operator || !valueInput || !valueSelect) return;
+
+    if (operator.inputType === 'select') {
+        valueSelect.innerHTML = '';
+        operator.options.forEach((opt) => {
+            const option = document.createElement('option');
+            option.value = opt;
+            option.textContent = opt;
+            valueSelect.appendChild(option);
+        });
+        valueInput.style.display = 'none';
+        valueSelect.style.display = 'inline-flex';
+    } else {
+        valueSelect.style.display = 'none';
+        valueInput.style.display = 'inline-flex';
+        valueInput.type = operator.inputType === 'number' ? 'number' : 'text';
+        valueInput.placeholder = operator.placeholder || 'Value';
+        if (operator.min !== undefined) valueInput.min = operator.min;
+        if (operator.max !== undefined) valueInput.max = operator.max;
+    }
+    valueInput.value = '';
+}
+
+function addPolicyCondition() {
+    const field = getSelectedField();
+    const operator = getSelectedOperator(field);
+    const valueInput = document.getElementById('builder-value');
+    const valueSelect = document.getElementById('builder-value-select');
+    if (!field || !operator) {
+        alert('Select a field and operator.');
+        return;
+    }
+
+    let rawValue = operator.inputType === 'select' ? valueSelect.value : valueInput.value.trim();
+    if (rawValue === '') {
+        alert('Enter a value for this condition.');
+        return;
+    }
+
+    let buildValue = rawValue;
+    if (operator.inputType === 'number') {
+        buildValue = Number(rawValue);
+        if (!Number.isFinite(buildValue)) {
+            alert('Enter a valid number.');
+            return;
+        }
+    }
+
+    const expression = operator.build(buildValue);
+    if (!expression) {
+        alert('Unable to build expression for this condition.');
+        return;
+    }
+
+    builderState.conditions.push({
+        expression,
+        label: `${field.label} ${operator.label} ${rawValue}`,
+    });
+    renderPolicyConditions();
+    updateLogicFromBuilder();
+    valueInput.value = '';
+}
+
+function renderPolicyConditions() {
+    const container = document.getElementById('builder-conditions');
+    if (!container) return;
+    container.innerHTML = '';
+    if (builderState.conditions.length === 0) {
+        container.classList.add('empty');
+        container.textContent = 'No conditions yet. Select a field above to begin.';
+        return;
+    }
+    container.classList.remove('empty');
+    builderState.conditions.forEach((condition, index) => {
+        const chip = document.createElement('div');
+        chip.className = 'condition-chip';
+        chip.textContent = condition.label;
+        const removeBtn = document.createElement('button');
+        removeBtn.type = 'button';
+        removeBtn.ariaLabel = 'Remove condition';
+        removeBtn.textContent = '×';
+        removeBtn.addEventListener('click', () => removePolicyCondition(index));
+        chip.appendChild(removeBtn);
+        container.appendChild(chip);
+    });
+}
+
+function removePolicyCondition(index) {
+    builderState.conditions.splice(index, 1);
+    renderPolicyConditions();
+    updateLogicFromBuilder();
+}
+
+function updateLogicFromBuilder() {
+    if (builderState.mode !== 'builder') {
+        return;
+    }
+    const textarea = document.getElementById('policy-logic');
+    if (!textarea) return;
+    if (builderState.conditions.length === 0) {
+        textarea.value = '';
+        return;
+    }
+    const joiner = builderState.combinator === '||' ? ' || ' : ' && ';
+    textarea.value = builderState.conditions.map((c) => `(${c.expression})`).join(joiner);
+}
+
+function resetPolicyBuilder() {
+    builderState.conditions = [];
+    builderState.combinator = '&&';
+    const combinatorSelect = document.getElementById('builder-combinator');
+    if (combinatorSelect) combinatorSelect.value = '&&';
+    renderPolicyConditions();
+    updateLogicFromBuilder();
+}
+
+function setLogicMode(mode) {
+    builderState.mode = mode;
+    const panel = document.getElementById('builder-panel');
+    const textarea = document.getElementById('policy-logic');
+    if (!panel || !textarea) return;
+    if (mode === 'builder') {
+        panel.style.display = 'block';
+        textarea.readOnly = true;
+        textarea.classList.add('readonly');
+        updateLogicFromBuilder();
+        document.querySelector('input[name="logic-mode"][value="builder"]').checked = true;
+    } else {
+        panel.style.display = 'none';
+        textarea.readOnly = false;
+        textarea.classList.remove('readonly');
+        document.querySelector('input[name="logic-mode"][value="expression"]').checked = true;
+    }
+}
+
+function escapeRegex(value) {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function quoteValue(value) {
+    try {
+        return JSON.stringify(value);
+    } catch (_) {
+        return `"${String(value).replace(/\"/g, '\\"')}"`;
     }
 }
 </script>
