@@ -78,12 +78,12 @@ func initTemplates() error {
 	}
 
 	parsePage := func(name string) (*template.Template, error) {
-		clone, err := baseTemplate.Clone()
-		if err != nil {
-			return nil, err
+		clone, cloneErr := baseTemplate.Clone()
+		if cloneErr != nil {
+			return nil, cloneErr
 		}
-		if _, err := clone.ParseFS(tmplFS, name); err != nil {
-			return nil, err
+		if _, parseErr := clone.ParseFS(tmplFS, name); parseErr != nil {
+			return nil, parseErr
 		}
 		return clone, nil
 	}

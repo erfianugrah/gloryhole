@@ -205,13 +205,13 @@ func (s *SQLiteStorage) DeleteClientGroup(ctx context.Context, name string) erro
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	if _, err := tx.ExecContext(ctx, `UPDATE client_profiles SET group_name = NULL WHERE group_name = ?`, name); err != nil {
-		return fmt.Errorf("clear client group references failed: %w", err)
+	if _, execErr := tx.ExecContext(ctx, `UPDATE client_profiles SET group_name = NULL WHERE group_name = ?`, name); execErr != nil {
+		return fmt.Errorf("clear client group references failed: %w", execErr)
 	}
 
-	res, err := tx.ExecContext(ctx, `DELETE FROM client_groups WHERE name = ?`, name)
-	if err != nil {
-		return fmt.Errorf("delete client group failed: %w", err)
+	res, execErr := tx.ExecContext(ctx, `DELETE FROM client_groups WHERE name = ?`, name)
+	if execErr != nil {
+		return fmt.Errorf("delete client group failed: %w", execErr)
 	}
 
 	affected, _ := res.RowsAffected()
@@ -219,8 +219,8 @@ func (s *SQLiteStorage) DeleteClientGroup(ctx context.Context, name string) erro
 		return ErrNotFound
 	}
 
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit client group delete failed: %w", err)
+	if commitErr := tx.Commit(); commitErr != nil {
+		return fmt.Errorf("commit client group delete failed: %w", commitErr)
 	}
 	return nil
 }
