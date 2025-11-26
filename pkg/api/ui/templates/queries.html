@@ -32,9 +32,11 @@
     <div id="queries-container"
          hx-get="/api/ui/queries?limit=100&offset=0"
          hx-trigger="load, every 2s"
-         hx-swap="innerHTML">
+         hx-swap="innerHTML"
+         hx-indicator="#queries-loading">
         <div class="loading">Loading queries...</div>
     </div>
+    <div id="queries-loading" class="hx-indicator">Refreshing…</div>
 
     <div class="pagination">
         <button id="prev-btn" class="btn btn-secondary" onclick="loadPage(-100)">Previous</button>

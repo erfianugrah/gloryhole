@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/miekg/dns"
 )
 
 type blocklistSummaryResponse struct {
@@ -71,9 +73,11 @@ func (s *Server) handleCheckBlocklist(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	blocked := s.blocklistManager.IsBlocked(strings.ToLower(domain))
+	normalized := normalizeDomain(domain)
+	fqdn := dns.Fqdn(normalized)
+	blocked := s.blocklistManager.IsBlocked(normalized) || s.blocklistManager.IsBlocked(fqdn)
 	s.writeJSON(w, http.StatusOK, map[string]any{
-		"domain":  domain,
+		"domain":  normalized,
 		"blocked": blocked,
 		"enabled": true,
 	})
@@ -109,4 +113,12 @@ func (s *Server) buildBlocklistSummary(ctx context.Context) blocklistSummaryResp
 	}
 
 	return summary
+}
+
+func normalizeDomain(value string) string {
+	trimmed := strings.TrimSpace(strings.ToLower(value))
+	if trimmed == "" {
+		return ""
+	}
+	return strings.TrimSuffix(trimmed, ".")
 }

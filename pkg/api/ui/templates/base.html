@@ -4,6 +4,22 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{block "title" .}}Glory-Hole DNS{{end}}</title>
+    <script>
+    (function() {
+        const STORAGE_KEY = "gloryhole-theme";
+        let theme = "light";
+        try {
+            const stored = localStorage.getItem(STORAGE_KEY);
+            if (stored === "dark" || stored === "light") {
+                theme = stored;
+            } else if (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) {
+                theme = "dark";
+            }
+        } catch (_) {}
+        document.documentElement.dataset.theme = theme;
+        document.documentElement.style.colorScheme = theme;
+    })();
+    </script>
     <script src="/static/js/mini-htmx.js" defer></script>
     <script src="/static/js/simple-chart.js" defer></script>
     <link rel="stylesheet" href="/static/css/style.css">
@@ -71,7 +87,7 @@
 
         function applyTheme(theme, emit) {
             const next = theme === "dark" ? "dark" : "light";
-            document.body.dataset.theme = next;
+            document.documentElement.dataset.theme = next;
             document.documentElement.style.colorScheme = next;
             if (toggle) {
                 toggle.setAttribute("aria-pressed", next === "dark" ? "true" : "false");
@@ -87,7 +103,7 @@
 
         if (toggle) {
             toggle.addEventListener("click", function() {
-                const current = document.body.dataset.theme === "dark" ? "dark" : "light";
+                const current = document.documentElement.dataset.theme === "dark" ? "dark" : "light";
                 const next = current === "dark" ? "light" : "dark";
                 applyTheme(next, true);
                 safeStorage.set(next);

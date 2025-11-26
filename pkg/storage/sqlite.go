@@ -445,13 +445,23 @@ func (s *SQLiteStorage) GetTopDomains(ctx context.Context, limit int, blocked bo
 		return nil, ErrClosed
 	}
 
+	blockedValue := 0
+	if blocked {
+		blockedValue = 1
+	}
+
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT domain, query_count, last_queried, first_queried, blocked
-		FROM domain_stats
+		SELECT
+			domain,
+			COUNT(*) AS query_count,
+			MAX(timestamp) AS last_queried,
+			MIN(timestamp) AS first_queried
+		FROM queries
 		WHERE blocked = ?
+		GROUP BY domain
 		ORDER BY query_count DESC
 		LIMIT ?
-	`, blocked, limit)
+	`, blockedValue, limit)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrQueryFailed, err)
 	}
@@ -460,9 +470,13 @@ func (s *SQLiteStorage) GetTopDomains(ctx context.Context, limit int, blocked bo
 	var domains []*DomainStats
 	for rows.Next() {
 		var d DomainStats
-		if err := rows.Scan(&d.Domain, &d.QueryCount, &d.LastQueried, &d.FirstQueried, &d.Blocked); err != nil {
+		var lastStr, firstStr string
+		if err := rows.Scan(&d.Domain, &d.QueryCount, &lastStr, &firstStr); err != nil {
 			return nil, fmt.Errorf("%w: %v", ErrQueryFailed, err)
 		}
+		d.LastQueried = parseSQLiteTime(lastStr)
+		d.FirstQueried = parseSQLiteTime(firstStr)
+		d.Blocked = blocked
 		domains = append(domains, &d)
 	}
 

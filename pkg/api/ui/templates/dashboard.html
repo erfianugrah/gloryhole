@@ -29,12 +29,14 @@
                 <div class="chart-container">
                     <canvas id="queryChart"></canvas>
                 </div>
+                <div class="chart-legend" id="queryChart-legend"></div>
             </div>
             <div class="chart-card">
                 <h4>Cache Hit Rate</h4>
                 <div class="chart-container">
                     <canvas id="cacheHitChart"></canvas>
                 </div>
+                <div class="chart-legend" id="cacheHitChart-legend"></div>
             </div>
         </div>
     </div>
@@ -47,18 +49,21 @@
                 <div class="chart-container">
                     <canvas id="queryTypeChart"></canvas>
                 </div>
+                <div class="chart-legend" id="queryTypeChart-legend"></div>
             </div>
             <div class="chart-card">
                 <h4>Top Allowed Domains</h4>
                 <div class="chart-container">
                     <canvas id="topAllowedChart"></canvas>
                 </div>
+                <div class="chart-legend" id="topAllowedChart-legend"></div>
             </div>
             <div class="chart-card">
                 <h4>Top Blocked Domains</h4>
                 <div class="chart-container">
                     <canvas id="topBlockedChart"></canvas>
                 </div>
+                <div class="chart-legend" id="topBlockedChart-legend"></div>
             </div>
         </div>
     </div>
@@ -100,6 +105,30 @@
 </div>
 
 <script>
+function renderLegend(containerId, items) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    container.innerHTML = '';
+    (items || []).forEach((item) => {
+        if (!item || !item.label) return;
+        const chip = document.createElement('div');
+        chip.className = 'legend-chip';
+        if (item.color) {
+            chip.style.setProperty('--legend-color', item.color);
+        }
+        chip.textContent = item.label;
+        container.appendChild(chip);
+    });
+}
+
+function datasetLegendItems(datasets) {
+    if (!Array.isArray(datasets)) return [];
+    return datasets.map((ds) => ({
+        label: ds.label,
+        color: Array.isArray(ds.borderColor) ? ds.borderColor[0] : ds.borderColor || ds.backgroundColor || '#3b82f6',
+    }));
+}
+
 let queryChart = null;
 let cacheHitChart = null;
 let queryTypeChart = null;
@@ -178,6 +207,7 @@ function initializeTimeSeriesCharts() {
                 }
             }
         });
+        renderLegend('queryChart-legend', datasetLegendItems(queryChart.data.datasets));
     }
 
     const cacheCtx = document.getElementById('cacheHitChart');
@@ -215,6 +245,7 @@ function initializeTimeSeriesCharts() {
                 }
             }
         });
+        renderLegend('cacheHitChart-legend', datasetLegendItems(cacheHitChart.data.datasets));
     }
 }
 
@@ -250,12 +281,14 @@ async function refreshTimeSeriesCharts() {
             queryChart.data.datasets[1].data = blocked;
             queryChart.data.datasets[2].data = cached;
             queryChart.update('none');
+            renderLegend('queryChart-legend', datasetLegendItems(queryChart.data.datasets));
         }
 
         if (cacheHitChart) {
             cacheHitChart.data.labels = labels;
             cacheHitChart.data.datasets[0].data = hitRates;
             cacheHitChart.update('none');
+            renderLegend('cacheHitChart-legend', datasetLegendItems(cacheHitChart.data.datasets));
         }
     } catch (error) {
         console.error('Failed to update time-series charts:', error);
@@ -292,6 +325,7 @@ function initializeTypeChart() {
             }
         }
     });
+    renderLegend('queryTypeChart-legend', []);
 }
 
 async function updateQueryTypeChart() {
@@ -314,6 +348,14 @@ async function updateQueryTypeChart() {
 
         queryTypeChart.data.labels = labels;
         queryTypeChart.data.datasets[0].data = counts;
+        const colors = Array.isArray(queryTypeChart.data.datasets[0].backgroundColor)
+            ? queryTypeChart.data.datasets[0].backgroundColor
+            : [];
+        const legendItems = labels.map((label, idx) => ({
+            label,
+            color: colors[idx] || '#3b82f6',
+        }));
+        renderLegend('queryTypeChart-legend', legendItems);
         queryTypeChart.update('none');
     } catch (error) {
         console.error('Failed to update query-type chart:', error);
@@ -324,11 +366,13 @@ function initializeDomainCharts() {
     const allowedCtx = document.getElementById('topAllowedChart');
     if (allowedCtx) {
         topAllowedChart = new Chart(allowedCtx, createDomainBarConfig('#3b82f6'));
+        renderLegend('topAllowedChart-legend', [{ label: 'Queries', color: '#3b82f6' }]);
     }
 
     const blockedCtx = document.getElementById('topBlockedChart');
     if (blockedCtx) {
         topBlockedChart = new Chart(blockedCtx, createDomainBarConfig('#ef4444'));
+        renderLegend('topBlockedChart-legend', [{ label: 'Blocked', color: '#ef4444' }]);
     }
 }
 
@@ -388,6 +432,9 @@ async function updateTopDomainsChart(url, chart) {
 
         chart.data.labels = labels;
         chart.data.datasets[0].data = values;
+        const legendId = chart === topBlockedChart ? 'topBlockedChart-legend' : 'topAllowedChart-legend';
+        const color = chart?.data?.datasets?.[0]?.backgroundColor || '#3b82f6';
+        renderLegend(legendId, [{ label: 'Queries', color }]);
         chart.update('none');
     } catch (error) {
         console.error('Failed to update top domains chart:', error);

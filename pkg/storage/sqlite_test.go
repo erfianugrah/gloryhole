@@ -531,13 +531,15 @@ func TestSQLiteStorage_GetTopDomains(t *testing.T) {
 	}
 
 	for _, q := range queries {
-		// Use domain_stats directly for faster testing
-		_, err := sqlStorage.db.Exec(`
-			INSERT INTO domain_stats (domain, query_count, last_queried, first_queried, blocked)
-			VALUES (?, ?, ?, ?, ?)
-		`, q.domain, q.count, time.Now(), time.Now(), q.blocked)
-		if err != nil {
-			t.Fatalf("Failed to insert test data: %v", err)
+		for i := 0; i < q.count; i++ {
+			_, err := sqlStorage.db.Exec(`
+				INSERT INTO queries
+					(timestamp, client_ip, domain, query_type, response_code, blocked, cached, response_time_ms)
+				VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+			`, time.Now(), "192.168.1.1", q.domain, "A", 0, q.blocked, false, 5)
+			if err != nil {
+				t.Fatalf("Failed to insert test query: %v", err)
+			}
 		}
 	}
 
