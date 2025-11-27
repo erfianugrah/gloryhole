@@ -370,6 +370,20 @@ main {
     border-color: rgba(148, 163, 184, 0.4);
 }
 
+.legend-chip-button {
+    cursor: pointer;
+    user-select: none;
+}
+
+.legend-chip-button:focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
+}
+
+.legend-chip-inactive {
+    opacity: 0.45;
+}
+
 /* Sections */
 .top-domains-section,
 .recent-queries-section {

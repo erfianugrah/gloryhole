@@ -2,6 +2,7 @@ package dns
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"strconv"
 	"strings"
@@ -839,10 +840,12 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 	// This path is ~10x faster than the locked path below (~10ns vs ~110ns)
 	// Kill-switch check: Only check blocklist if enable_blocklist is true in config
 	var whitelisted bool
+	var blockMatch blocklist.MatchResult
 
 	if enableBlocklist && h.BlocklistManager != nil {
 		// Lock-free atomic pointer read - blazing fast!
-		blocked = h.BlocklistManager.IsBlocked(domain)
+		blockMatch = h.BlocklistManager.Match(domain)
+		blocked = blockMatch.Blocked
 
 		// Check whitelist/overrides with read lock
 		// Note: Could be optimized with atomic pointer in future if needed
@@ -861,6 +864,7 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 		// Override blocklist if whitelisted
 		if whitelisted {
 			blocked = false
+			blockMatch = blocklist.MatchResult{}
 		}
 
 		h.lookupMu.RLock() // Re-acquire lock for subsequent map reads
@@ -886,8 +890,16 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 			responseCode = dns.RcodeNameError
 			msg.SetRcode(r, dns.RcodeNameError)
 
+			sourceLabel := blocklistTraceSource(blockMatch)
+			if sourceLabel == "" {
+				sourceLabel = "blocklist"
+			}
 			trace.Record(traceStageBlocklist, "block", func(entry *storage.BlockTraceEntry) {
-				entry.Source = "manager"
+				entry.Source = sourceLabel
+				if detail := describeBlockMatch(blockMatch); detail != "" {
+					entry.Detail = detail
+				}
+				applyBlockMatchMetadata(entry, blockMatch)
 			})
 
 			// Record blocked query metric with trace metadata
@@ -895,7 +907,7 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 				reason:     "blocklist_manager",
 				qtypeLabel: qtypeLabel,
 				stage:      traceStageBlocklist,
-				source:     "manager",
+				source:     sourceLabel,
 			})
 
 			// Cache blocked response to avoid repeated blocklist lookups
@@ -1000,6 +1012,7 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 
 			trace.Record(traceStageBlocklist, "block", func(entry *storage.BlockTraceEntry) {
 				entry.Source = "legacy"
+				entry.Detail = "Matched legacy blocklist entry"
 			})
 
 			// Record blocked query metric with trace metadata
@@ -1232,6 +1245,66 @@ func (h *Handler) recordBlockedQuery(ctx context.Context, meta blockMetadata) {
 		return
 	}
 	h.Metrics.DNSBlockedQueries.Add(ctx, 1, metric.WithAttributes(attrs...))
+}
+
+func blocklistTraceSource(match blocklist.MatchResult) string {
+	if len(match.Sources) > 0 {
+		return match.Sources[0]
+	}
+	if match.Kind != "" {
+		return match.Kind
+	}
+	return ""
+}
+
+func describeBlockMatch(match blocklist.MatchResult) string {
+	if !match.Blocked {
+		return ""
+	}
+	kind := titleCase(match.Kind)
+	switch {
+	case match.Pattern != "" && kind != "":
+		return fmt.Sprintf("Matched %s pattern %s", strings.ToLower(kind), match.Pattern)
+	case match.Pattern != "":
+		return fmt.Sprintf("Matched pattern %s", match.Pattern)
+	case kind != "":
+		return fmt.Sprintf("Matched %s entry", strings.ToLower(kind))
+	case len(match.Sources) > 0:
+		return fmt.Sprintf("Blocked by %s", match.Sources[0])
+	default:
+		return ""
+	}
+}
+
+func applyBlockMatchMetadata(entry *storage.BlockTraceEntry, match blocklist.MatchResult) {
+	if !match.Blocked {
+		return
+	}
+	if entry.Metadata == nil {
+		entry.Metadata = make(map[string]string)
+	}
+	if len(match.Sources) > 0 {
+		entry.Metadata["lists"] = strings.Join(match.Sources, ", ")
+	}
+	if match.Kind != "" {
+		entry.Metadata["match_kind"] = titleCase(match.Kind)
+	}
+	if match.Pattern != "" {
+		entry.Metadata["pattern"] = match.Pattern
+	}
+	if len(entry.Metadata) == 0 {
+		entry.Metadata = nil
+	}
+}
+
+func titleCase(value string) string {
+	if value == "" {
+		return ""
+	}
+	if len(value) == 1 {
+		return strings.ToUpper(value)
+	}
+	return strings.ToUpper(value[:1]) + strings.ToLower(value[1:])
 }
 
 // recordForwardedQuery increments the forwarded-query counter tagged with path/upstream metadata.

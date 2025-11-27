@@ -84,6 +84,17 @@ func TestManager_Update(t *testing.T) {
 	if m.IsBlocked("allowed.example.com.") {
 		t.Error("Expected allowed.example.com. not to be blocked")
 	}
+
+	match := m.Match("ads.example.com.")
+	if !match.Blocked {
+		t.Fatal("Expected match to be blocked")
+	}
+	if match.Kind != "exact" {
+		t.Fatalf("Expected match kind exact, got %s", match.Kind)
+	}
+	if len(match.Sources) != 1 || match.Sources[0] != server.URL {
+		t.Fatalf("Expected sources to contain %s, got %v", server.URL, match.Sources)
+	}
 }
 
 func TestManager_Update_NoBlocklists(t *testing.T) {
@@ -194,8 +205,12 @@ func TestManager_Get(t *testing.T) {
 		t.Errorf("Expected 1 domain in blocklist, got %d", len(*blocklist))
 	}
 
-	if _, ok := (*blocklist)["ads.example.com."]; !ok {
+	entry, ok := (*blocklist)["ads.example.com."]
+	if !ok {
 		t.Error("Expected ads.example.com. to be in blocklist")
+	}
+	if entry.SourceMask == 0 {
+		t.Error("Expected entry to contain source metadata")
 	}
 }
 
@@ -236,6 +251,73 @@ func TestManager_IsBlocked(t *testing.T) {
 	// Test empty domain
 	if m.IsBlocked("") {
 		t.Error("Expected empty domain not to be blocked")
+	}
+}
+
+func TestManager_MatchMultipleSources(t *testing.T) {
+	server1 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("0.0.0.0 ads.example.com\n"))
+	}))
+	defer server1.Close()
+
+	server2 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("0.0.0.0 ads.example.com\n"))
+	}))
+	defer server2.Close()
+
+	cfg := &config.Config{
+		Blocklists: []string{server1.URL, server2.URL},
+	}
+	logger := logging.NewDefault()
+	m := NewManager(cfg, logger, nil, nil)
+
+	if err := m.Update(context.Background()); err != nil {
+		t.Fatalf("Update failed: %v", err)
+	}
+
+	match := m.Match("ads.example.com.")
+	if !match.Blocked {
+		t.Fatal("Expected domain to be blocked")
+	}
+	if len(match.Sources) != 2 {
+		t.Fatalf("Expected 2 sources, got %v", match.Sources)
+	}
+	want := map[string]bool{
+		server1.URL: true,
+		server2.URL: true,
+	}
+	for _, source := range match.Sources {
+		if !want[source] {
+			t.Fatalf("Unexpected source %s", source)
+		}
+		delete(want, source)
+	}
+	if len(want) != 0 {
+		t.Fatalf("Missing sources: %v", want)
+	}
+}
+
+func TestManager_MatchPattern(t *testing.T) {
+	cfg := &config.Config{}
+	logger := logging.NewDefault()
+	m := NewManager(cfg, logger, nil, nil)
+
+	if err := m.SetPatterns([]string{"*.example.com"}); err != nil {
+		t.Fatalf("SetPatterns failed: %v", err)
+	}
+
+	match := m.Match("foo.example.com")
+	if !match.Blocked {
+		t.Fatal("Expected pattern match to block domain")
+	}
+	if match.Kind != "wildcard" {
+		t.Fatalf("Expected wildcard match, got %s", match.Kind)
+	}
+	if match.Pattern != "*.example.com" {
+		t.Fatalf("Unexpected pattern %s", match.Pattern)
+	}
+	if len(match.Sources) != 1 || match.Sources[0] != "pattern" {
+		t.Fatalf("Expected pattern source, got %v", match.Sources)
 	}
 }
 

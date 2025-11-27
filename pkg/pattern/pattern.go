@@ -169,26 +169,36 @@ func NewMatcher(patterns []string) (*Matcher, error) {
 //  2. Try wildcard matches (fast - O(n) string ops)
 //  3. Try regex matches last (slower - O(n) regex ops)
 func (m *Matcher) Match(domain string) bool {
+	_, ok := m.MatchPattern(domain)
+	return ok
+}
+
+// MatchPattern returns the specific pattern that matched the provided domain.
+// The returned pointer may refer to an existing pattern; callers must treat it as read-only.
+func (m *Matcher) MatchPattern(domain string) (*Pattern, bool) {
 	// Try exact first (fastest)
 	if _, ok := m.exact[domain]; ok {
-		return true
+		return &Pattern{
+			Raw:  domain,
+			Type: PatternTypeExact,
+		}, true
 	}
 
 	// Try wildcards (fast)
 	for _, pattern := range m.wildcard {
 		if pattern.Match(domain) {
-			return true
+			return pattern, true
 		}
 	}
 
 	// Try regex last (slowest)
 	for _, pattern := range m.regex {
 		if pattern.Match(domain) {
-			return true
+			return pattern, true
 		}
 	}
 
-	return false
+	return nil, false
 }
 
 // Stats returns statistics about the patterns in this matcher.

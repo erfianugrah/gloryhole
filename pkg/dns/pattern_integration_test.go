@@ -1,6 +1,7 @@
 package dns
 
 import (
+	"strings"
 	"testing"
 
 	"glory-hole/pkg/blocklist"
@@ -35,21 +36,23 @@ func TestWhitelistPatternIntegration(t *testing.T) {
 	manager := blocklist.NewManager(cfg, handler.Logger, nil, nil)
 
 	// Manually add some blocked domains
-	blockedDomains := map[string]struct{}{
-		"ads.example.com":     {},
-		"tracker.example.com": {},
-		"cdn1.example.com":    {},
-		"cdn2.example.com":    {},
-		"cdn3.example.com":    {},
+	current := manager.Get()
+	require.NotNil(t, current)
+	for _, domain := range []string{
+		"ads.example.com.",
+		"tracker.example.com.",
+		"cdn1.example.com.",
+		"cdn2.example.com.",
+		"cdn3.example.com.",
+	} {
+		(*current)[domain] = blocklist.BlockEntry{SourceMask: 1}
 	}
-	manager.Get() // Initialize the pointer
-	*manager.Get() = blockedDomains
 
 	handler.SetBlocklistManager(manager)
 
 	// Set up whitelist patterns
 	whitelistPatterns := []string{
-		"*.cdn.example.com",                    // Wildcard: should NOT match cdn1.example.com
+		"*.cdn.example.com",                   // Wildcard: should NOT match cdn1.example.com
 		"(\\.|^)taskassist.*\\.google\\.com$", // Regex: Pi-hole style pattern
 	}
 
@@ -58,7 +61,7 @@ func TestWhitelistPatternIntegration(t *testing.T) {
 	handler.WhitelistPatterns.Store(matcher)
 
 	// Set up exact whitelist entries
-	handler.Whitelist["tracker.example.com"] = struct{}{} // Exact match whitelist
+	handler.Whitelist["tracker.example.com."] = struct{}{} // Exact match whitelist
 
 	tests := []struct {
 		name        string
@@ -106,17 +109,20 @@ func TestWhitelistPatternIntegration(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			fqdnDomain := ensureTrailingDot(tt.domain)
+			shortDomain := strings.TrimSuffix(fqdnDomain, ".")
+
 			// Manually check if domain would be blocked
-			blocked := handler.BlocklistManager.IsBlocked(tt.domain)
+			blocked := handler.BlocklistManager.IsBlocked(fqdnDomain)
 
 			// Check whitelist (exact)
-			_, whitelistedExact := handler.Whitelist[tt.domain]
+			_, whitelistedExact := handler.Whitelist[fqdnDomain]
 
 			// Check whitelist (pattern)
 			whitelistedPattern := false
 			patterns := handler.WhitelistPatterns.Load()
 			if patterns != nil {
-				whitelistedPattern = patterns.Match(tt.domain)
+				whitelistedPattern = patterns.Match(shortDomain)
 			}
 
 			whitelisted := whitelistedExact || whitelistedPattern
@@ -136,6 +142,13 @@ func TestWhitelistPatternIntegration(t *testing.T) {
 	}
 }
 
+func ensureTrailingDot(domain string) string {
+	if domain == "" || strings.HasSuffix(domain, ".") {
+		return domain
+	}
+	return domain + "."
+}
+
 // TestBlocklistManagerPatternIntegration tests blocklist manager pattern support
 func TestBlocklistManagerPatternIntegration(t *testing.T) {
 	cfg := &config.Config{}
@@ -149,9 +162,9 @@ func TestBlocklistManagerPatternIntegration(t *testing.T) {
 
 	// Set up pattern-based blocklist
 	patterns := []string{
-		"*.ads.example.com",           // Wildcard
-		"^ad[sz]\\..*\\.com$",         // Regex
-		"(\\.|^)tracker\\.com$",       // Pi-hole style regex
+		"*.ads.example.com",     // Wildcard
+		"^ad[sz]\\..*\\.com$",   // Regex
+		"(\\.|^)tracker\\.com$", // Pi-hole style regex
 	}
 
 	err = manager.SetPatterns(patterns)

@@ -117,11 +117,11 @@
 </div>
 
 <script>
-function renderLegend(containerId, items) {
+function renderLegend(containerId, items, options = {}) {
     const container = document.getElementById(containerId);
     if (!container) return;
     container.innerHTML = '';
-    (items || []).forEach((item) => {
+    (items || []).forEach((item, index) => {
         if (!item || !item.label) return;
         const chip = document.createElement('div');
         chip.className = 'legend-chip';
@@ -129,6 +129,24 @@ function renderLegend(containerId, items) {
             chip.style.setProperty('--legend-color', item.color);
         }
         chip.textContent = item.label;
+        if (typeof options.isActive === 'function' && !options.isActive(item, index)) {
+            chip.classList.add('legend-chip-inactive');
+        }
+        if (typeof options.onClick === 'function') {
+            chip.classList.add('legend-chip-button');
+            chip.setAttribute('role', 'button');
+            chip.tabIndex = 0;
+            chip.addEventListener('click', (event) => {
+                event.preventDefault();
+                options.onClick(item, index, event);
+            });
+            chip.addEventListener('keydown', (event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    options.onClick(item, index, event);
+                }
+            });
+        }
         container.appendChild(chip);
     });
 }
@@ -146,6 +164,10 @@ let cacheHitChart = null;
 let queryTypeChart = null;
 let topAllowedChart = null;
 let topBlockedChart = null;
+let queryTypeLabels = [];
+let queryTypeCounts = [];
+let queryTypeColors = [];
+const queryTypeHidden = new Set();
 const queryTypeRangeSelect = document.getElementById('query-type-range');
 
 document.addEventListener('DOMContentLoaded', function() {
@@ -206,8 +228,7 @@ function initializeTimeSeriesCharts() {
                 },
                 plugins: {
                     legend: {
-                        display: true,
-                        position: 'top'
+                        display: false
                     }
                 },
                 scales: {
@@ -245,7 +266,7 @@ function initializeTimeSeriesCharts() {
                 responsive: true,
                 maintainAspectRatio: false,
                 plugins: {
-                    legend: { display: true, position: 'top' }
+                    legend: { display: false }
                 },
                 scales: {
                     x: {
@@ -336,7 +357,7 @@ function initializeTypeChart() {
             maintainAspectRatio: false,
             plugins: {
                 legend: {
-                    position: 'right'
+                    display: false
                 }
             }
         }
@@ -368,20 +389,61 @@ async function updateQueryTypeChart() {
             counts.push(item.total);
         });
 
-        queryTypeChart.data.labels = labels;
-        queryTypeChart.data.datasets[0].data = counts;
         const colors = Array.isArray(queryTypeChart.data.datasets[0].backgroundColor)
             ? queryTypeChart.data.datasets[0].backgroundColor
             : [];
-        const legendItems = labels.map((label, idx) => ({
-            label,
-            color: colors[idx] || '#3b82f6',
-        }));
-        renderLegend('queryTypeChart-legend', legendItems);
-        queryTypeChart.update('none');
+        queryTypeLabels = labels.slice();
+        queryTypeCounts = counts.slice();
+        queryTypeColors = colors.slice();
+        pruneQueryTypeHidden();
+        applyQueryTypeFilters();
     } catch (error) {
         console.error('Failed to update query-type chart:', error);
     }
+}
+
+function pruneQueryTypeHidden() {
+    if (!queryTypeLabels.length) {
+        queryTypeHidden.clear();
+        return;
+    }
+    const valid = new Set(queryTypeLabels);
+    Array.from(queryTypeHidden).forEach((label) => {
+        if (!valid.has(label)) {
+            queryTypeHidden.delete(label);
+        }
+    });
+    if (queryTypeHidden.size >= queryTypeLabels.length) {
+        queryTypeHidden.clear();
+    }
+}
+
+function applyQueryTypeFilters() {
+    if (!queryTypeChart) return;
+    const dataset = queryTypeChart.data.datasets[0];
+    dataset.data = queryTypeLabels.map((label, idx) => {
+        const value = queryTypeCounts[idx] || 0;
+        return queryTypeHidden.has(label) ? 0 : value;
+    });
+    queryTypeChart.data.labels = queryTypeLabels.slice();
+    queryTypeChart.update('none');
+    const legendItems = queryTypeLabels.map((label, idx) => ({
+        label,
+        color: queryTypeColors[idx] || '#3b82f6',
+    }));
+    renderLegend('queryTypeChart-legend', legendItems, {
+        isActive: (item) => !queryTypeHidden.has(item.label),
+        onClick: (item) => {
+            if (queryTypeHidden.has(item.label)) {
+                queryTypeHidden.delete(item.label);
+            } else if (queryTypeHidden.size < queryTypeLabels.length - 1) {
+                queryTypeHidden.add(item.label);
+            } else {
+                return;
+            }
+            applyQueryTypeFilters();
+        }
+    });
 }
 
 function initializeDomainCharts() {

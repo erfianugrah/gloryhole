@@ -2,7 +2,9 @@ package blocklist
 
 import (
 	"context"
+	"math/bits"
 	"net/http"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -11,7 +13,17 @@ import (
 	"glory-hole/pkg/logging"
 	"glory-hole/pkg/pattern"
 	"glory-hole/pkg/telemetry"
+
+	mdns "github.com/miekg/dns"
 )
+
+const maxTrackedSources = 64
+
+// BlockEntry stores metadata about a blocked domain.
+type BlockEntry struct {
+	SourceMask uint64
+	Overflow   bool
+}
 
 // Manager manages blocklist downloads and automatic updates
 type Manager struct {
@@ -21,12 +33,13 @@ type Manager struct {
 	metrics    *telemetry.Metrics
 
 	// Current blocklist (atomic pointer for zero-copy reads)
-	current atomic.Pointer[map[string]struct{}]
+	current atomic.Pointer[map[string]BlockEntry]
 
 	// Pattern-based blocklist (wildcard and regex)
 	patterns atomic.Pointer[pattern.Matcher]
 
 	lastUpdated atomic.Value
+	sourceNames atomic.Value
 
 	// Lifecycle management
 	updateTicker *time.Ticker
@@ -48,9 +61,10 @@ func NewManager(cfg *config.Config, logger *logging.Logger, metrics *telemetry.M
 	}
 
 	// Initialize with empty blocklist
-	empty := make(map[string]struct{})
+	empty := make(map[string]BlockEntry)
 	m.current.Store(&empty)
 	m.lastUpdated.Store(time.Time{})
+	m.sourceNames.Store([]string{})
 
 	return m
 }
@@ -126,7 +140,7 @@ func (m *Manager) Update(ctx context.Context) error {
 	}
 
 	// Download all blocklists
-	blocklist, err := m.downloader.DownloadAll(ctx, m.cfg.Blocklists)
+	blocklist, err := m.downloadWithSources(ctx)
 	if err != nil {
 		return err
 	}
@@ -137,6 +151,12 @@ func (m *Manager) Update(ctx context.Context) error {
 	// Atomically update current blocklist (zero-copy read for all DNS queries)
 	m.current.Store(&blocklist)
 	m.lastUpdated.Store(time.Now())
+	sourceCopy := make([]string, len(m.cfg.Blocklists))
+	copy(sourceCopy, m.cfg.Blocklists)
+	if len(sourceCopy) > maxTrackedSources {
+		sourceCopy = sourceCopy[:maxTrackedSources]
+	}
+	m.sourceNames.Store(sourceCopy)
 
 	// Record blocklist size change to Prometheus metrics if available
 	if m.metrics != nil {
@@ -168,6 +188,53 @@ func (m *Manager) Update(ctx context.Context) error {
 	return nil
 }
 
+func (m *Manager) downloadWithSources(ctx context.Context) (map[string]BlockEntry, error) {
+	urls := m.cfg.Blocklists
+	if len(urls) == 0 {
+		return make(map[string]BlockEntry), nil
+	}
+
+	m.logger.Info("Downloading blocklists", "count", len(urls))
+	startTime := time.Now()
+	merged := make(map[string]BlockEntry)
+
+	for idx, url := range urls {
+		m.logger.Info("Downloading blocklist", "index", idx+1, "total", len(urls), "url", url)
+		domains, err := m.downloader.Download(ctx, url)
+		if err != nil {
+			m.logger.Error("Failed to download blocklist", "url", url, "error", err)
+			continue
+		}
+
+		var mask uint64
+		overflow := false
+		if idx < maxTrackedSources {
+			mask = 1 << uint(idx)
+		} else {
+			overflow = true
+		}
+
+		for domain := range domains {
+			entry := merged[domain]
+			entry.SourceMask |= mask
+			if overflow {
+				entry.Overflow = true
+			}
+			merged[domain] = entry
+		}
+	}
+
+	if len(urls) > maxTrackedSources {
+		m.logger.Warn("Tracking metadata for first 64 blocklist sources only", "configured", len(urls))
+	}
+
+	m.logger.Info("All blocklists downloaded",
+		"total_domains", len(merged),
+		"duration", time.Since(startTime))
+
+	return merged, nil
+}
+
 // SetHTTPClient updates the HTTP client used for downloads.
 func (m *Manager) SetHTTPClient(client *http.Client) {
 	m.downloader = NewDownloader(m.logger, client)
@@ -185,7 +252,7 @@ func (m *Manager) SetLogger(logger *logging.Logger) {
 }
 
 // Get returns a pointer to the current blocklist (safe for concurrent reads)
-func (m *Manager) Get() *map[string]struct{} {
+func (m *Manager) Get() *map[string]BlockEntry {
 	return m.current.Load()
 }
 
@@ -194,21 +261,50 @@ func (m *Manager) Get() *map[string]struct{} {
 //  1. Try exact match first (fastest - O(1))
 //  2. Try pattern match if no exact match (wildcard/regex)
 func (m *Manager) IsBlocked(domain string) bool {
-	// Try exact match first (fastest path)
+	return m.Match(domain).Blocked
+}
+
+// MatchResult describes how a domain was blocked.
+type MatchResult struct {
+	Blocked bool
+	Kind    string   // exact, wildcard, regex
+	Pattern string   // for wildcard/regex
+	Sources []string // blocklist sources
+}
+
+// Match returns detailed information about a blocked domain.
+func (m *Manager) Match(domain string) MatchResult {
+	if domain == "" {
+		return MatchResult{}
+	}
+
+	normalized := strings.ToLower(domain)
+	fqdn := mdns.Fqdn(normalized)
+	short := strings.TrimSuffix(fqdn, ".")
+
 	blocklist := m.current.Load()
 	if blocklist != nil {
-		if _, blocked := (*blocklist)[domain]; blocked {
-			return true
+		if entry, ok := (*blocklist)[fqdn]; ok {
+			return MatchResult{
+				Blocked: true,
+				Kind:    "exact",
+				Sources: m.sourcesFromMask(entry.SourceMask, entry.Overflow),
+			}
 		}
 	}
 
-	// Try pattern match (wildcard/regex)
-	patterns := m.patterns.Load()
-	if patterns != nil {
-		return patterns.Match(domain)
+	if patterns := m.patterns.Load(); patterns != nil {
+		if matched, ok := patterns.MatchPattern(short); ok && matched != nil {
+			return MatchResult{
+				Blocked: true,
+				Kind:    matched.Type.String(),
+				Pattern: matched.Raw,
+				Sources: []string{"pattern"},
+			}
+		}
 	}
 
-	return false
+	return MatchResult{}
 }
 
 // Size returns the number of blocked domains (exact matches only)
@@ -277,6 +373,30 @@ func (m *Manager) Stats() map[string]int {
 	}
 
 	return stats
+}
+
+func (m *Manager) sourcesFromMask(mask uint64, overflow bool) []string {
+	value := m.sourceNames.Load()
+	names, _ := value.([]string)
+	if len(names) == 0 && !overflow {
+		return nil
+	}
+
+	result := make([]string, 0, bits.OnesCount64(mask))
+	for idx := 0; idx < len(names) && idx < maxTrackedSources; idx++ {
+		if mask&(1<<uint(idx)) != 0 {
+			result = append(result, names[idx])
+		}
+	}
+
+	if overflow {
+		result = append(result, "additional sources")
+	}
+
+	if len(result) == 0 {
+		return nil
+	}
+	return result
 }
 
 // updateLoop runs the automatic update loop
