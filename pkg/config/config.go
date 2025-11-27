@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"glory-hole/pkg/storage"
@@ -17,6 +18,7 @@ type Config struct {
 	Telemetry             TelemetryConfig             `yaml:"telemetry"`
 	Server                ServerConfig                `yaml:"server"`
 	Policy                PolicyConfig                `yaml:"policy"`
+	Auth                  AuthConfig                  `yaml:"auth"`
 	LocalRecords          LocalRecordsConfig          `yaml:"local_records"`
 	ConditionalForwarding ConditionalForwardingConfig `yaml:"conditional_forwarding"`
 	UpstreamDNSServers    []string                    `yaml:"upstream_dns_servers"`
@@ -39,6 +41,24 @@ type ServerConfig struct {
 	EnableBlocklist bool   `yaml:"enable_blocklist"` // Kill-switch for ad-blocking
 	EnablePolicies  bool   `yaml:"enable_policies"`  // Kill-switch for policy engine
 	DecisionTrace   bool   `yaml:"decision_trace"`   // Capture block decision traces
+}
+
+// AuthConfig controls static authentication for the API/UI layer.
+type AuthConfig struct {
+	Enabled  bool   `yaml:"enabled"`
+	APIKey   string `yaml:"api_key"`
+	Header   string `yaml:"header"`
+	Username string `yaml:"username"`
+	Password string `yaml:"password"`
+}
+
+func (a *AuthConfig) normalize() {
+	if a == nil {
+		return
+	}
+	if strings.TrimSpace(a.Header) == "" {
+		a.Header = "Authorization"
+	}
 }
 
 // CacheConfig holds cache settings
@@ -170,6 +190,7 @@ func Load(path string) (*Config, error) {
 
 	// Apply defaults
 	cfg.applyDefaults()
+	cfg.applyEnvOverrides()
 
 	// Validate
 	if err := cfg.Validate(); err != nil {
@@ -183,6 +204,7 @@ func Load(path string) (*Config, error) {
 func LoadWithDefaults() *Config {
 	cfg := &Config{}
 	cfg.applyDefaults()
+	cfg.applyEnvOverrides()
 	return cfg
 }
 
@@ -256,10 +278,13 @@ func (c *Config) applyDefaults() {
 		c.Database.SQLite.BusyTimeout = 5000
 	}
 	if c.Database.SQLite.CacheSize == 0 {
-		c.Database.SQLite.CacheSize = 10000
+		c.Database.SQLite.CacheSize = 4096
+	}
+	if c.Database.SQLite.MMapSize == 0 {
+		c.Database.SQLite.MMapSize = 268435456
 	}
 	if c.Database.BufferSize == 0 {
-		c.Database.BufferSize = 1000
+		c.Database.BufferSize = 500
 	}
 	if c.Database.FlushInterval == 0 {
 		c.Database.FlushInterval = 5 * time.Second
@@ -340,6 +365,35 @@ func (c *Config) applyDefaults() {
 	if c.Telemetry.PrometheusPort == 0 {
 		c.Telemetry.PrometheusPort = 9090
 	}
+
+	c.Auth.normalize()
+}
+
+const (
+	envAPIKey   = "GLORYHOLE_API_KEY"
+	envAuthUser = "GLORYHOLE_BASIC_USER"
+	envAuthPass = "GLORYHOLE_BASIC_PASS"
+)
+
+func (c *Config) applyEnvOverrides() {
+	key := strings.TrimSpace(os.Getenv(envAPIKey))
+	if key != "" {
+		c.Auth.APIKey = key
+		c.Auth.Enabled = true
+	}
+
+	user := strings.TrimSpace(os.Getenv(envAuthUser))
+	if user != "" {
+		c.Auth.Username = user
+		c.Auth.Enabled = true
+	}
+
+	if pass, ok := os.LookupEnv(envAuthPass); ok {
+		c.Auth.Password = pass
+		c.Auth.Enabled = true
+	}
+
+	c.Auth.normalize()
 }
 
 // Validate checks if the configuration is valid
@@ -384,6 +438,13 @@ func (c *Config) Validate() error {
 	}
 	if c.Logging.Output == "file" && c.Logging.FilePath == "" {
 		return fmt.Errorf("logging.file_path must be set when output is 'file'")
+	}
+
+	if c.Auth.Enabled {
+		c.Auth.normalize()
+		if strings.TrimSpace(c.Auth.APIKey) == "" && (c.Auth.Username == "" || c.Auth.Password == "") {
+			return fmt.Errorf("auth requires api_key or username/password when enabled")
+		}
 	}
 
 	// Validate conditional forwarding

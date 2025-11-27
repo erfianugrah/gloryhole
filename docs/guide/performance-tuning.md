@@ -106,7 +106,7 @@ database:
   sqlite:
     wal_mode: true  # Enabled by default
     busy_timeout: 5000
-    cache_size: 10000
+    cache_size: 4096
 ```
 
 **Benefits:**

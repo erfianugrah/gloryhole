@@ -168,6 +168,11 @@ func (n *NoOpStorage) Cleanup(ctx context.Context, olderThan time.Time) error {
 	return nil
 }
 
+// Reset does nothing
+func (n *NoOpStorage) Reset(ctx context.Context) error {
+	return nil
+}
+
 // Close does nothing
 func (n *NoOpStorage) Close() error {
 	return nil

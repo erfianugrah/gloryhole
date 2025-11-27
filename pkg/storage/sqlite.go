@@ -66,7 +66,10 @@ func NewSQLiteStorage(cfg *Config, metrics MetricsRecorder) (Storage, error) {
 		fmt.Sprintf("PRAGMA cache_size = %d", -cfg.SQLite.CacheSize), // Negative means KB
 		"PRAGMA synchronous = NORMAL",                                // Balance between safety and performance
 		"PRAGMA temp_store = MEMORY",                                 // Use memory for temp tables
-		"PRAGMA mmap_size = 30000000000",                             // 30GB mmap
+	}
+
+	if cfg.SQLite.MMapSize > 0 {
+		pragmas = append(pragmas, fmt.Sprintf("PRAGMA mmap_size = %d", cfg.SQLite.MMapSize))
 	}
 
 	if cfg.SQLite.WALMode {
@@ -803,6 +806,54 @@ func (s *SQLiteStorage) Cleanup(ctx context.Context, olderThan time.Time) error 
 				"deleted_rows", rows,
 			)
 		}
+	}
+
+	return nil
+}
+
+// Reset wipes all stored query, statistics, and client metadata.
+// Intended for troubleshooting or when the operator wants to start fresh.
+func (s *SQLiteStorage) Reset(ctx context.Context) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.closed {
+		return ErrClosed
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("reset begin transaction failed: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	tables := []string{
+		"queries",
+		"statistics",
+		"domain_stats",
+		"client_profiles",
+		"client_groups",
+	}
+
+	for _, table := range tables {
+		if _, err := tx.ExecContext(ctx, "DELETE FROM "+table); err != nil {
+			return fmt.Errorf("reset failed clearing %s: %w", table, err)
+		}
+	}
+
+	// Reset AUTOINCREMENT sequences so IDs start from 1 again.
+	if _, err := tx.ExecContext(ctx, `
+		DELETE FROM sqlite_sequence WHERE name IN ('queries','statistics','domain_stats')
+	`); err != nil {
+		return fmt.Errorf("reset failed clearing sqlite_sequence: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("reset commit failed: %w", err)
+	}
+
+	if _, err := s.db.ExecContext(ctx, "VACUUM"); err != nil {
+		slog.Default().Warn("SQLite vacuum after reset failed", "error", err)
 	}
 
 	return nil

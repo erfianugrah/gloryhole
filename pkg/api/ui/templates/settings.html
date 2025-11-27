@@ -325,6 +325,19 @@
         </div>
     </div>
 
+    <!-- Danger Zone -->
+    <div class="settings-section danger-zone">
+        <h3>Danger Zone</h3>
+        <p class="section-description">Permanently delete all stored query logs, statistics, and client metadata. This cannot be undone.</p>
+        <div class="form-group">
+            <label for="storage-nuke-confirm">Type <code>NUKE</code> to confirm</label>
+            <input id="storage-nuke-confirm" type="text" placeholder="NUKE">
+        </div>
+        <div class="form-actions">
+            <button id="storage-nuke-btn" class="btn btn-danger" type="button" onclick="resetStorage()">Delete All Query Data</button>
+        </div>
+    </div>
+
     <!-- Logging Settings -->
     {{template "settings-logging" .}}
 
@@ -410,6 +423,56 @@
 </div>
 
 <script>
+async function resetStorage() {
+    const input = document.getElementById('storage-nuke-confirm');
+    const button = document.getElementById('storage-nuke-btn');
+    if (!input || !button) {
+        return;
+    }
+
+    const value = (input.value || '').trim().toUpperCase();
+    if (value !== 'NUKE') {
+        alert('Please type "NUKE" to confirm.');
+        input.focus();
+        return;
+    }
+
+    if (!confirm('This will permanently delete all stored query data. Continue?')) {
+        return;
+    }
+
+    const defaultLabel = button.textContent;
+    button.disabled = true;
+    button.textContent = 'Deleting...';
+
+    try {
+        const response = await fetch('/api/storage/reset', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ confirm: 'NUKE' })
+        });
+
+        if (!response.ok) {
+            let errorMessage = 'Failed to reset storage';
+            try {
+                const error = await response.json();
+                errorMessage = error.message || errorMessage;
+            } catch (_) {
+                // ignore JSON parse errors
+            }
+            throw new Error(errorMessage);
+        }
+
+        input.value = '';
+        alert('All stored query data has been deleted.');
+    } catch (error) {
+        alert('Error: ' + error.message);
+    } finally {
+        button.disabled = false;
+        button.textContent = defaultLabel;
+    }
+}
+
 async function reloadBlocklists() {
     const button = event.target;
     button.disabled = true;

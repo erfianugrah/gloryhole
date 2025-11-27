@@ -641,6 +641,10 @@ func (m *mockUIStorage) Cleanup(ctx context.Context, olderThan time.Time) error 
 	return nil
 }
 
+func (m *mockUIStorage) Reset(ctx context.Context) error {
+	return nil
+}
+
 func (m *mockUIStorage) Ping(ctx context.Context) error {
 	return nil
 }

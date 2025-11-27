@@ -1192,7 +1192,7 @@ database:
     path: "./glory-hole.db"
     wal_mode: true
     busy_timeout: 5000
-    cache_size: 10000
+    cache_size: 4096
   buffer_size: 1000
   flush_interval: "5s"
   retention_days: 7

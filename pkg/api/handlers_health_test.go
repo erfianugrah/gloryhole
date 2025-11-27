@@ -84,6 +84,10 @@ func (m *mockStorageForHealth) Cleanup(ctx context.Context, olderThan time.Time)
 	return nil
 }
 
+func (m *mockStorageForHealth) Reset(ctx context.Context) error {
+	return nil
+}
+
 func (m *mockStorageForHealth) Close() error {
 	return nil
 }

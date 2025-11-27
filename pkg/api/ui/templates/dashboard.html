@@ -15,7 +15,7 @@
     <!-- Statistics Cards -->
     <div id="stats-container"
          hx-get="/api/ui/stats"
-         hx-trigger="load, every 5s"
+         hx-trigger="load, every 10s"
          hx-swap="innerHTML">
         <div class="loading">Loading statistics...</div>
     </div>
@@ -87,7 +87,7 @@
                 <h3>Top Allowed Domains</h3>
                 <div id="top-allowed"
                      hx-get="/api/ui/top-domains?limit=10&blocked=false"
-                     hx-trigger="load, every 10s"
+                     hx-trigger="load, every 20s"
                      hx-swap="innerHTML">
                     <div class="loading">Loading...</div>
                 </div>
@@ -96,7 +96,7 @@
                 <h3>Top Blocked Domains</h3>
                 <div id="top-blocked"
                      hx-get="/api/ui/top-domains?limit=10&blocked=true"
-                     hx-trigger="load, every 10s"
+                     hx-trigger="load, every 20s"
                      hx-swap="innerHTML">
                     <div class="loading">Loading...</div>
                 </div>
@@ -109,7 +109,7 @@
         <h3>Recent Queries</h3>
         <div id="recent-queries"
              hx-get="/api/ui/queries?limit=20"
-             hx-trigger="load, every 3s"
+             hx-trigger="load, every 6s"
              hx-swap="innerHTML">
             <div class="loading">Loading queries...</div>
         </div>

@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
+	"sync"
 	"time"
 
 	"glory-hole/pkg/blocklist"
@@ -32,6 +34,12 @@ type Server struct {
 	version          string
 	configPath       string // Path to config file for persistence
 	rateLimiter      *ratelimit.Manager
+	authMu           sync.RWMutex
+	authEnabled      bool
+	authHeader       string
+	apiKey           string
+	basicUser        string
+	basicPass        string
 }
 
 // Config holds API server configuration
@@ -76,6 +84,10 @@ func New(cfg *Config) *Server {
 		rateLimiter:      cfg.RateLimiter,
 	}
 
+	if cfg.InitialConfig != nil {
+		s.applyAuthConfig(cfg.InitialConfig.Auth)
+	}
+
 	// Setup routes
 	mux := http.NewServeMux()
 
@@ -103,6 +115,7 @@ func New(cfg *Config) *Server {
 
 	// Cache management
 	mux.HandleFunc("POST /api/cache/purge", s.handleCachePurge)
+	mux.HandleFunc("POST /api/storage/reset", s.handleStorageReset)
 
 	// Policy management
 	mux.HandleFunc("GET /api/policies", s.handleGetPolicies)
@@ -160,7 +173,9 @@ func New(cfg *Config) *Server {
 	}
 
 	// Apply middleware
-	handler := s.rateLimitMiddleware(mux)
+	handler := http.Handler(mux)
+	handler = s.authMiddleware(handler)
+	handler = s.rateLimitMiddleware(handler)
 	handler = s.loggingMiddleware(handler)
 	handler = s.corsMiddleware(handler)
 
@@ -174,6 +189,40 @@ func New(cfg *Config) *Server {
 	}
 
 	return s
+}
+
+func (s *Server) applyAuthConfig(auth config.AuthConfig) {
+	s.authMu.Lock()
+	defer s.authMu.Unlock()
+
+	header := strings.TrimSpace(auth.Header)
+	if header == "" {
+		header = "Authorization"
+	}
+
+	apiKey := strings.TrimSpace(auth.APIKey)
+	username := strings.TrimSpace(auth.Username)
+	password := auth.Password
+
+	enabled := auth.Enabled && (apiKey != "" || (username != "" && password != ""))
+	s.authEnabled = enabled
+	if !enabled {
+		s.apiKey = ""
+		s.basicUser = ""
+		s.basicPass = ""
+		s.authHeader = ""
+		return
+	}
+
+	s.apiKey = apiKey
+	s.basicUser = username
+	s.basicPass = password
+	s.authHeader = strings.ToLower(header)
+}
+
+// SetAuthConfig hot-swaps authentication parameters (used by config watcher).
+func (s *Server) SetAuthConfig(auth config.AuthConfig) {
+	s.applyAuthConfig(auth)
 }
 
 // Start starts the API server

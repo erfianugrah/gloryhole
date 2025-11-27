@@ -131,12 +131,12 @@ conditional_forwarding:
 
 cache:
   enabled: true
-  max_entries: 20000
+  max_entries: 4000
   min_ttl: "60s"
   max_ttl: "24h"
   negative_ttl: "30s"
   blocked_ttl: "5m"
-  shard_count: 8
+  shard_count: 4
 
 database:
   enabled: true
@@ -144,9 +144,12 @@ database:
   sqlite:
     path: "./glory-hole.db"
     wal_mode: true
+    cache_size: 4096
+    mmap_size: 268435456
   retention_days: 90
-  buffer_size: 1000
+  buffer_size: 500
   flush_interval: "5s"
+  batch_size: 100
 
 telemetry:
   enabled: true
@@ -159,10 +162,35 @@ rate_limit:
   requests_per_second: 50
   burst: 25
   on_exceed: "nxdomain"
+auth:
+  enabled: true
+  api_key: "change-me"
+  username: "admin"      # Optional basic-auth helper for browsers
+  password: "supersecret" # Optional basic-auth helper for browsers
 ```
+
+#### Static API Authentication
+
+Set `auth.enabled: true` to guard both the REST API and HTMX UI. Provide either a shared API key (checked via `Authorization: Bearer <key>` or any custom header defined in `auth.header`) and/or HTTP Basic credentials (`auth.username`/`auth.password`). Browsers automatically prompt for Basic auth, which keeps the UI usable without custom extensions, while API clients can send the bearer token.
+
+Environment variables override the YAML for containerized deployments:
+
+| Env var | Purpose |
+| --- | --- |
+| `GLORYHOLE_API_KEY` | Sets `auth.api_key` and enables auth. |
+| `GLORYHOLE_BASIC_USER` | Sets `auth.username`. |
+| `GLORYHOLE_BASIC_PASS` | Sets `auth.password`. |
+
+Supplying an API key or both username/password is sufficient; you can set both to allow scripts (Bearer) and browsers (Basic) simultaneously. Restart or let the config watcher reload after changing credentials so the middleware picks up the latest values, and remember to propagate the header via `hx-headers` if you build a custom UI client.
 
 Refer to `config/config.example.yml` and `docs/guide/configuration.md` for exhaustive fields and defaults.
 
+#### Resource Tuning
+
+- **SQLite memory** – `database.sqlite.cache_size` (KB) and `database.sqlite.mmap_size` (bytes) cap how much page cache SQLite keeps resident. The defaults (4 MB cache + 256 MB mmap window) work well for embedded hardware; raise them only if you have plenty of RAM.
+- **Write buffers** – `database.buffer_size` controls the async insert queue; keeping it at or below 500 keeps GC overhead low while still batching writes (tune `batch_size`/`flush_interval` for your workload).
+- **DNS cache size** – `cache.max_entries` sets how many responses are retained. Dropping it to 2–4k cuts heap usage dramatically on small boxes.
+- **Go heap limit** – export `GOMEMLIMIT=512MiB` (or any budget) in Docker/Kubernetes so the runtime respects your memory ceiling. Pair it with `GODEBUG=madvdontneed=1` to return freed pages to the host sooner.
 ## Feature Guide
 
 ### Filtering & Blocklists

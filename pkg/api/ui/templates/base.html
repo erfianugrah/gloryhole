@@ -22,6 +22,7 @@
     </script>
     <script src="/static/js/mini-htmx.js" defer></script>
     <script src="/static/js/simple-chart.js" defer></script>
+    <script src="/static/js/trace-modal.js" defer></script>
     <link rel="stylesheet" href="/static/css/style.css">
 </head>
 <body>
@@ -55,6 +56,21 @@
             <p>Glory-Hole DNS Server - High-Performance Ad Blocking</p>
         </div>
     </footer>
+
+    <div id="trace-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="trace-modal-title" style="display:none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="trace-modal-title">Decision Trace</h3>
+                <button class="modal-close" data-trace-close>&times;</button>
+            </div>
+            <div id="trace-body" class="trace-body">
+                <p class="text-muted">No trace data available.</p>
+            </div>
+            <div class="form-actions" style="justify-content: flex-end; margin-top:1rem;">
+                <button class="btn btn-secondary" type="button" data-trace-close>Close</button>
+            </div>
+        </div>
+    </div>
     <script>
     (function() {
         const STORAGE_KEY = "gloryhole-theme";

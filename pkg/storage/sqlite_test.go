@@ -747,6 +747,77 @@ func TestSQLiteStorage_Cleanup(t *testing.T) {
 	}
 }
 
+func TestSQLiteStorage_Reset(t *testing.T) {
+	storage, cleanup := setupTestStorage(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	sqlStorage := storage.(*SQLiteStorage)
+
+	now := time.Now()
+	_, err := sqlStorage.db.Exec(`
+		INSERT INTO queries (timestamp, client_ip, domain, query_type, response_code, blocked, cached, response_time_ms)
+		VALUES (?, ?, ?, 'A', 0, 0, 0, 5)
+	`, now, "10.0.0.2", "nuke.test")
+	if err != nil {
+		t.Fatalf("failed to insert query data: %v", err)
+	}
+
+	_, err = sqlStorage.db.Exec(`
+		INSERT INTO statistics (hour, total_queries)
+		VALUES (?, 42)
+	`, now.Truncate(time.Hour))
+	if err != nil {
+		t.Fatalf("failed to insert statistics data: %v", err)
+	}
+
+	_, err = sqlStorage.db.Exec(`
+		INSERT INTO domain_stats (domain, query_count, last_queried, first_queried, blocked)
+		VALUES ('nuke.test', 1, ?, ?, 0)
+	`, now, now)
+	if err != nil {
+		t.Fatalf("failed to insert domain stats: %v", err)
+	}
+
+	_, err = sqlStorage.db.Exec(`
+		INSERT INTO client_groups (name, description)
+		VALUES ('testers', 'Test Group')
+	`)
+	if err != nil {
+		t.Fatalf("failed to insert client group: %v", err)
+	}
+
+	_, err = sqlStorage.db.Exec(`
+		INSERT INTO client_profiles (client_ip, display_name, group_name)
+		VALUES ('10.0.0.2', 'Client', 'testers')
+	`)
+	if err != nil {
+		t.Fatalf("failed to insert client profile: %v", err)
+	}
+
+	if err := storage.Reset(ctx); err != nil {
+		t.Fatalf("Reset() error = %v", err)
+	}
+
+	tables := map[string]string{
+		"queries":         "query",
+		"statistics":      "stat",
+		"domain_stats":    "domain stat",
+		"client_groups":   "client group",
+		"client_profiles": "client profile",
+	}
+
+	for table, label := range tables {
+		var count int64
+		if err := sqlStorage.db.QueryRow("SELECT COUNT(*) FROM " + table).Scan(&count); err != nil {
+			t.Fatalf("failed counting %s rows: %v", table, err)
+		}
+		if count != 0 {
+			t.Errorf("expected %s table to be empty after reset, got %d rows", label, count)
+		}
+	}
+}
+
 func TestSQLiteStorage_Close(t *testing.T) {
 	storage, _ := setupTestStorage(t)
 

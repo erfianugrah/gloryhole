@@ -17,13 +17,15 @@ import (
 
 // mockStorage implements storage.Storage for testing
 type mockStorage struct {
-	stats      *storage.Statistics
-	queries    []*storage.QueryLog
-	domains    []*storage.DomainStats
-	timeseries []*storage.TimeSeriesPoint
-	queryTypes []*storage.QueryTypeStats
-	filtered   []*storage.QueryLog
-	lastFilter storage.QueryFilter
+	stats       *storage.Statistics
+	queries     []*storage.QueryLog
+	domains     []*storage.DomainStats
+	timeseries  []*storage.TimeSeriesPoint
+	queryTypes  []*storage.QueryTypeStats
+	filtered    []*storage.QueryLog
+	lastFilter  storage.QueryFilter
+	resetErr    error
+	resetCalled bool
 }
 
 func (m *mockStorage) LogQuery(ctx context.Context, query *storage.QueryLog) error {
@@ -112,6 +114,11 @@ func (m *mockStorage) GetQueryTypeStats(ctx context.Context, limit int, since ti
 
 func (m *mockStorage) Cleanup(ctx context.Context, olderThan time.Time) error {
 	return nil
+}
+
+func (m *mockStorage) Reset(ctx context.Context) error {
+	m.resetCalled = true
+	return m.resetErr
 }
 
 func (m *mockStorage) Close() error {

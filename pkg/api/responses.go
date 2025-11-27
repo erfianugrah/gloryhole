@@ -27,20 +27,20 @@ type ReadinessResponse struct {
 
 // StatsResponse represents query statistics
 type StatsResponse struct {
-	Period         string  `json:"period"`
-	Timestamp      string  `json:"timestamp"`
-	TotalQueries   int64   `json:"total_queries"`
-	BlockedQueries int64   `json:"blocked_queries"`
-	CachedQueries  int64   `json:"cached_queries"`
-	BlockRate      float64 `json:"block_rate"`
-	CacheHitRate   float64 `json:"cache_hit_rate"`
-	AvgResponseMs  float64 `json:"avg_response_ms"`
-	CPUUsagePercent    float64 `json:"cpu_usage_percent,omitempty"`
-	MemoryUsageBytes   uint64  `json:"memory_usage_bytes,omitempty"`
-	MemoryTotalBytes   uint64  `json:"memory_total_bytes,omitempty"`
-	MemoryUsagePercent float64 `json:"memory_usage_percent,omitempty"`
-	TemperatureCelsius float64 `json:"temperature_celsius,omitempty"`
-	TemperatureAvailable bool  `json:"temperature_available,omitempty"`
+	Period               string  `json:"period"`
+	Timestamp            string  `json:"timestamp"`
+	TotalQueries         int64   `json:"total_queries"`
+	BlockedQueries       int64   `json:"blocked_queries"`
+	CachedQueries        int64   `json:"cached_queries"`
+	BlockRate            float64 `json:"block_rate"`
+	CacheHitRate         float64 `json:"cache_hit_rate"`
+	AvgResponseMs        float64 `json:"avg_response_ms"`
+	CPUUsagePercent      float64 `json:"cpu_usage_percent,omitempty"`
+	MemoryUsageBytes     uint64  `json:"memory_usage_bytes,omitempty"`
+	MemoryTotalBytes     uint64  `json:"memory_total_bytes,omitempty"`
+	MemoryUsagePercent   float64 `json:"memory_usage_percent,omitempty"`
+	TemperatureCelsius   float64 `json:"temperature_celsius,omitempty"`
+	TemperatureAvailable bool    `json:"temperature_available,omitempty"`
 }
 
 // TimeSeriesResponse represents time-series statistics data
@@ -121,6 +121,12 @@ type CachePurgeResponse struct {
 	Status         string `json:"status"`
 	Message        string `json:"message"`
 	EntriesCleared int    `json:"entries_cleared,omitempty"`
+}
+
+// StorageResetResponse represents a destructive reset operation result.
+type StorageResetResponse struct {
+	Status  string `json:"status"`
+	Message string `json:"message"`
 }
 
 // ErrorResponse represents an API error

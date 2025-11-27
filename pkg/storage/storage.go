@@ -36,6 +36,7 @@ type Storage interface {
 
 	// Maintenance
 	Cleanup(ctx context.Context, olderThan time.Time) error
+	Reset(ctx context.Context) error
 	Close() error
 	Ping(ctx context.Context) error
 }
@@ -187,6 +188,7 @@ type SQLiteConfig struct {
 	BusyTimeout int    `yaml:"busy_timeout"` // Busy timeout in milliseconds
 	WALMode     bool   `yaml:"wal_mode"`     // Enable WAL mode
 	CacheSize   int    `yaml:"cache_size"`   // Cache size in KB
+	MMapSize    int64  `yaml:"mmap_size"`    // mmap window in bytes
 }
 
 // D1Config represents D1-specific configuration
@@ -211,9 +213,10 @@ func DefaultConfig() Config {
 			Path:        "./glory-hole.db",
 			BusyTimeout: 5000,
 			WALMode:     true,
-			CacheSize:   10000,
+			CacheSize:   4096,
+			MMapSize:    268435456,
 		},
-		BufferSize:    1000,
+		BufferSize:    500,
 		FlushInterval: 5 * time.Second,
 		BatchSize:     100,
 		RetentionDays: 7,
@@ -244,6 +247,10 @@ func (c *Config) Validate() error {
 
 	if c.RetentionDays < 1 {
 		c.RetentionDays = 7
+	}
+
+	if c.SQLite.MMapSize < 0 {
+		c.SQLite.MMapSize = 0
 	}
 
 	return nil

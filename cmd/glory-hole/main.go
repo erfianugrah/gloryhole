@@ -539,6 +539,8 @@ func main() {
 			"api_address", newCfg.Server.WebUIAddress,
 		)
 
+		apiServer.SetAuthConfig(newCfg.Auth)
+
 		handler.SetDecisionTrace(newCfg.Server.DecisionTrace)
 
 		if !equalStringSlice(cfg.UpstreamDNSServers, newCfg.UpstreamDNSServers) {

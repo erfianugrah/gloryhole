@@ -379,7 +379,7 @@ database:
     path: "./glory-hole.db"      # Database file path
     wal_mode: true                # Write-Ahead Logging (better concurrency)
     busy_timeout: 5000            # Busy timeout in milliseconds
-    cache_size: 10000             # Cache size in KB
+    cache_size: 4096              # Cache size in KB
 
   # Cloudflare D1 configuration (alternative to SQLite)
   d1:
@@ -412,7 +412,7 @@ database:
     path: "./glory-hole.db"
     wal_mode: true          # Recommended for concurrency
     busy_timeout: 5000
-    cache_size: 10000       # 10MB cache
+    cache_size: 4096        # 4MB cache
 ```
 
 **Advantages:**

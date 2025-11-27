@@ -31,7 +31,7 @@
 
     <div id="queries-container"
          hx-get="/api/ui/queries?limit=100&offset=0"
-         hx-trigger="load, every 2s"
+         hx-trigger="load, every 6s"
          hx-swap="innerHTML"
          hx-indicator="#queries-loading">
         <div class="loading">Loading queries...</div>
@@ -42,21 +42,6 @@
         <button id="prev-btn" class="btn btn-secondary" onclick="loadPage(-100)">Previous</button>
         <span id="page-info" style="margin: 0 1rem;">Page <span id="current-page">1</span></span>
         <button class="btn btn-secondary" onclick="loadPage(100)">Next</button>
-    </div>
-</div>
-
-<div id="trace-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="trace-modal-title" style="display:none;">
-    <div class="modal-content">
-        <div class="modal-header">
-            <h3 id="trace-modal-title">Decision Trace</h3>
-            <button class="modal-close" data-trace-close>&times;</button>
-        </div>
-        <div id="trace-body" class="trace-body">
-            <p class="text-muted">No trace data available.</p>
-        </div>
-        <div class="form-actions" style="justify-content: flex-end; margin-top:1rem;">
-            <button class="btn btn-secondary" type="button" data-trace-close>Close</button>
-        </div>
     </div>
 </div>
 
@@ -147,159 +132,5 @@
         }
         return date.toISOString();
     }
-
-    const traceModal = document.getElementById('trace-modal');
-    const traceBody = document.getElementById('trace-body');
-    const TRACE_STAGE_LABELS = {
-        blocklist: 'Blocklist',
-        policy: 'Policy Engine',
-        whitelist: 'Whitelist',
-        rate_limit: 'Rate Limiter',
-        cache: 'Cache'
-    };
-    const TRACE_ACTION_LABELS = {
-        block: 'Blocked',
-        allow: 'Allowed',
-        redirect: 'Redirected',
-        forward: 'Forwarded',
-        blocked_hit: 'Cache Block',
-        drop: 'Dropped'
-    };
-
-    function humanizeLabel(value) {
-        if (!value) {
-            return 'Unknown';
-        }
-        return value
-            .toString()
-            .replace(/[_-]+/g, ' ')
-            .replace(/\b\w/g, (char) => char.toUpperCase());
-    }
-
-    function formatStageLabel(stage) {
-        if (!stage) {
-            return 'Unknown stage';
-        }
-        return TRACE_STAGE_LABELS[stage] || humanizeLabel(stage);
-    }
-
-    function formatActionLabel(action) {
-        if (!action) {
-            return '';
-        }
-        return TRACE_ACTION_LABELS[action] || humanizeLabel(action);
-    }
-
-    function createTraceChip(content, extraClass = '') {
-        return `<span class="trace-chip ${extraClass}">${content}</span>`;
-    }
-
-    function chipClassForAction(action) {
-        switch (action) {
-            case 'block':
-            case 'blocked_hit':
-            case 'drop':
-                return 'trace-chip-danger';
-            case 'allow':
-                return 'trace-chip-success';
-            case 'redirect':
-                return 'trace-chip-warning';
-            default:
-                return 'trace-chip-info';
-        }
-    }
-
-    function renderTraceChips(entry) {
-        const chips = [];
-        if (entry.action) {
-            chips.push(createTraceChip(formatActionLabel(entry.action), chipClassForAction(entry.action)));
-        }
-        if (entry.rule) {
-            chips.push(createTraceChip(`Rule: ${entry.rule}`, 'trace-chip-info'));
-        }
-        if (entry.source) {
-            chips.push(createTraceChip(entry.source, 'trace-chip-muted'));
-        }
-        return chips.join('');
-    }
-
-    function renderTraceMetadata(metadata) {
-        if (!metadata || typeof metadata !== 'object') {
-            return '';
-        }
-        const entries = Object.entries(metadata).filter(([key, value]) => key && value !== undefined && value !== null && value !== '');
-        if (!entries.length) {
-            return '';
-        }
-        const rows = entries.map(([key, value]) => `
-            <div class="trace-meta-row">
-                <div class="trace-meta-key">${humanizeLabel(key)}</div>
-                <div class="trace-meta-value">${value}</div>
-            </div>
-        `).join('');
-        return `<div class="trace-metadata">${rows}</div>`;
-    }
-
-    function renderTraceRow(entry) {
-        const row = document.createElement('div');
-        row.className = 'trace-row';
-
-        const chips = renderTraceChips(entry);
-        const metadata = renderTraceMetadata(entry.metadata);
-        const detail = entry.detail ? `<p class="trace-detail">${entry.detail}</p>` : '';
-
-        row.innerHTML = `
-            <div class="trace-row-header">
-                <div>
-                    <div class="trace-stage">${formatStageLabel(entry.stage)}</div>
-                    ${entry.stage ? `<div class="trace-stage-meta">${entry.stage}</div>` : ''}
-                </div>
-                ${chips ? `<div class="trace-chips">${chips}</div>` : ''}
-            </div>
-            ${detail}
-            ${metadata}
-        `;
-
-        return row;
-    }
-
-    function openTraceModal(entries, domain, client) {
-        if (!traceBody) return;
-        traceBody.innerHTML = '';
-        const header = document.createElement('div');
-        header.className = 'trace-meta';
-        header.innerHTML = `<strong>${domain}</strong><span>${client}</span>`;
-        traceBody.appendChild(header);
-
-        if (!entries || !entries.length) {
-            const empty = document.createElement('p');
-            empty.className = 'text-muted';
-            empty.textContent = 'No decision trace recorded.';
-            traceBody.appendChild(empty);
-        } else {
-            entries.forEach((entry) => {
-                traceBody.appendChild(renderTraceRow(entry));
-            });
-        }
-        traceModal.style.display = 'flex';
-    }
-
-    document.body.addEventListener('click', (event) => {
-        const target = event.target;
-        if (!(target instanceof HTMLElement)) {
-            return;
-        }
-        if (target.dataset.traceBtn !== undefined) {
-            try {
-                const entries = target.dataset.trace ? JSON.parse(target.dataset.trace) : [];
-                openTraceModal(entries, target.dataset.domain || 'unknown domain', target.dataset.client || 'unknown client');
-            } catch (error) {
-                alert('Failed to parse trace payload');
-            }
-        }
-        if (target.dataset.traceClose !== undefined || target === traceModal) {
-            traceModal.style.display = 'none';
-        }
-    });
 </script>
 {{end}}
