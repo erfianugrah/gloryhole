@@ -34,10 +34,9 @@ func (s *Server) handleUpdateUpstreams(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	cfg.UpstreamDNSServers = servers
-	if err := config.Save(s.configPath, cfg); err != nil {
-		s.logger.Error("Failed to persist upstream DNS servers", "error", err)
-		s.writeError(w, http.StatusInternalServerError, "Failed to save configuration")
+	updated := *cfg
+	updated.UpstreamDNSServers = servers
+	if !s.persistConfigSection(w, r, &updated, settingsTemplateUpstreams, flashKeyUpstreams, cfg) {
 		return
 	}
 
@@ -65,17 +64,16 @@ func (s *Server) handleUpdateCache(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	cfg.Cache.Enabled = payload.Enabled
-	cfg.Cache.MaxEntries = payload.MaxEntries
-	cfg.Cache.MinTTL = payload.MinTTL
-	cfg.Cache.MaxTTL = payload.MaxTTL
-	cfg.Cache.NegativeTTL = payload.NegativeTTL
-	cfg.Cache.BlockedTTL = payload.BlockedTTL
-	cfg.Cache.ShardCount = payload.ShardCount
+	updated := *cfg
+	updated.Cache.Enabled = payload.Enabled
+	updated.Cache.MaxEntries = payload.MaxEntries
+	updated.Cache.MinTTL = payload.MinTTL
+	updated.Cache.MaxTTL = payload.MaxTTL
+	updated.Cache.NegativeTTL = payload.NegativeTTL
+	updated.Cache.BlockedTTL = payload.BlockedTTL
+	updated.Cache.ShardCount = payload.ShardCount
 
-	if err := config.Save(s.configPath, cfg); err != nil {
-		s.logger.Error("Failed to persist cache settings", "error", err)
-		s.writeError(w, http.StatusInternalServerError, "Failed to save configuration")
+	if !s.persistConfigSection(w, r, &updated, settingsTemplateCache, flashKeyCache, cfg) {
 		return
 	}
 
@@ -103,18 +101,17 @@ func (s *Server) handleUpdateLogging(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	cfg.Logging.Level = payload.Level
-	cfg.Logging.Format = payload.Format
-	cfg.Logging.Output = payload.Output
-	cfg.Logging.FilePath = payload.FilePath
-	cfg.Logging.AddSource = payload.AddSource
-	cfg.Logging.MaxSize = payload.MaxSize
-	cfg.Logging.MaxBackups = payload.MaxBackups
-	cfg.Logging.MaxAge = payload.MaxAge
+	updated := *cfg
+	updated.Logging.Level = payload.Level
+	updated.Logging.Format = payload.Format
+	updated.Logging.Output = payload.Output
+	updated.Logging.FilePath = payload.FilePath
+	updated.Logging.AddSource = payload.AddSource
+	updated.Logging.MaxSize = payload.MaxSize
+	updated.Logging.MaxBackups = payload.MaxBackups
+	updated.Logging.MaxAge = payload.MaxAge
 
-	if err := config.Save(s.configPath, cfg); err != nil {
-		s.logger.Error("Failed to persist logging settings", "error", err)
-		s.writeError(w, http.StatusInternalServerError, "Failed to save configuration")
+	if !s.persistConfigSection(w, r, &updated, settingsTemplateLogging, flashKeyLogging, cfg) {
 		return
 	}
 
@@ -497,4 +494,34 @@ func isNumeric(value string) bool {
 
 func isJSONContent(r *http.Request) bool {
 	return strings.Contains(strings.ToLower(r.Header.Get("Content-Type")), "application/json")
+}
+
+func (s *Server) persistConfigSection(w http.ResponseWriter, r *http.Request, updated *config.Config, tmpl, errorKey string, current *config.Config) bool {
+	if s.configPath == "" {
+		s.respondConfigValidationError(
+			w, r, tmpl, errorKey,
+			"Configuration path is not set; settings are read-only in this deployment",
+			current,
+			http.StatusServiceUnavailable,
+		)
+		return false
+	}
+
+	if err := config.Save(s.configPath, updated); err != nil {
+		s.logger.Error("Failed to save configuration", "error", err)
+		status := http.StatusInternalServerError
+		if isHTMXRequest(r) {
+			status = http.StatusOK
+		}
+		s.respondConfigValidationError(
+			w, r, tmpl, errorKey,
+			fmt.Sprintf("Failed to save configuration: %v", err),
+			current,
+			status,
+		)
+		return false
+	}
+
+	*current = *updated
+	return true
 }

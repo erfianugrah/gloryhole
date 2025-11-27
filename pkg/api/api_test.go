@@ -755,6 +755,104 @@ func TestHandleUpdateLogging_FormHTMX(t *testing.T) {
 	}
 }
 
+func TestHandleUpdateCache_FormSuccess(t *testing.T) {
+	server, configPath := newConfigTestServer(t, nil)
+
+	form := url.Values{}
+	form.Set("enabled", "on")
+	form.Set("max_entries", "2048")
+	form.Set("min_ttl", "45s")
+	form.Set("max_ttl", "2h")
+	form.Set("negative_ttl", "90s")
+	form.Set("blocked_ttl", "15s")
+	form.Set("shard_count", "3")
+
+	req := httptest.NewRequest(http.MethodPut, "/api/config/cache", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("HX-Request", "true")
+
+	w := httptest.NewRecorder()
+	server.handleUpdateCache(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", w.Code)
+	}
+	if !strings.Contains(w.Body.String(), "Cache settings updated") {
+		t.Fatalf("expected success message, got body: %s", w.Body.String())
+	}
+
+	reloaded, err := config.Load(configPath)
+	if err != nil {
+		t.Fatalf("failed to reload config: %v", err)
+	}
+	if reloaded.Cache.MaxEntries != 2048 || reloaded.Cache.ShardCount != 3 {
+		t.Fatalf("cache settings not persisted: %+v", reloaded.Cache)
+	}
+	if reloaded.Cache.MinTTL != 45*time.Second || reloaded.Cache.MaxTTL != 2*time.Hour {
+		t.Fatalf("unexpected cache TTLs: %+v", reloaded.Cache)
+	}
+	if reloaded.Cache.NegativeTTL != 90*time.Second || reloaded.Cache.BlockedTTL != 15*time.Second {
+		t.Fatalf("unexpected cache negative/blocked TTLs: %+v", reloaded.Cache)
+	}
+}
+
+func TestHandleUpdateCache_SaveErrorHTMX(t *testing.T) {
+	server, _ := newConfigTestServer(t, nil)
+	server.configPath = filepath.Join(t.TempDir(), "missing", "config.yml")
+
+	form := url.Values{}
+	form.Set("enabled", "on")
+	form.Set("max_entries", "1024")
+	form.Set("min_ttl", "30s")
+	form.Set("max_ttl", "1h")
+	form.Set("negative_ttl", "5m")
+	form.Set("blocked_ttl", "1m")
+	form.Set("shard_count", "2")
+
+	req := httptest.NewRequest(http.MethodPut, "/api/config/cache", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("HX-Request", "true")
+
+	w := httptest.NewRecorder()
+	server.handleUpdateCache(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status 200 for HTMX error, got %d", w.Code)
+	}
+	if !strings.Contains(w.Body.String(), "Failed to save configuration") {
+		t.Fatalf("expected failure message, got body: %s", w.Body.String())
+	}
+}
+
+func TestHandleUpdateLogging_SaveError(t *testing.T) {
+	server, _ := newConfigTestServer(t, nil)
+	server.configPath = filepath.Join(t.TempDir(), "missing", "config.yml")
+
+	form := url.Values{}
+	form.Set("level", "info")
+	form.Set("format", "json")
+	form.Set("output", "stdout")
+	form.Set("file_path", "")
+	form.Set("add_source", "on")
+	form.Set("max_size", "200")
+	form.Set("max_backups", "5")
+	form.Set("max_age", "14")
+
+	req := httptest.NewRequest(http.MethodPut, "/api/config/logging", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("HX-Request", "true")
+
+	w := httptest.NewRecorder()
+	server.handleUpdateLogging(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status 200 for HTMX error, got %d", w.Code)
+	}
+	if !strings.Contains(w.Body.String(), "Failed to save configuration") {
+		t.Fatalf("expected failure message, got body: %s", w.Body.String())
+	}
+}
+
 func TestCORSMiddleware(t *testing.T) {
 	server := New(&Config{
 		ListenAddress: ":8080",
