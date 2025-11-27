@@ -639,7 +639,8 @@ func (s *SQLiteStorage) GetTimeSeriesStats(ctx context.Context, bucket time.Dura
 }
 
 // GetQueryTypeStats returns aggregated counts grouped by DNS query type.
-func (s *SQLiteStorage) GetQueryTypeStats(ctx context.Context, limit int) ([]*QueryTypeStats, error) {
+// If since is non-zero, only queries newer than or equal to that timestamp are considered.
+func (s *SQLiteStorage) GetQueryTypeStats(ctx context.Context, limit int, since time.Time) ([]*QueryTypeStats, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -651,17 +652,29 @@ func (s *SQLiteStorage) GetQueryTypeStats(ctx context.Context, limit int) ([]*Qu
 		limit = 10
 	}
 
-	rows, err := s.db.QueryContext(ctx, `
+	query := `
 		SELECT
 			COALESCE(NULLIF(UPPER(query_type), ''), 'UNKNOWN') AS type,
 			COUNT(*) AS total,
 			SUM(CASE WHEN blocked THEN 1 ELSE 0 END) AS blocked,
 			SUM(CASE WHEN cached THEN 1 ELSE 0 END) AS cached
 		FROM queries
+	`
+
+	args := make([]any, 0, 2)
+	if !since.IsZero() {
+		query += " WHERE timestamp >= ?"
+		args = append(args, since.UTC())
+	}
+
+	query += `
 		GROUP BY type
 		ORDER BY total DESC
 		LIMIT ?
-	`, limit)
+	`
+	args = append(args, limit)
+
+	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrQueryFailed, err)
 	}

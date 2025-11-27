@@ -139,7 +139,7 @@ func (n *NoOpStorage) GetQueriesWithTraceFilter(ctx context.Context, filter Trac
 }
 
 // GetQueryTypeStats returns an empty slice.
-func (n *NoOpStorage) GetQueryTypeStats(ctx context.Context, limit int) ([]*QueryTypeStats, error) {
+func (n *NoOpStorage) GetQueryTypeStats(ctx context.Context, limit int, since time.Time) ([]*QueryTypeStats, error) {
 	return []*QueryTypeStats{}, nil
 }
 

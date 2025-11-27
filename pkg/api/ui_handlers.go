@@ -191,20 +191,30 @@ func (s *Server) handleStatsPartial(w http.ResponseWriter, r *http.Request) {
 	// Get statistics
 	since := parseDuration(r.URL.Query().Get("since"), 24*time.Hour)
 
-	var stats StatsResponse
+	sysMetrics := collectSystemMetrics(r.Context())
+	stats := StatsResponse{
+		CPUUsagePercent:    sysMetrics.CPUPercent,
+		MemoryUsageBytes:   sysMetrics.MemUsed,
+		MemoryTotalBytes:   sysMetrics.MemTotal,
+		MemoryUsagePercent: sysMetrics.MemPercent,
+		Period:             since.String(),
+		Timestamp:          time.Now().Format(time.RFC3339),
+	}
+
+	if sysMetrics.TemperatureAvailable() {
+		stats.TemperatureCelsius = sysMetrics.TemperatureC
+		stats.TemperatureAvailable = true
+	}
+
 	if s.storage != nil {
 		dbStats, err := s.storage.GetStatistics(r.Context(), time.Now().Add(-since))
 		if err == nil {
-			stats = StatsResponse{
-				TotalQueries:   dbStats.TotalQueries,
-				BlockedQueries: dbStats.BlockedQueries,
-				CachedQueries:  dbStats.CachedQueries,
-				BlockRate:      dbStats.BlockRate,
-				CacheHitRate:   dbStats.CacheHitRate,
-				AvgResponseMs:  dbStats.AvgResponseTimeMs,
-				Period:         since.String(),
-				Timestamp:      time.Now().Format(time.RFC3339),
-			}
+			stats.TotalQueries = dbStats.TotalQueries
+			stats.BlockedQueries = dbStats.BlockedQueries
+			stats.CachedQueries = dbStats.CachedQueries
+			stats.BlockRate = dbStats.BlockRate
+			stats.CacheHitRate = dbStats.CacheHitRate
+			stats.AvgResponseMs = dbStats.AvgResponseTimeMs
 		}
 	}
 

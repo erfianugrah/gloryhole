@@ -413,7 +413,7 @@ func TestSQLiteStorage_GetQueryTypeStats(t *testing.T) {
 		}
 	}
 
-	stats, err := storage.GetQueryTypeStats(ctx, 10)
+	stats, err := storage.GetQueryTypeStats(ctx, 10, time.Time{})
 	if err != nil {
 		t.Fatalf("GetQueryTypeStats() error = %v", err)
 	}
@@ -428,6 +428,70 @@ func TestSQLiteStorage_GetQueryTypeStats(t *testing.T) {
 
 	if stats[1].QueryType != "AAAA" || stats[1].Blocked != 3 {
 		t.Fatalf("unexpected stats for AAAA: %+v", stats[1])
+	}
+}
+
+func TestSQLiteStorage_GetQueryTypeStatsSince(t *testing.T) {
+	storage, cleanup := setupTestStorage(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	sqlStorage := storage.(*SQLiteStorage)
+
+	now := time.Now().UTC()
+	type sample struct {
+		qtype string
+		at    time.Time
+	}
+
+	data := []sample{
+		{"A", now.Add(-25 * time.Hour)},
+		{"A", now.Add(-2 * time.Hour)},
+		{"AAAA", now.Add(-30 * time.Minute)},
+	}
+
+	for idx, s := range data {
+		_, err := sqlStorage.db.Exec(`
+			INSERT INTO queries
+			(timestamp, client_ip, domain, query_type, response_code, blocked, cached, response_time_ms)
+			VALUES (?, ?, ?, ?, ?, 0, 0, 5)
+		`,
+			s.at,
+			"198.51.100.1",
+			fmt.Sprintf("old%d.example", idx),
+			s.qtype,
+			dns.RcodeSuccess,
+		)
+		if err != nil {
+			t.Fatalf("failed inserting sample %d: %v", idx, err)
+		}
+	}
+
+	statsAll, err := storage.GetQueryTypeStats(ctx, 10, time.Time{})
+	if err != nil {
+		t.Fatalf("GetQueryTypeStats(all) error = %v", err)
+	}
+	if len(statsAll) != 2 {
+		t.Fatalf("expected both query types, got %d", len(statsAll))
+	}
+
+	since := now.Add(-24 * time.Hour)
+	statsRecent, err := storage.GetQueryTypeStats(ctx, 10, since)
+	if err != nil {
+		t.Fatalf("GetQueryTypeStats(recent) error = %v", err)
+	}
+
+	if len(statsRecent) != 2 {
+		t.Fatalf("expected 2 query types in last 24h, got %d", len(statsRecent))
+	}
+
+	for _, stat := range statsRecent {
+		if stat.QueryType == "A" && stat.Total != 1 {
+			t.Fatalf("expected only 1 recent A query, got %d", stat.Total)
+		}
+		if stat.QueryType == "AAAA" && stat.Total != 1 {
+			t.Fatalf("expected 1 recent AAAA query, got %d", stat.Total)
+		}
 	}
 }
 

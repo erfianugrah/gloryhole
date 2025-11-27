@@ -220,10 +220,18 @@ func (s *Server) handleQueryTypes(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	var sinceTime time.Time
+	if sinceParam := r.URL.Query().Get("since"); sinceParam != "" {
+		sinceDuration := parseDuration(sinceParam, 0)
+		if sinceDuration > 0 {
+			sinceTime = time.Now().Add(-sinceDuration)
+		}
+	}
+
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
 
-	stats, err := s.storage.GetQueryTypeStats(ctx, limit)
+	stats, err := s.storage.GetQueryTypeStats(ctx, limit, sinceTime)
 	if err != nil {
 		s.logger.Error("Failed to get query-type stats", "error", err)
 		s.writeError(w, http.StatusInternalServerError, "Failed to retrieve query-type statistics")

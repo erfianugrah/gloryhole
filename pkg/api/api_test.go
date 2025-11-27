@@ -103,7 +103,7 @@ func (m *mockStorage) GetQueriesWithTraceFilter(ctx context.Context, filter stor
 	return m.queries, nil
 }
 
-func (m *mockStorage) GetQueryTypeStats(ctx context.Context, limit int) ([]*storage.QueryTypeStats, error) {
+func (m *mockStorage) GetQueryTypeStats(ctx context.Context, limit int, since time.Time) ([]*storage.QueryTypeStats, error) {
 	if m.queryTypes != nil {
 		return m.queryTypes, nil
 	}

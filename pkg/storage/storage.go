@@ -21,7 +21,7 @@ type Storage interface {
 	GetBlockedCount(ctx context.Context, since time.Time) (int64, error)
 	GetQueryCount(ctx context.Context, since time.Time) (int64, error)
 	GetTimeSeriesStats(ctx context.Context, bucket time.Duration, points int) ([]*TimeSeriesPoint, error)
-	GetQueryTypeStats(ctx context.Context, limit int) ([]*QueryTypeStats, error)
+	GetQueryTypeStats(ctx context.Context, limit int, since time.Time) ([]*QueryTypeStats, error)
 
 	// Trace Analytics
 	GetTraceStatistics(ctx context.Context, since time.Time) (*TraceStatistics, error)
