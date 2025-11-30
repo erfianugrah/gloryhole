@@ -85,8 +85,16 @@ func (s *Server) handleUpdateFeatures(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get current config
-	cfg := s.configWatcher.Config()
+	// Get current config and create a safe copy for mutation
+	// IMPORTANT: Never mutate the shared config directly - it races with readers
+	currentCfg := s.configWatcher.Config()
+	cfg, err := currentCfg.Clone()
+	if err != nil {
+		s.logger.Error("Failed to clone config", "error", err)
+		s.writeError(w, http.StatusInternalServerError, "Failed to process configuration")
+		return
+	}
+
 	modified := false
 
 	// Update blocklist if specified
@@ -113,6 +121,7 @@ func (s *Server) handleUpdateFeatures(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Persist to config file
+	// If save fails, the in-memory config remains unchanged (no corruption)
 	if err := config.Save(s.configPath, cfg); err != nil {
 		s.logger.Error("Failed to persist config", "error", err)
 		s.writeError(w, http.StatusInternalServerError,

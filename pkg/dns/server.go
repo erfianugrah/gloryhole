@@ -45,8 +45,8 @@ type Handler struct {
 	Storage           storage.Storage
 	BlocklistManager  *blocklist.Manager
 	Blocklist         map[string]struct{}
-	Whitelist         map[string]struct{}
-	WhitelistPatterns atomic.Pointer[pattern.Matcher] // Pattern-based whitelist (wildcard/regex)
+	Whitelist         atomic.Pointer[map[string]struct{}] // Exact-match whitelist (hot-reloadable)
+	WhitelistPatterns atomic.Pointer[pattern.Matcher]     // Pattern-based whitelist (wildcard/regex)
 	Overrides         map[string]net.IP
 	CNAMEOverrides    map[string]string
 	LocalRecords      *localrecords.Manager
@@ -65,12 +65,15 @@ type Handler struct {
 
 // NewHandler creates a new DNS handler
 func NewHandler() *Handler {
-	return &Handler{
+	h := &Handler{
 		Blocklist:      make(map[string]struct{}),
-		Whitelist:      make(map[string]struct{}),
 		Overrides:      make(map[string]net.IP),
 		CNAMEOverrides: make(map[string]string),
 	}
+	// Initialize Whitelist with empty map
+	emptyWhitelist := make(map[string]struct{})
+	h.Whitelist.Store(&emptyWhitelist)
+	return h
 }
 
 // SetForwarder sets the upstream DNS forwarder
@@ -847,11 +850,11 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 		blockMatch = h.BlocklistManager.Match(domain)
 		blocked = blockMatch.Blocked
 
-		// Check whitelist/overrides with read lock
-		// Note: Could be optimized with atomic pointer in future if needed
-		h.lookupMu.RLock()
-		_, whitelisted = h.Whitelist[domain]
-		h.lookupMu.RUnlock()
+		// Check exact-match whitelist (lock-free atomic read)
+		whitelist := h.Whitelist.Load()
+		if whitelist != nil {
+			_, whitelisted = (*whitelist)[domain]
+		}
 
 		// Check whitelist patterns if not exact match
 		if !whitelisted {
@@ -964,12 +967,12 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 	} else if enableBlocklist {
 		// SLOW PATH: Use legacy locked map lookups (backward compatibility)
 		// Only used if BlocklistManager is nil but kill-switch is enabled
-		// Single lock for all map lookups (performance optimization)
-		h.lookupMu.RLock()
 
-		// Check whitelist first (always allow)
-		_, whitelisted = h.Whitelist[domain]
-		h.lookupMu.RUnlock()
+		// Check whitelist first (always allow) - lock-free atomic read
+		whitelist := h.Whitelist.Load()
+		if whitelist != nil {
+			_, whitelisted = (*whitelist)[domain]
+		}
 
 		// Check whitelist patterns if not exact match
 		if !whitelisted {

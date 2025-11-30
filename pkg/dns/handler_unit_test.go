@@ -332,7 +332,8 @@ func TestServeDNS_WhitelistBypass(t *testing.T) {
 
 	// Add to both blocklist and whitelist
 	handler.Blocklist["whitelisted.test."] = struct{}{}
-	handler.Whitelist["whitelisted.test."] = struct{}{}
+	whitelist := map[string]struct{}{"whitelisted.test.": {}}
+	handler.Whitelist.Store(&whitelist)
 
 	// Setup forwarder
 	logger, _ := logging.New(&config.LoggingConfig{

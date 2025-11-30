@@ -152,15 +152,34 @@ func (s *Server) handleAddPolicy(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Validate action
-	if req.Action != policy.ActionBlock && req.Action != policy.ActionAllow && req.Action != policy.ActionRedirect {
-		s.writeError(w, http.StatusBadRequest, fmt.Sprintf("Invalid action: %s (must be BLOCK, ALLOW, or REDIRECT)", req.Action))
+	validActions := []string{policy.ActionBlock, policy.ActionAllow, policy.ActionRedirect, policy.ActionForward}
+	validAction := false
+	for _, a := range validActions {
+		if req.Action == a {
+			validAction = true
+			break
+		}
+	}
+	if !validAction {
+		s.writeError(w, http.StatusBadRequest, fmt.Sprintf("Invalid action: %s (must be BLOCK, ALLOW, REDIRECT, or FORWARD)", req.Action))
 		return
 	}
 
-	// If REDIRECT, require action_data
+	// Validate action_data requirements
 	if req.Action == policy.ActionRedirect && req.ActionData == "" {
 		s.writeError(w, http.StatusBadRequest, "action_data (redirect IP) is required for REDIRECT action")
 		return
+	}
+	if req.Action == policy.ActionForward {
+		if req.ActionData == "" {
+			s.writeError(w, http.StatusBadRequest, "action_data (upstream DNS servers) is required for FORWARD action")
+			return
+		}
+		// Validate upstream format
+		if _, err := policy.ParseUpstreams(req.ActionData); err != nil {
+			s.writeError(w, http.StatusBadRequest, fmt.Sprintf("Invalid upstream format: %v", err))
+			return
+		}
 	}
 
 	// Create and add rule
@@ -210,14 +229,12 @@ func (s *Server) handleUpdatePolicy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get existing rule
+	// Verify rule exists
 	rules := s.policyEngine.GetRules()
 	if id < 0 || id >= len(rules) {
 		s.writeError(w, http.StatusNotFound, "Policy not found")
 		return
 	}
-
-	existingRule := rules[id]
 
 	// Limit request body size to 10MB
 	r.Body = http.MaxBytesReader(w, r.Body, 10*1024*1024)
@@ -251,21 +268,37 @@ func (s *Server) handleUpdatePolicy(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Validate action
-	if req.Action != policy.ActionBlock && req.Action != policy.ActionAllow && req.Action != policy.ActionRedirect {
-		s.writeError(w, http.StatusBadRequest, fmt.Sprintf("Invalid action: %s", req.Action))
+	validActions := []string{policy.ActionBlock, policy.ActionAllow, policy.ActionRedirect, policy.ActionForward}
+	validAction := false
+	for _, a := range validActions {
+		if req.Action == a {
+			validAction = true
+			break
+		}
+	}
+	if !validAction {
+		s.writeError(w, http.StatusBadRequest, fmt.Sprintf("Invalid action: %s (must be BLOCK, ALLOW, REDIRECT, or FORWARD)", req.Action))
 		return
 	}
 
-	// If REDIRECT, require action_data
+	// Validate action_data requirements
 	if req.Action == policy.ActionRedirect && req.ActionData == "" {
 		s.writeError(w, http.StatusBadRequest, "action_data (redirect IP) is required for REDIRECT action")
 		return
 	}
+	if req.Action == policy.ActionForward {
+		if req.ActionData == "" {
+			s.writeError(w, http.StatusBadRequest, "action_data (upstream DNS servers) is required for FORWARD action")
+			return
+		}
+		// Validate upstream format
+		if _, err := policy.ParseUpstreams(req.ActionData); err != nil {
+			s.writeError(w, http.StatusBadRequest, fmt.Sprintf("Invalid upstream format: %v", err))
+			return
+		}
+	}
 
-	// Remove old rule and add new one
-	// Note: This preserves the order by removing and adding in sequence
-	s.policyEngine.RemoveRule(existingRule.Name)
-
+	// Update rule in-place to preserve evaluation order
 	newRule := &policy.Rule{
 		Name:       req.Name,
 		Logic:      req.Logic,
@@ -274,9 +307,7 @@ func (s *Server) handleUpdatePolicy(w http.ResponseWriter, r *http.Request) {
 		Enabled:    req.Enabled,
 	}
 
-	if err := s.policyEngine.AddRule(newRule); err != nil {
-		// Try to restore the old rule
-		_ = s.policyEngine.AddRule(existingRule)
+	if err := s.policyEngine.UpdateRule(id, newRule); err != nil {
 		s.writeError(w, http.StatusBadRequest, fmt.Sprintf("Failed to update policy: %v", err))
 		return
 	}

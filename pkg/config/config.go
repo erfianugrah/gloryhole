@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"net"
 	"os"
 	"strings"
 	"time"
@@ -138,6 +139,7 @@ type RateLimitConfig struct {
 	CleanupInterval   time.Duration       `yaml:"cleanup_interval"`
 	MaxTrackedClients int                 `yaml:"max_tracked_clients"`
 	Overrides         []RateLimitOverride `yaml:"overrides"`
+	TrustedProxyCIDRs []string            `yaml:"trusted_proxy_cidrs"` // CIDRs of trusted reverse proxies (for X-Forwarded-For/X-Real-IP)
 }
 
 // RateLimitOverride allows per-client or per-CIDR customization of limits.
@@ -206,6 +208,28 @@ func LoadWithDefaults() *Config {
 	cfg.applyDefaults()
 	cfg.applyEnvOverrides()
 	return cfg
+}
+
+// Clone creates a deep copy of the configuration
+// This is used to safely mutate config before persisting
+func (c *Config) Clone() (*Config, error) {
+	// Use YAML marshal/unmarshal for deep copy
+	// This ensures all nested structs are properly copied
+	data, err := yaml.Marshal(c)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal config for cloning: %w", err)
+	}
+
+	var clone Config
+	if err := yaml.Unmarshal(data, &clone); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal config clone: %w", err)
+	}
+
+	// Reapply normalization and defaults (they might not survive YAML round-trip)
+	clone.applyDefaults()
+	clone.Auth.normalize()
+
+	return &clone, nil
 }
 
 // Save writes the configuration back to a YAML file
@@ -463,6 +487,13 @@ func (c *Config) Validate() error {
 		case RateLimitActionDrop, RateLimitActionNXDOMAIN:
 		default:
 			return fmt.Errorf("rate_limit.on_exceed must be 'drop' or 'nxdomain'")
+		}
+
+		// Validate trusted proxy CIDRs
+		for i, cidr := range c.RateLimit.TrustedProxyCIDRs {
+			if _, _, err := net.ParseCIDR(cidr); err != nil {
+				return fmt.Errorf("rate_limit.trusted_proxy_cidrs[%d] is invalid: %w", i, err)
+			}
 		}
 
 		for i, override := range c.RateLimit.Overrides {

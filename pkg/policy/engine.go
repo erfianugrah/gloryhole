@@ -202,6 +202,87 @@ func (e *Engine) RemoveRule(name string) bool {
 	return false
 }
 
+// UpdateRule updates a rule at the given index, preserving evaluation order
+// Returns an error if the index is out of bounds or the rule fails validation
+func (e *Engine) UpdateRule(index int, rule *Rule) error {
+	if rule == nil {
+		return fmt.Errorf("rule cannot be nil")
+	}
+
+	// Validate action and action_data
+	if err := validateAction(rule); err != nil {
+		return fmt.Errorf("invalid rule '%s': %w", rule.Name, err)
+	}
+
+	// Compile the expression (same compilation logic as AddRule)
+	program, err := expr.Compile(rule.Logic,
+		expr.Env(Context{}),
+		// Domain matching functions
+		expr.Function("DomainMatches",
+			func(params ...any) (any, error) {
+				return DomainMatches(params[0].(string), params[1].(string)), nil
+			},
+			new(func(string, string) bool),
+		),
+		expr.Function("DomainEndsWith",
+			func(params ...any) (any, error) {
+				return DomainEndsWith(params[0].(string), params[1].(string)), nil
+			},
+			new(func(string, string) bool),
+		),
+		expr.Function("DomainStartsWith",
+			func(params ...any) (any, error) {
+				return DomainStartsWith(params[0].(string), params[1].(string)), nil
+			},
+			new(func(string, string) bool),
+		),
+		expr.Function("DomainRegex",
+			func(params ...any) (any, error) {
+				result, err := DomainRegex(params[0].(string), params[1].(string))
+				if err != nil {
+					return false, err
+				}
+				return result, nil
+			},
+			new(func(string, string) bool),
+		),
+		expr.Function("DomainLevelCount",
+			func(params ...any) (any, error) {
+				return DomainLevelCount(params[0].(string)), nil
+			},
+			new(func(string) int),
+		),
+		// IP matching functions
+		expr.Function("IPInCIDR",
+			func(params ...any) (any, error) {
+				return IPInCIDR(params[0].(string), params[1].(string)), nil
+			},
+			new(func(string, string) bool),
+		),
+		expr.Function("IPEquals",
+			func(params ...any) (any, error) {
+				return IPEquals(params[0].(string), params[1].(string)), nil
+			},
+			new(func(string, string) bool),
+		),
+	)
+	if err != nil {
+		return fmt.Errorf("failed to compile rule '%s': %w", rule.Name, err)
+	}
+
+	rule.program = program
+
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	if index < 0 || index >= len(e.rules) {
+		return fmt.Errorf("index %d out of bounds (have %d rules)", index, len(e.rules))
+	}
+
+	e.rules[index] = rule
+	return nil
+}
+
 // GetRules returns a copy of all rules
 func (e *Engine) GetRules() []*Rule {
 	e.mu.RLock()

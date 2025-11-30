@@ -84,7 +84,8 @@ func BenchmarkHandler_BlocklistBlock(b *testing.B) {
 func BenchmarkHandler_WhitelistBypass(b *testing.B) {
 	handler := NewHandler()
 	handler.Blocklist["test.com."] = struct{}{}
-	handler.Whitelist["test.com."] = struct{}{}
+	whitelist := map[string]struct{}{"test.com.": {}}
+	handler.Whitelist.Store(&whitelist)
 
 	// Create minimal forwarder for bypass
 	cfg := &config.Config{

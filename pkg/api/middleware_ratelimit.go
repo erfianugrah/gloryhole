@@ -19,7 +19,7 @@ func (s *Server) rateLimitMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
-		clientIP := clientIPFromRequest(r)
+		clientIP := s.clientIPFromRequest(r)
 		allowed, limited, _, label := s.rateLimiter.Allow(clientIP)
 		if allowed {
 			next.ServeHTTP(w, r)
@@ -38,23 +38,45 @@ func (s *Server) rateLimitMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-func clientIPFromRequest(r *http.Request) string {
-	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		parts := strings.Split(xff, ",")
-		for _, part := range parts {
-			if ip := strings.TrimSpace(part); ip != "" {
-				return ip
+func (s *Server) clientIPFromRequest(r *http.Request) string {
+	// Extract the actual remote address first
+	remoteAddr := r.RemoteAddr
+	if host, _, err := net.SplitHostPort(remoteAddr); err == nil {
+		remoteAddr = host
+	}
+
+	// Only trust X-Forwarded-For/X-Real-IP if the request comes from a trusted proxy
+	// Default behavior: DO NOT trust client-controlled headers (secure by default)
+	if len(s.trustedProxies) > 0 {
+		remoteIP := net.ParseIP(remoteAddr)
+		if remoteIP != nil {
+			// Check if remote IP is in any trusted proxy CIDR
+			trusted := false
+			for _, network := range s.trustedProxies {
+				if network.Contains(remoteIP) {
+					trusted = true
+					break
+				}
+			}
+
+			// Only use headers if request is from a trusted proxy
+			if trusted {
+				if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+					parts := strings.Split(xff, ",")
+					for _, part := range parts {
+						if ip := strings.TrimSpace(part); ip != "" {
+							return ip
+						}
+					}
+				}
+
+				if realIP := strings.TrimSpace(r.Header.Get("X-Real-IP")); realIP != "" {
+					return realIP
+				}
 			}
 		}
 	}
 
-	if realIP := strings.TrimSpace(r.Header.Get("X-Real-IP")); realIP != "" {
-		return realIP
-	}
-
-	if host, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
-		return host
-	}
-
-	return r.RemoteAddr
+	// Fall back to remote address (untrusted proxy or no headers)
+	return remoteAddr
 }

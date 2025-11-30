@@ -33,8 +33,9 @@ func TestServeDNS_BlocklistManagerPath(t *testing.T) {
 	mgr := blocklist.NewManager(cfg, logger, nil, nil)
 	handler.SetBlocklistManager(mgr)
 
-	// Also add to legacy map to test override
-	handler.Whitelist["whitelisted.example.com."] = struct{}{}
+	// Also add to whitelist to test override
+	whitelist := map[string]struct{}{"whitelisted.example.com.": {}}
+	handler.Whitelist.Store(&whitelist)
 
 	w := &mockResponseWriter{
 		remoteAddr: &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 12345},

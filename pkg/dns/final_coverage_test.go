@@ -134,7 +134,8 @@ func TestServeDNS_LegacyPathWhitelistNotBlocked(t *testing.T) {
 
 	// Use legacy path (no BlocklistManager)
 	handler.Blocklist["blocked.example.com."] = struct{}{}
-	handler.Whitelist["blocked.example.com."] = struct{}{} // Also whitelisted
+	whitelist := map[string]struct{}{"blocked.example.com.": {}} // Also whitelisted
+	handler.Whitelist.Store(&whitelist)
 
 	w := &mockResponseWriter{
 		remoteAddr: &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 12345},

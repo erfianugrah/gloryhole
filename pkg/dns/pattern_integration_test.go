@@ -61,7 +61,8 @@ func TestWhitelistPatternIntegration(t *testing.T) {
 	handler.WhitelistPatterns.Store(matcher)
 
 	// Set up exact whitelist entries
-	handler.Whitelist["tracker.example.com."] = struct{}{} // Exact match whitelist
+	whitelist := map[string]struct{}{"tracker.example.com.": {}} // Exact match whitelist
+	handler.Whitelist.Store(&whitelist)
 
 	tests := []struct {
 		name        string
@@ -116,7 +117,10 @@ func TestWhitelistPatternIntegration(t *testing.T) {
 			blocked := handler.BlocklistManager.IsBlocked(fqdnDomain)
 
 			// Check whitelist (exact)
-			_, whitelistedExact := handler.Whitelist[fqdnDomain]
+			whitelistedExact := false
+			if wl := handler.Whitelist.Load(); wl != nil {
+				_, whitelistedExact = (*wl)[fqdnDomain]
+			}
 
 			// Check whitelist (pattern)
 			whitelistedPattern := false

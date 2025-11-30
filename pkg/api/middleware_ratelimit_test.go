@@ -72,14 +72,38 @@ func TestRateLimitMiddleware_LimitsRequests(t *testing.T) {
 	}
 }
 
-func TestClientIPFromRequestPrefersHeaders(t *testing.T) {
+// TestClientIPFromRequest_NoTrustedProxies tests that headers are ignored by default (secure)
+func TestClientIPFromRequest_NoTrustedProxies(t *testing.T) {
+	server := New(&Config{ListenAddress: ":0"})
+
 	req := httptest.NewRequest(http.MethodGet, "/api/test", nil)
 	req.RemoteAddr = "198.51.100.5:9999"
 	req.Header.Set("X-Real-IP", "192.0.2.9")
 	req.Header.Set("X-Forwarded-For", "203.0.113.30, 198.51.100.5")
 
-	ip := clientIPFromRequest(req)
+	// Should use RemoteAddr, not headers (secure by default)
+	ip := server.clientIPFromRequest(req)
+	if ip != "198.51.100.5" {
+		t.Fatalf("expected RemoteAddr to be used (secure default), got %s", ip)
+	}
+}
+
+// TestClientIPFromRequest_TrustedProxy tests that headers are used from trusted proxies
+func TestClientIPFromRequest_TrustedProxy(t *testing.T) {
+	cfg := &config.Config{
+		RateLimit: config.RateLimitConfig{
+			TrustedProxyCIDRs: []string{"198.51.100.0/24"},
+		},
+	}
+	server := New(&Config{ListenAddress: ":0", InitialConfig: cfg})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/test", nil)
+	req.RemoteAddr = "198.51.100.5:9999" // This IP is in the trusted range
+	req.Header.Set("X-Forwarded-For", "203.0.113.30, 198.51.100.5")
+
+	// Should use X-Forwarded-For because request is from trusted proxy
+	ip := server.clientIPFromRequest(req)
 	if ip != "203.0.113.30" {
-		t.Fatalf("expected forwarded IP, got %s", ip)
+		t.Fatalf("expected X-Forwarded-For to be used from trusted proxy, got %s", ip)
 	}
 }

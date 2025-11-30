@@ -194,6 +194,7 @@ func main() {
 		var patterns []string
 
 		// Separate exact matches from patterns
+		whitelistMap := make(map[string]struct{})
 		for _, entry := range cfg.Whitelist {
 			if strings.HasPrefix(entry, "*.") || strings.ContainsAny(entry, "()[]{}^$|\\+?") {
 				// Pattern (wildcard or regex)
@@ -201,9 +202,11 @@ func main() {
 			} else {
 				// Exact match
 				exactMatches = append(exactMatches, entry)
-				handler.Whitelist[entry] = struct{}{}
+				whitelistMap[entry] = struct{}{}
 			}
 		}
+		// Store whitelist map atomically
+		handler.Whitelist.Store(&whitelistMap)
 
 		// Load whitelist patterns
 		if len(patterns) > 0 {
@@ -659,7 +662,7 @@ func main() {
 			var patterns []string
 
 			// Separate exact matches from patterns
-			handler.Whitelist = make(map[string]struct{})
+			newWhitelist := make(map[string]struct{})
 			for _, entry := range newCfg.Whitelist {
 				if strings.HasPrefix(entry, "*.") || strings.ContainsAny(entry, "()[]{}^$|\\+?") {
 					// Pattern (wildcard or regex)
@@ -667,9 +670,11 @@ func main() {
 				} else {
 					// Exact match
 					exactMatches = append(exactMatches, entry)
-					handler.Whitelist[entry] = struct{}{}
+					newWhitelist[entry] = struct{}{}
 				}
 			}
+			// Atomically replace whitelist map (race-free)
+			handler.Whitelist.Store(&newWhitelist)
 
 			// Reload whitelist patterns
 			if len(patterns) > 0 {

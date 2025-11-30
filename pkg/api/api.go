@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"strings"
 	"sync"
@@ -34,6 +35,7 @@ type Server struct {
 	version          string
 	configPath       string // Path to config file for persistence
 	rateLimiter      *ratelimit.Manager
+	trustedProxies   []*net.IPNet // Parsed trusted proxy CIDRs for rate limiting
 	authMu           sync.RWMutex
 	authEnabled      bool
 	authHeader       string
@@ -86,6 +88,20 @@ func New(cfg *Config) *Server {
 
 	if cfg.InitialConfig != nil {
 		s.applyAuthConfig(cfg.InitialConfig.Auth)
+
+		// Parse trusted proxy CIDRs for rate limiting
+		// Only trust X-Forwarded-For/X-Real-IP headers if explicitly configured
+		for _, cidr := range cfg.InitialConfig.RateLimit.TrustedProxyCIDRs {
+			_, network, err := net.ParseCIDR(cidr)
+			if err != nil {
+				cfg.Logger.Warn("Invalid trusted proxy CIDR, skipping", "cidr", cidr, "error", err)
+				continue
+			}
+			s.trustedProxies = append(s.trustedProxies, network)
+		}
+		if len(s.trustedProxies) > 0 {
+			cfg.Logger.Info("Trusted proxy CIDRs configured for rate limiting", "count", len(s.trustedProxies))
+		}
 	}
 
 	// Setup routes

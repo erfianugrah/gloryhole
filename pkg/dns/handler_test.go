@@ -71,7 +71,8 @@ func TestServeDNS_BlockedDomain(t *testing.T) {
 func TestServeDNS_WhitelistedDomain(t *testing.T) {
 	handler := NewHandler()
 	handler.Blocklist["example.com."] = struct{}{}
-	handler.Whitelist["example.com."] = struct{}{}
+	whitelist := map[string]struct{}{"example.com.": {}}
+	handler.Whitelist.Store(&whitelist)
 
 	w := &mockResponseWriter{
 		remoteAddr: &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 12345},
@@ -241,7 +242,7 @@ func TestNewHandler(t *testing.T) {
 	if handler.Blocklist == nil {
 		t.Error("Blocklist not initialized")
 	}
-	if handler.Whitelist == nil {
+	if handler.Whitelist.Load() == nil {
 		t.Error("Whitelist not initialized")
 	}
 	if handler.Overrides == nil {
