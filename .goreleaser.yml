@@ -29,7 +29,8 @@ builds:
 
 archives:
   - id: default
-    format: tar.gz
+    formats:
+      - tar.gz
     name_template: >-
       {{ .ProjectName }}-
       {{- .Version }}-
@@ -37,7 +38,8 @@ archives:
       {{- .Arch }}
     format_overrides:
       - goos: windows
-        format: zip
+        formats:
+          - zip
     files:
       - README.md
       - LICENSE
@@ -61,7 +63,7 @@ changelog:
 release:
   github:
     owner: "{{ .Env.GITHUB_REPOSITORY_OWNER }}"
-    name: "{{ .ProjectName }}"
+    name: "gloryhole"
   draft: false
   prerelease: auto
   mode: replace
