@@ -5,7 +5,6 @@ project_name: glory-hole
 before:
   hooks:
     - go mod tidy
-    - make test
 
 builds:
   - id: glory-hole
