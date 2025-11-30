@@ -14,6 +14,7 @@ import (
 	"glory-hole/pkg/blocklist"
 	"glory-hole/pkg/cache"
 	"glory-hole/pkg/config"
+	"glory-hole/pkg/dns"
 	"glory-hole/pkg/policy"
 	"glory-hole/pkg/ratelimit"
 	"glory-hole/pkg/storage"
@@ -31,6 +32,7 @@ type Server struct {
 	configWatcher    *config.Watcher    // For kill-switch feature
 	killSwitch       *KillSwitchManager // For duration-based temporary disabling
 	configSnapshot   *config.Config     // Used when watcher is unavailable (tests, static configs)
+	dnsHandler       *dns.Handler       // DNS handler for DNS-over-HTTPS (DoH) queries
 	startTime        time.Time
 	version          string
 	configPath       string // Path to config file for persistence
@@ -52,6 +54,7 @@ type Config struct {
 	BlocklistManager *blocklist.Manager
 	PolicyEngine     *policy.Engine
 	Cache            cache.Interface // DNS cache for purge operations
+	DNSHandler       *dns.Handler    // DNS handler for DNS-over-HTTPS (DoH) queries
 	Logger           *slog.Logger
 	ConfigWatcher    *config.Watcher    // For kill-switch feature
 	KillSwitch       *KillSwitchManager // For duration-based temporary disabling
@@ -78,6 +81,7 @@ func New(cfg *Config) *Server {
 		blocklistManager: cfg.BlocklistManager,
 		policyEngine:     cfg.PolicyEngine,
 		cache:            cfg.Cache,
+		dnsHandler:       cfg.DNSHandler,
 		logger:           cfg.Logger,
 		version:          cfg.Version,
 		configWatcher:    cfg.ConfigWatcher,
@@ -118,6 +122,9 @@ func New(cfg *Config) *Server {
 
 	// Setup routes
 	mux := http.NewServeMux()
+
+	// DNS-over-HTTPS (DoH) endpoint - RFC 8484 compatible
+	mux.HandleFunc("/dns-query", s.handleDNSQuery)
 
 	// Health checks
 	mux.HandleFunc("/api/health", s.handleHealth) // Detailed health with uptime/version
@@ -368,4 +375,33 @@ func (s *Server) getUptime() string {
 		return fmt.Sprintf("%dm%ds", minutes, seconds)
 	}
 	return fmt.Sprintf("%ds", seconds)
+}
+
+// getClientIP extracts the client IP address from the request
+// Checks X-Forwarded-For and X-Real-IP headers if behind a trusted proxy
+func (s *Server) getClientIP(r *http.Request) string {
+	// Check X-Forwarded-For header (proxied requests)
+	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+		// X-Forwarded-For can contain multiple IPs (client, proxy1, proxy2, ...)
+		// We want the first IP (original client)
+		ips := strings.Split(xff, ",")
+		if len(ips) > 0 {
+			clientIP := strings.TrimSpace(ips[0])
+			if clientIP != "" {
+				return clientIP
+			}
+		}
+	}
+
+	// Check X-Real-IP header (single IP from reverse proxy)
+	if xri := r.Header.Get("X-Real-IP"); xri != "" {
+		return strings.TrimSpace(xri)
+	}
+
+	// Fall back to remote address
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return r.RemoteAddr
+	}
+	return host
 }

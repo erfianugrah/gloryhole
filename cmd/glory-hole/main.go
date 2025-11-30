@@ -533,6 +533,7 @@ func main() {
 		BlocklistManager: blocklistMgr,
 		PolicyEngine:     policyEngine,
 		Cache:            handler.Cache, // DNS cache for purge operations
+		DNSHandler:       handler,       // DNS handler for DNS-over-HTTPS (DoH) queries
 		Logger:           logger.Logger, // Get underlying slog.Logger
 		Version:          version,
 		InitialConfig:    cfg,         // Pass initial config for auth/CORS setup
