@@ -40,23 +40,25 @@ type PolicyRequest struct {
 
 // handleGetPolicies returns all policies
 func (s *Server) handleGetPolicies(w http.ResponseWriter, r *http.Request) {
-	if s.policyEngine == nil {
-		s.writeError(w, http.StatusServiceUnavailable, "Policy engine not configured")
-		return
-	}
+	// If policy engine is not configured, return empty list
+	var policies []PolicyResponse
 
-	rules := s.policyEngine.GetRules()
-	policies := make([]PolicyResponse, 0, len(rules))
+	if s.policyEngine != nil {
+		rules := s.policyEngine.GetRules()
+		policies = make([]PolicyResponse, 0, len(rules))
 
-	for i, rule := range rules {
-		policies = append(policies, PolicyResponse{
-			ID:         i,
-			Name:       rule.Name,
-			Logic:      rule.Logic,
-			Action:     rule.Action,
-			ActionData: rule.ActionData,
-			Enabled:    rule.Enabled,
-		})
+		for i, rule := range rules {
+			policies = append(policies, PolicyResponse{
+				ID:         i,
+				Name:       rule.Name,
+				Logic:      rule.Logic,
+				Action:     rule.Action,
+				ActionData: rule.ActionData,
+				Enabled:    rule.Enabled,
+			})
+		}
+	} else {
+		policies = make([]PolicyResponse, 0)
 	}
 
 	// Check if request wants HTML (from HTMX or browser)
@@ -85,7 +87,7 @@ func (s *Server) handleGetPolicies(w http.ResponseWriter, r *http.Request) {
 // handleGetPolicy returns a specific policy by ID
 func (s *Server) handleGetPolicy(w http.ResponseWriter, r *http.Request) {
 	if s.policyEngine == nil {
-		s.writeError(w, http.StatusServiceUnavailable, "Policy engine not configured")
+		s.writeError(w, http.StatusNotFound, "Policy engine not configured")
 		return
 	}
 
@@ -116,7 +118,7 @@ func (s *Server) handleGetPolicy(w http.ResponseWriter, r *http.Request) {
 // handleAddPolicy adds a new policy
 func (s *Server) handleAddPolicy(w http.ResponseWriter, r *http.Request) {
 	if s.policyEngine == nil {
-		s.writeError(w, http.StatusServiceUnavailable, "Policy engine not configured")
+		s.writeError(w, http.StatusBadRequest, "Policy engine not configured - enable policies in config to add rules")
 		return
 	}
 
@@ -218,7 +220,7 @@ func (s *Server) handleAddPolicy(w http.ResponseWriter, r *http.Request) {
 // handleUpdatePolicy updates an existing policy
 func (s *Server) handleUpdatePolicy(w http.ResponseWriter, r *http.Request) {
 	if s.policyEngine == nil {
-		s.writeError(w, http.StatusServiceUnavailable, "Policy engine not configured")
+		s.writeError(w, http.StatusBadRequest, "Policy engine not configured - enable policies in config to update rules")
 		return
 	}
 
@@ -330,7 +332,7 @@ func (s *Server) handleUpdatePolicy(w http.ResponseWriter, r *http.Request) {
 // handleDeletePolicy deletes a policy
 func (s *Server) handleDeletePolicy(w http.ResponseWriter, r *http.Request) {
 	if s.policyEngine == nil {
-		s.writeError(w, http.StatusServiceUnavailable, "Policy engine not configured")
+		s.writeError(w, http.StatusNotFound, "Policy engine not configured")
 		return
 	}
 
@@ -374,22 +376,23 @@ func (s *Server) handleExportPolicies(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if s.policyEngine == nil {
-		s.writeError(w, http.StatusServiceUnavailable, "Policy engine not configured")
-		return
-	}
-
-	rules := s.policyEngine.GetRules()
-	policies := make([]PolicyResponse, 0, len(rules))
-	for i, rule := range rules {
-		policies = append(policies, PolicyResponse{
-			ID:         i,
-			Name:       rule.Name,
+	// Export empty list if policy engine not configured
+	var policies []PolicyResponse
+	if s.policyEngine != nil {
+		rules := s.policyEngine.GetRules()
+		policies = make([]PolicyResponse, 0, len(rules))
+		for i, rule := range rules {
+			policies = append(policies, PolicyResponse{
+				ID:         i,
+				Name:       rule.Name,
 			Logic:      rule.Logic,
 			Action:     rule.Action,
 			ActionData: rule.ActionData,
 			Enabled:    rule.Enabled,
 		})
+		}
+	} else {
+		policies = make([]PolicyResponse, 0)
 	}
 
 	payload := PolicyListResponse{
