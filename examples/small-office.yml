@@ -11,6 +11,15 @@ server:
   tcp_enabled: true
   udp_enabled: true
   web_ui_address: "0.0.0.0:8080"
+  cors_allowed_origins:
+    - "https://dns-admin.company.com"  # Admin portal
+
+# Authentication (REQUIRED for business environments)
+auth:
+  enabled: true
+  username: "admin"
+  password_hash: ""  # REQUIRED: Use glory-hole hash-password "strongpass"
+  api_key: ""        # Optional: For programmatic access
 
 # Enterprise-grade DNS providers with security features
 upstream_dns_servers:

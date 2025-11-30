@@ -8,7 +8,19 @@ server:
   web_ui_address: ":8080"
   enable_blocklist: true  # Runtime kill-switch for blocklists (API/UI toggle)
   enable_policies: true   # Runtime kill-switch for policy engine (API/UI toggle)
-  decision_trace: false    # Capture detailed block breadcrumbs (higher storage cost)
+  decision_trace: false   # Capture detailed block breadcrumbs (higher storage cost)
+  cors_allowed_origins: [] # Allowed CORS origins (empty = no cross-origin, ["*"] = all origins)
+    # - "https://admin.example.com"
+    # - "http://localhost:3000"
+
+# Authentication (API/UI protection)
+auth:
+  enabled: false          # Enable to require authentication for API/UI access
+  username: "admin"       # Username for Basic Auth
+  password_hash: ""       # Bcrypt hash of password (use: glory-hole hash-password "yourpass")
+  # password: ""          # DEPRECATED: Plaintext password (use password_hash instead!)
+  api_key: ""             # API key for Bearer token auth (alternative to Basic Auth)
+  header: "Authorization" # Header name for API key (default: Authorization)
 
 # Optional per-client rate limiting
 rate_limit:

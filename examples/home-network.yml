@@ -11,6 +11,15 @@ server:
   tcp_enabled: true
   udp_enabled: true
   web_ui_address: ":8080"
+  cors_allowed_origins:
+    - "http://192.168.1.2:8080"  # Same-origin access for web UI
+
+# Authentication (recommended for home networks exposed to internet)
+auth:
+  enabled: false  # Enable if exposing to internet
+  username: "admin"
+  password_hash: ""  # Use: glory-hole hash-password "yourpass"
+  api_key: ""
 
 # Use fast, privacy-focused DNS providers
 upstream_dns_servers:

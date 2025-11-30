@@ -361,9 +361,12 @@ func TestCORSMiddleware_Preflight(t *testing.T) {
 		t.Error("Handler should not be called for OPTIONS request")
 	})
 
+	// Test with allowed origin
+	server.allowedOrigins = []string{"http://example.com"}
 	wrapped := server.corsMiddleware(testHandler)
 
 	req := httptest.NewRequest("OPTIONS", "/test", nil)
+	req.Header.Set("Origin", "http://example.com")
 	w := httptest.NewRecorder()
 
 	wrapped.ServeHTTP(w, req)
@@ -372,13 +375,28 @@ func TestCORSMiddleware_Preflight(t *testing.T) {
 		t.Errorf("Expected status 200 for OPTIONS, got %d", w.Code)
 	}
 
-	// Check CORS headers
-	if w.Header().Get("Access-Control-Allow-Origin") != "*" {
-		t.Error("Missing or incorrect CORS Allow-Origin header")
+	// Check CORS headers for allowed origin
+	if w.Header().Get("Access-Control-Allow-Origin") != "http://example.com" {
+		t.Errorf("Expected CORS Allow-Origin header 'http://example.com', got %s", w.Header().Get("Access-Control-Allow-Origin"))
 	}
 
 	if w.Header().Get("Access-Control-Allow-Methods") == "" {
 		t.Error("Missing CORS Allow-Methods header")
+	}
+
+	// Test with disallowed origin (should not have CORS headers)
+	req2 := httptest.NewRequest("OPTIONS", "/test", nil)
+	req2.Header.Set("Origin", "http://evil.com")
+	w2 := httptest.NewRecorder()
+
+	wrapped.ServeHTTP(w2, req2)
+
+	if w2.Code != http.StatusOK {
+		t.Errorf("Expected status 200 for OPTIONS, got %d", w2.Code)
+	}
+
+	if w2.Header().Get("Access-Control-Allow-Origin") != "" {
+		t.Error("Should not have CORS headers for disallowed origin")
 	}
 }
 

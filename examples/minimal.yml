@@ -11,6 +11,11 @@ server:
   tcp_enabled: false  # Disable TCP to save resources
   udp_enabled: true
   web_ui_address: ""  # Disable web UI
+  cors_allowed_origins: []
+
+# No authentication (web UI disabled)
+auth:
+  enabled: false
 
 # Single fast upstream
 upstream_dns_servers:

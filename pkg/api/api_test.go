@@ -858,7 +858,11 @@ func TestCORSMiddleware(t *testing.T) {
 		ListenAddress: ":8080",
 	})
 
+	// Set wildcard CORS for this test
+	server.allowedOrigins = []string{"*"}
+
 	req := httptest.NewRequest(http.MethodOptions, "/api/health", nil)
+	req.Header.Set("Origin", "http://example.com")
 	w := httptest.NewRecorder()
 
 	server.handler.ServeHTTP(w, req)
@@ -868,8 +872,8 @@ func TestCORSMiddleware(t *testing.T) {
 	}
 
 	corsHeader := w.Header().Get("Access-Control-Allow-Origin")
-	if corsHeader != "*" {
-		t.Errorf("expected CORS header '*', got %s", corsHeader)
+	if corsHeader != "http://example.com" {
+		t.Errorf("expected CORS header 'http://example.com', got %s", corsHeader)
 	}
 }
 
