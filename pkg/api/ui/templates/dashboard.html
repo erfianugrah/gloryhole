@@ -1,6 +1,6 @@
 {{template "base.html" .}}
 
-{{define "title"}}Dashboard - Glory-Hole DNS{{end}}
+{{define "title"}}Dashboard - Gloryhole{{end}}
 
 {{define "content"}}
 <div class="dashboard">
@@ -16,7 +16,8 @@
     <div id="stats-container"
          hx-get="/api/ui/stats"
          hx-trigger="load, every 10s"
-         hx-swap="innerHTML">
+         hx-swap="morph"
+         hx-ext="morph">
         <div class="stats-grid" aria-hidden="true">
             <div class="stat-card skeleton skeleton-card"></div>
             <div class="stat-card skeleton skeleton-card"></div>

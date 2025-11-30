@@ -30,26 +30,11 @@ jobs:
       - name: Test with coverage
         run: go test -race -coverprofile=coverage.out -covermode=atomic ./...
 
-  # Build binaries for multiple platforms (runs in parallel with Docker after tests pass)
-  build-binaries:
+  # Use GoReleaser for fast, efficient cross-platform builds and Docker images
+  release:
+    name: Release with GoReleaser
     needs: [test]
-    name: Build Binaries
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        include:
-          - os: linux
-            arch: amd64
-          - os: linux
-            arch: arm64
-          - os: darwin
-            arch: amd64
-          - os: darwin
-            arch: arm64
-          - os: windows
-            arch: amd64
-          - os: windows
-            arch: arm64
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -61,60 +46,6 @@ jobs:
         with:
           go-version-file: ${{ env.GO_VERSION_FILE }}
           cache: true
-
-      - name: Get version from tag
-        id: version
-        run: |
-          VERSION=${GITHUB_REF#refs/tags/}
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "version_number=${VERSION#v}" >> $GITHUB_OUTPUT
-
-      - name: Build and package binary
-        env:
-          GOOS: ${{ matrix.os }}
-          GOARCH: ${{ matrix.arch }}
-          CGO_ENABLED: 0
-        run: |
-          OUTPUT_NAME="glory-hole-${{ matrix.os }}-${{ matrix.arch }}"
-          if [ "${{ matrix.os }}" = "windows" ]; then
-            OUTPUT_NAME="${OUTPUT_NAME}.exe"
-          fi
-
-          BUILD_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-          GIT_COMMIT=$(git rev-parse --short HEAD)
-
-          go build -v \
-            -ldflags="-s -w -X main.version=${{ steps.version.outputs.version }} -X main.buildTime=${BUILD_TIME} -X main.gitCommit=${GIT_COMMIT}" \
-            -o "${OUTPUT_NAME}" \
-            ./cmd/glory-hole
-
-          gzip -9 "${OUTPUT_NAME}"
-          ARCHIVE_NAME="${OUTPUT_NAME}.gz"
-
-          # Create checksums for the compressed artifact
-          if command -v sha256sum &> /dev/null; then
-            sha256sum "${ARCHIVE_NAME}" > "${ARCHIVE_NAME}.sha256"
-          else
-            shasum -a 256 "${ARCHIVE_NAME}" > "${ARCHIVE_NAME}.sha256"
-          fi
-
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: binary-${{ matrix.os }}-${{ matrix.arch }}
-          path: glory-hole-${{ matrix.os }}-${{ matrix.arch }}*
-          retention-days: 7
-
-  # Build and push Docker images (runs in parallel with binaries after tests pass)
-  build-docker:
-    name: Build Docker Images
-    needs: [test]
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -135,136 +66,14 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Capture build timestamp
-        id: build-meta
-        run: echo "build_time=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> $GITHUB_OUTPUT
-
-      - name: Extract metadata
-        id: meta
-        uses: docker/metadata-action@v5
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v6
         with:
-          images: |
-            ${{ secrets.DOCKER_USERNAME }}/glory-hole
-            ghcr.io/${{ github.repository }}
-          tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{major}}
-            type=raw,value=latest
-
-      - name: Build and push multi-arch Docker image
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: |
-            type=gha,scope=main
-            type=gha,scope=${{ github.ref_name }}
-          cache-to: type=gha,mode=max,scope=${{ github.ref_name }}
-          build-args: |
-            VERSION=${{ github.ref_name }}
-            BUILD_TIME=${{ steps.build-meta.outputs.build_time }}
-
-  # Create GitHub Release
-  create-release:
-    name: Create Release
-    needs: [build-binaries, build-docker]
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: artifacts
-          pattern: binary-*
-
-      - name: Prepare release assets
-        run: |
-          mkdir -p release-assets
-          find artifacts -type f -name "glory-hole-*" -exec cp {} release-assets/ \;
-          ls -lah release-assets/
-
-      - name: Generate changelog
-        id: changelog
-        run: |
-          # Get the previous tag
-          PREVIOUS_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
-          CURRENT_TAG=${GITHUB_REF#refs/tags/}
-
-          echo "## Changes in $CURRENT_TAG" > RELEASE_NOTES.md
-          echo "" >> RELEASE_NOTES.md
-
-          if [ -n "$PREVIOUS_TAG" ]; then
-            echo "### Commits since $PREVIOUS_TAG:" >> RELEASE_NOTES.md
-            echo "" >> RELEASE_NOTES.md
-            git log --pretty=format:"- %s (%h)" $PREVIOUS_TAG..HEAD >> RELEASE_NOTES.md
-          else
-            echo "### All Commits:" >> RELEASE_NOTES.md
-            echo "" >> RELEASE_NOTES.md
-            git log --pretty=format:"- %s (%h)" >> RELEASE_NOTES.md
-          fi
-
-          echo "" >> RELEASE_NOTES.md
-          echo "" >> RELEASE_NOTES.md
-          echo "## Installation" >> RELEASE_NOTES.md
-          echo "" >> RELEASE_NOTES.md
-          echo "### Docker" >> RELEASE_NOTES.md
-          echo '```bash' >> RELEASE_NOTES.md
-          echo "docker pull ${{ secrets.DOCKER_USERNAME }}/glory-hole:$CURRENT_TAG" >> RELEASE_NOTES.md
-          echo '```' >> RELEASE_NOTES.md
-          echo "" >> RELEASE_NOTES.md
-          echo "### Binary" >> RELEASE_NOTES.md
-          echo "Download the appropriate binary for your platform from the assets below." >> RELEASE_NOTES.md
-          echo "" >> RELEASE_NOTES.md
-          echo "### Verification" >> RELEASE_NOTES.md
-          echo "Each binary includes a SHA256 checksum file for verification:" >> RELEASE_NOTES.md
-          echo '```bash' >> RELEASE_NOTES.md
-          echo "sha256sum -c glory-hole-*.sha256" >> RELEASE_NOTES.md
-          echo '```' >> RELEASE_NOTES.md
-
-          # Extract CHANGELOG section if it exists
-          if [ -f CHANGELOG.md ]; then
-            echo "" >> RELEASE_NOTES.md
-            echo "---" >> RELEASE_NOTES.md
-            echo "" >> RELEASE_NOTES.md
-            echo "## Full Changelog" >> RELEASE_NOTES.md
-            # Try to extract the section for this version
-            sed -n "/## \[${CURRENT_TAG#v}\]/,/## \[/p" CHANGELOG.md | head -n -1 >> RELEASE_NOTES.md || true
-          fi
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v1
-        with:
-          files: release-assets/*
-          body_path: RELEASE_NOTES.md
-          draft: false
-          prerelease: ${{ contains(github.ref, 'alpha') || contains(github.ref, 'beta') || contains(github.ref, 'rc') }}
-          generate_release_notes: true
+          distribution: goreleaser
+          version: '~> v2'
+          args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  # Notify on completion
-  notify:
-    name: Notify Release Complete
-    needs: [create-release, build-docker]
-    runs-on: ubuntu-latest
-    if: always()
-    steps:
-      - name: Check release status
-        run: |
-          if [ "${{ needs.create-release.result }}" == "success" ] && [ "${{ needs.build-docker.result }}" == "success" ]; then
-            echo "Release completed successfully!"
-            echo "Version: ${GITHUB_REF#refs/tags/}"
-            echo "Docker images pushed to Docker Hub and GHCR"
-            echo "GitHub Release created with binaries"
-          else
-            echo "Release process encountered issues"
-            exit 1
-          fi
+          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}

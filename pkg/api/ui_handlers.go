@@ -321,8 +321,10 @@ func (s *Server) handleTopDomainsPartial(w http.ResponseWriter, r *http.Request)
 
 	data := struct {
 		Domains []DomainData
+		Blocked bool
 	}{
 		Domains: domains,
+		Blocked: blocked,
 	}
 
 	if err := topDomainsTemplate.ExecuteTemplate(w, "top_domains_partial.html", data); err != nil {

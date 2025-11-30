@@ -2,11 +2,12 @@ package api
 
 import (
 	"context"
+	"os"
 	"strings"
 
-	"github.com/shirou/gopsutil/v3/cpu"
 	"github.com/shirou/gopsutil/v3/host"
 	"github.com/shirou/gopsutil/v3/mem"
+	"github.com/shirou/gopsutil/v3/process"
 )
 
 type systemMetrics struct {
@@ -21,14 +22,26 @@ type systemMetrics struct {
 func collectSystemMetrics(ctx context.Context) systemMetrics {
 	var metrics systemMetrics
 
-	if percentages, err := cpu.PercentWithContext(ctx, 0, false); err == nil && len(percentages) > 0 {
-		metrics.CPUPercent = percentages[0]
+	// Get process-specific metrics
+	proc, err := process.NewProcessWithContext(ctx, int32(os.Getpid()))
+	if err == nil {
+		// Get CPU percent for this process
+		if cpuPercent, err := proc.PercentWithContext(ctx, 0); err == nil {
+			metrics.CPUPercent = cpuPercent
+		}
+
+		// Get memory info for this process
+		if memInfo, err := proc.MemoryInfoWithContext(ctx); err == nil {
+			metrics.MemUsed = memInfo.RSS // Resident Set Size
+		}
 	}
 
+	// Get total system memory for context
 	if vm, err := mem.VirtualMemoryWithContext(ctx); err == nil {
-		metrics.MemUsed = vm.Used
 		metrics.MemTotal = vm.Total
-		metrics.MemPercent = vm.UsedPercent
+		if metrics.MemTotal > 0 && metrics.MemUsed > 0 {
+			metrics.MemPercent = (float64(metrics.MemUsed) / float64(metrics.MemTotal)) * 100
+		}
 	}
 
 	if temps, err := host.SensorsTemperaturesWithContext(ctx); err == nil {

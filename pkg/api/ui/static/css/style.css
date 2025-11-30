@@ -344,7 +344,7 @@ code, .stat-value, .domain-name, pre {
 
 /* Main Content */
 main {
-    padding: 2rem 0;
+    padding: 1rem 0 2rem 0;
     min-height: calc(100vh - 200px);
 }
 
@@ -1686,6 +1686,7 @@ form {
 }
 
 .form-group input[type="text"],
+.form-group input[type="number"],
 .form-group textarea,
 .form-group select {
     width: 100%;
@@ -1913,6 +1914,21 @@ form {
     background: linear-gradient(90deg, var(--primary), #00cc88);
     transition: width 0.3s ease;
     box-shadow: 0 0 8px rgba(0, 255, 65, 0.5);
+}
+
+/* Blocked Domain Styling */
+.domain-item.blocked:hover {
+    background-color: rgba(255, 0, 110, 0.05);
+    border-left-color: var(--danger);
+}
+
+.domain-item.blocked .domain-rank {
+    color: var(--danger);
+}
+
+.domain-item.blocked .domain-bar-fill {
+    background: linear-gradient(90deg, var(--danger), #cc0057);
+    box-shadow: 0 0 8px rgba(255, 0, 110, 0.5);
 }
 
 /* Responsive */

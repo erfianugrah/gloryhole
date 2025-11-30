@@ -1,12 +1,12 @@
 {{template "base.html" .}}
 
-{{define "title"}}Settings - Glory-Hole DNS{{end}}
+{{define "title"}}Settings - Gloryhole{{end}}
 
 {{define "settings-upstreams"}}
 {{$cfg := .Config}}
 <div class="settings-section" id="upstreams-section">
     <h3>Upstream DNS Servers</h3>
-    <p class="section-description">Control which recursive resolvers Glory-Hole uses when forwarding client queries.</p>
+    <p class="section-description">Control which recursive resolvers Gloryhole uses when forwarding client queries.</p>
 
     {{with index .Flash "upstreams"}}
         <div class="alert alert-success">{{.}}</div>
@@ -81,7 +81,7 @@
         <div class="form-group">
             <label for="cache-shards">Shard Count</label>
             <input id="cache-shards" type="number" min="0" name="shard_count" value="{{$cfg.Cache.ShardCount}}">
-            <span class="form-help">0 lets Glory-Hole auto-size shards based on CPU cores.</span>
+            <span class="form-help">0 lets Gloryhole auto-size shards based on CPU cores.</span>
         </div>
 
         <div class="form-actions">
@@ -399,7 +399,7 @@
         <div class="setting-row">
             <div class="setting-label">
                 <h4>Version</h4>
-                <p>Glory-Hole DNS version</p>
+                <p>Gloryhole version</p>
             </div>
             <div class="setting-value">
                 <code>{{.Version}}</code>

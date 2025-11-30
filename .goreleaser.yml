@@ -1,0 +1,145 @@
+version: 2
+
+project_name: glory-hole
+
+before:
+  hooks:
+    - go mod tidy
+    - make test
+
+builds:
+  - id: glory-hole
+    main: ./cmd/glory-hole
+    binary: glory-hole
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.buildTime={{.Date}}
+      - -X main.gitCommit={{.ShortCommit}}
+
+archives:
+  - id: default
+    format: tar.gz
+    name_template: >-
+      {{ .ProjectName }}-
+      {{- .Version }}-
+      {{- .Os }}-
+      {{- .Arch }}
+    format_overrides:
+      - goos: windows
+        format: zip
+    files:
+      - README.md
+      - LICENSE
+      - config/config.example.yml
+
+checksum:
+  name_template: 'checksums.txt'
+  algorithm: sha256
+
+changelog:
+  use: github
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^ci:'
+      - Merge pull request
+      - Merge branch
+
+release:
+  github:
+    owner: "{{ .Env.GITHUB_REPOSITORY_OWNER }}"
+    name: "{{ .ProjectName }}"
+  draft: false
+  prerelease: auto
+  mode: replace
+  header: |
+    ## Gloryhole {{ .Tag }}
+
+    High-Performance DNS Server & Ad Blocker
+
+    ### Installation
+
+    #### Docker
+    ```bash
+    docker pull {{ .Env.DOCKER_USERNAME }}/glory-hole:{{ .Tag }}
+    ```
+
+    #### Binary
+    Download the appropriate binary for your platform from the assets below.
+
+  footer: |
+    ### Verification
+    Verify checksums:
+    ```bash
+    sha256sum -c checksums.txt
+    ```
+
+    **Full Changelog**: https://github.com/{{ .Env.GITHUB_REPOSITORY }}/compare/{{ .PreviousTag }}...{{ .Tag }}
+
+dockers:
+  - image_templates:
+      - "{{ .Env.DOCKER_USERNAME }}/glory-hole:{{ .Tag }}-amd64"
+      - "ghcr.io/{{ .Env.GITHUB_REPOSITORY }}:{{ .Tag }}-amd64"
+    use: buildx
+    goos: linux
+    goarch: amd64
+    dockerfile: Dockerfile
+    build_flag_templates:
+      - "--platform=linux/amd64"
+      - "--label=org.opencontainers.image.created={{.Date}}"
+      - "--label=org.opencontainers.image.title={{.ProjectName}}"
+      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
+      - "--label=org.opencontainers.image.version={{.Version}}"
+      - "--build-arg=VERSION={{.Version}}"
+      - "--build-arg=BUILD_TIME={{.Date}}"
+
+  - image_templates:
+      - "{{ .Env.DOCKER_USERNAME }}/glory-hole:{{ .Tag }}-arm64"
+      - "ghcr.io/{{ .Env.GITHUB_REPOSITORY }}:{{ .Tag }}-arm64"
+    use: buildx
+    goos: linux
+    goarch: arm64
+    dockerfile: Dockerfile
+    build_flag_templates:
+      - "--platform=linux/arm64"
+      - "--label=org.opencontainers.image.created={{.Date}}"
+      - "--label=org.opencontainers.image.title={{.ProjectName}}"
+      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
+      - "--label=org.opencontainers.image.version={{.Version}}"
+      - "--build-arg=VERSION={{.Version}}"
+      - "--build-arg=BUILD_TIME={{.Date}}"
+
+docker_manifests:
+  - name_template: "{{ .Env.DOCKER_USERNAME }}/glory-hole:{{ .Tag }}"
+    image_templates:
+      - "{{ .Env.DOCKER_USERNAME }}/glory-hole:{{ .Tag }}-amd64"
+      - "{{ .Env.DOCKER_USERNAME }}/glory-hole:{{ .Tag }}-arm64"
+
+  - name_template: "{{ .Env.DOCKER_USERNAME }}/glory-hole:latest"
+    image_templates:
+      - "{{ .Env.DOCKER_USERNAME }}/glory-hole:{{ .Tag }}-amd64"
+      - "{{ .Env.DOCKER_USERNAME }}/glory-hole:{{ .Tag }}-arm64"
+
+  - name_template: "ghcr.io/{{ .Env.GITHUB_REPOSITORY }}:{{ .Tag }}"
+    image_templates:
+      - "ghcr.io/{{ .Env.GITHUB_REPOSITORY }}:{{ .Tag }}-amd64"
+      - "ghcr.io/{{ .Env.GITHUB_REPOSITORY }}:{{ .Tag }}-arm64"
+
+  - name_template: "ghcr.io/{{ .Env.GITHUB_REPOSITORY }}:latest"
+    image_templates:
+      - "ghcr.io/{{ .Env.GITHUB_REPOSITORY }}:{{ .Tag }}-amd64"
+      - "ghcr.io/{{ .Env.GITHUB_REPOSITORY }}:{{ .Tag }}-arm64"
