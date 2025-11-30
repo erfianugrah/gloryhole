@@ -35,22 +35,24 @@ type Config struct {
 
 // ServerConfig holds server-specific settings
 type ServerConfig struct {
-	ListenAddress   string `yaml:"listen_address"`
-	WebUIAddress    string `yaml:"web_ui_address"`
-	TCPEnabled      bool   `yaml:"tcp_enabled"`
-	UDPEnabled      bool   `yaml:"udp_enabled"`
-	EnableBlocklist bool   `yaml:"enable_blocklist"` // Kill-switch for ad-blocking
-	EnablePolicies  bool   `yaml:"enable_policies"`  // Kill-switch for policy engine
-	DecisionTrace   bool   `yaml:"decision_trace"`   // Capture block decision traces
+	ListenAddress      string   `yaml:"listen_address"`
+	WebUIAddress       string   `yaml:"web_ui_address"`
+	TCPEnabled         bool     `yaml:"tcp_enabled"`
+	UDPEnabled         bool     `yaml:"udp_enabled"`
+	EnableBlocklist    bool     `yaml:"enable_blocklist"`     // Kill-switch for ad-blocking
+	EnablePolicies     bool     `yaml:"enable_policies"`      // Kill-switch for policy engine
+	DecisionTrace      bool     `yaml:"decision_trace"`       // Capture block decision traces
+	CORSAllowedOrigins []string `yaml:"cors_allowed_origins"` // Allowed CORS origins (empty = none, "*" = all)
 }
 
 // AuthConfig controls static authentication for the API/UI layer.
 type AuthConfig struct {
-	Enabled  bool   `yaml:"enabled"`
-	APIKey   string `yaml:"api_key"`
-	Header   string `yaml:"header"`
-	Username string `yaml:"username"`
-	Password string `yaml:"password"`
+	Enabled      bool   `yaml:"enabled"`
+	APIKey       string `yaml:"api_key"`
+	Header       string `yaml:"header"`
+	Username     string `yaml:"username"`
+	Password     string `yaml:"password"`      // Plaintext password (deprecated, use password_hash)
+	PasswordHash string `yaml:"password_hash"` // Bcrypt hash of password (recommended)
 }
 
 func (a *AuthConfig) normalize() {

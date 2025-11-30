@@ -8,11 +8,15 @@ import (
 // corsMiddleware adds CORS headers to responses
 func (s *Server) corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Allow requests from any origin (for development)
-		// In production, you might want to restrict this
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+		origin := r.Header.Get("Origin")
+
+		// Check if origin is allowed
+		if origin != "" && s.isOriginAllowed(origin) {
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+			w.Header().Set("Access-Control-Allow-Credentials", "true")
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+		}
 
 		// Handle preflight requests
 		if r.Method == "OPTIONS" {
@@ -22,6 +26,22 @@ func (s *Server) corsMiddleware(next http.Handler) http.Handler {
 
 		next.ServeHTTP(w, r)
 	})
+}
+
+// isOriginAllowed checks if an origin is in the allowed list
+func (s *Server) isOriginAllowed(origin string) bool {
+	if len(s.allowedOrigins) == 0 {
+		// Secure default: no origins allowed
+		return false
+	}
+
+	for _, allowed := range s.allowedOrigins {
+		if allowed == "*" || origin == allowed {
+			return true
+		}
+	}
+
+	return false
 }
 
 // loggingMiddleware logs HTTP requests

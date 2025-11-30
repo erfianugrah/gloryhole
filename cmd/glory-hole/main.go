@@ -27,6 +27,8 @@ import (
 	"glory-hole/pkg/resolver"
 	"glory-hole/pkg/storage"
 	"glory-hole/pkg/telemetry"
+
+	"golang.org/x/crypto/bcrypt"
 )
 
 var (
@@ -45,9 +47,15 @@ var (
 
 func main() {
 	// Check for subcommands before flag parsing
-	if len(os.Args) > 1 && os.Args[1] == "import-pihole" {
-		runImportPihole(os.Args[2:])
-		return
+	if len(os.Args) > 1 {
+		switch os.Args[1] {
+		case "import-pihole":
+			runImportPihole(os.Args[2:])
+			return
+		case "hash-password":
+			runHashPassword(os.Args[2:])
+			return
+		}
 	}
 
 	flag.Parse()
@@ -527,6 +535,7 @@ func main() {
 		Cache:            handler.Cache, // DNS cache for purge operations
 		Logger:           logger.Logger, // Get underlying slog.Logger
 		Version:          version,
+		InitialConfig:    cfg,         // Pass initial config for auth/CORS setup
 		ConfigWatcher:    cfgWatcher,  // For kill-switch feature
 		ConfigPath:       *configPath, // For persisting kill-switch changes
 		KillSwitch:       killSwitch,  // For duration-based temporary disabling
@@ -1169,4 +1178,71 @@ func runImportPihole(args []string) {
 		fmt.Fprintf(os.Stderr, "Failed to write config: %v\n", err)
 		os.Exit(1)
 	}
+}
+
+func runHashPassword(args []string) {
+	fs := flag.NewFlagSet("hash-password", flag.ExitOnError)
+	cost := fs.Int("cost", 12, "Bcrypt cost parameter (10-14 recommended, higher = more secure but slower)")
+
+	fs.Usage = func() {
+		fmt.Fprintf(os.Stderr, "Usage: glory-hole hash-password [OPTIONS] [PASSWORD]\n\n")
+		fmt.Fprintf(os.Stderr, "Generate a bcrypt hash for a password to use in auth.password_hash.\n\n")
+		fmt.Fprintf(os.Stderr, "Examples:\n")
+		fmt.Fprintf(os.Stderr, "  glory-hole hash-password MySecretPassword\n")
+		fmt.Fprintf(os.Stderr, "  glory-hole hash-password --cost 14 MySecretPassword\n")
+		fmt.Fprintf(os.Stderr, "  echo -n 'MySecretPassword' | glory-hole hash-password\n\n")
+		fmt.Fprintf(os.Stderr, "Options:\n")
+		fs.PrintDefaults()
+	}
+
+	if err := fs.Parse(args); err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to parse flags: %v\n", err)
+		os.Exit(1)
+	}
+
+	var password string
+
+	// Get password from argument or stdin
+	if fs.NArg() > 0 {
+		password = fs.Arg(0)
+	} else {
+		// Read from stdin
+		fmt.Fprintf(os.Stderr, "Enter password: ")
+		var input string
+		if _, err := fmt.Scanln(&input); err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to read password: %v\n", err)
+			os.Exit(1)
+		}
+		password = input
+	}
+
+	if password == "" {
+		fmt.Fprintf(os.Stderr, "Error: Password cannot be empty\n")
+		fs.Usage()
+		os.Exit(1)
+	}
+
+	// Validate cost
+	if *cost < 4 || *cost > 31 {
+		fmt.Fprintf(os.Stderr, "Error: Cost must be between 4 and 31 (recommended: 10-14)\n")
+		os.Exit(1)
+	}
+
+	// Generate hash
+	fmt.Fprintf(os.Stderr, "Generating bcrypt hash with cost %d...\n", *cost)
+
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), *cost)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to generate hash: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Fprintf(os.Stderr, "Success! Hash generated.\n\n")
+	fmt.Printf("# Add this to your config.yml:\n")
+	fmt.Printf("auth:\n")
+	fmt.Printf("  enabled: true\n")
+	fmt.Printf("  username: \"admin\"\n")
+	fmt.Printf("  password_hash: \"%s\"\n", string(hash))
+	fmt.Printf("\n# IMPORTANT: Remove the plaintext 'password' field when using password_hash!\n")
+	fmt.Printf("# The password_hash field takes precedence over password.\n")
 }

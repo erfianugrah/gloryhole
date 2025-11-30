@@ -36,12 +36,14 @@ type Server struct {
 	configPath       string // Path to config file for persistence
 	rateLimiter      *ratelimit.Manager
 	trustedProxies   []*net.IPNet // Parsed trusted proxy CIDRs for rate limiting
+	allowedOrigins   []string     // Allowed CORS origins
 	authMu           sync.RWMutex
 	authEnabled      bool
 	authHeader       string
 	apiKey           string
 	basicUser        string
-	basicPass        string
+	basicPass        string   // Plaintext password (backward compat)
+	passwordHash     string   // Bcrypt hash of password
 }
 
 // Config holds API server configuration
@@ -101,6 +103,16 @@ func New(cfg *Config) *Server {
 		}
 		if len(s.trustedProxies) > 0 {
 			cfg.Logger.Info("Trusted proxy CIDRs configured for rate limiting", "count", len(s.trustedProxies))
+		}
+
+		// Set allowed CORS origins (defaults to empty = no cross-origin requests)
+		s.allowedOrigins = cfg.InitialConfig.Server.CORSAllowedOrigins
+		if len(s.allowedOrigins) == 0 {
+			cfg.Logger.Info("CORS disabled (no allowed origins configured)")
+		} else if len(s.allowedOrigins) == 1 && s.allowedOrigins[0] == "*" {
+			cfg.Logger.Warn("CORS allows all origins (*) - not recommended for production")
+		} else {
+			cfg.Logger.Info("CORS configured", "allowed_origins", s.allowedOrigins)
 		}
 	}
 
@@ -220,20 +232,31 @@ func (s *Server) applyAuthConfig(auth config.AuthConfig) {
 	apiKey := strings.TrimSpace(auth.APIKey)
 	username := strings.TrimSpace(auth.Username)
 	password := auth.Password
+	passwordHash := strings.TrimSpace(auth.PasswordHash)
 
-	enabled := auth.Enabled && (apiKey != "" || (username != "" && password != ""))
+	// Auth is enabled if we have either an API key OR (username with password/hash)
+	hasBasicAuth := username != "" && (password != "" || passwordHash != "")
+	enabled := auth.Enabled && (apiKey != "" || hasBasicAuth)
 	s.authEnabled = enabled
+
 	if !enabled {
 		s.apiKey = ""
 		s.basicUser = ""
 		s.basicPass = ""
+		s.passwordHash = ""
 		s.authHeader = ""
 		return
 	}
 
+	// Warn if using plaintext password
+	if password != "" && passwordHash == "" {
+		s.logger.Warn("Using plaintext password (deprecated) - use password_hash for better security")
+	}
+
 	s.apiKey = apiKey
 	s.basicUser = username
-	s.basicPass = password
+	s.basicPass = password       // For backward compatibility
+	s.passwordHash = passwordHash // Preferred
 	s.authHeader = strings.ToLower(header)
 }
 

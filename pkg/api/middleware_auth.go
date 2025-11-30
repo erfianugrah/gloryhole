@@ -4,6 +4,8 @@ import (
 	"crypto/subtle"
 	"net/http"
 	"strings"
+
+	"golang.org/x/crypto/bcrypt"
 )
 
 var authBypassPaths = map[string]struct{}{
@@ -58,7 +60,7 @@ func (s *Server) isAuthRequired(r *http.Request) bool {
 func (s *Server) hasBasicCredentials() bool {
 	s.authMu.RLock()
 	defer s.authMu.RUnlock()
-	return s.basicUser != "" && s.basicPass != ""
+	return s.basicUser != "" && (s.basicPass != "" || s.passwordHash != "")
 }
 
 func (s *Server) authorizeRequest(r *http.Request) bool {
@@ -67,8 +69,10 @@ func (s *Server) authorizeRequest(r *http.Request) bool {
 	header := s.authHeader
 	username := s.basicUser
 	password := s.basicPass
+	passwordHash := s.passwordHash
 	s.authMu.RUnlock()
 
+	// Try API key authentication
 	if apiKey != "" {
 		if token := extractAPIKey(r, header); token != "" {
 			if subtle.ConstantTimeCompare([]byte(token), []byte(apiKey)) == 1 {
@@ -77,11 +81,28 @@ func (s *Server) authorizeRequest(r *http.Request) bool {
 		}
 	}
 
-	if username != "" && password != "" {
+	// Try Basic Auth (username/password or username/passwordHash)
+	if username != "" {
 		if user, pass, ok := r.BasicAuth(); ok {
-			if subtle.ConstantTimeCompare([]byte(user), []byte(username)) == 1 &&
-				subtle.ConstantTimeCompare([]byte(pass), []byte(password)) == 1 {
-				return true
+			// Username must match
+			if subtle.ConstantTimeCompare([]byte(user), []byte(username)) != 1 {
+				return false
+			}
+
+			// Try bcrypt hash first (preferred)
+			if passwordHash != "" {
+				if err := bcrypt.CompareHashAndPassword([]byte(passwordHash), []byte(pass)); err == nil {
+					return true
+				}
+				// If hash exists but doesn't match, don't fall back to plaintext
+				return false
+			}
+
+			// Fall back to plaintext password (deprecated)
+			if password != "" {
+				if subtle.ConstantTimeCompare([]byte(pass), []byte(password)) == 1 {
+					return true
+				}
 			}
 		}
 	}
