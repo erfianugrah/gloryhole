@@ -344,7 +344,7 @@ code, .stat-value, .domain-name, pre {
 
 /* Main Content */
 main {
-    padding: 1rem 0 2rem 0;
+    padding: 2.5rem 0 2rem 0;
     min-height: calc(100vh - 200px);
 }
 
@@ -673,6 +673,10 @@ main {
     text-transform: uppercase;
     letter-spacing: 0.05em;
     color: var(--primary);
+}
+
+.section-col.blocked h3 {
+    color: var(--danger);
 }
 
 /* Tables */
