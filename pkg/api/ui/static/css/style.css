@@ -465,6 +465,13 @@ main {
     line-height: 1;
 }
 
+.stat-value time {
+    font-size: 1rem;
+    word-break: break-all;
+    display: block;
+    line-height: 1.4;
+}
+
 .stat-percent {
     font-size: 0.875rem;
     color: var(--text-muted);
@@ -894,6 +901,10 @@ main {
     align-items: center;
     gap: 0.35rem;
     color: var(--text);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-weight: 600;
+    font-family: 'JetBrains Mono', monospace;
 }
 
 .btn-icon svg {
@@ -1245,6 +1256,7 @@ main {
     font-weight: 600;
     border: 1px solid;
     font-family: 'JetBrains Mono', monospace;
+    display: none;
 }
 
 .test-result.success {

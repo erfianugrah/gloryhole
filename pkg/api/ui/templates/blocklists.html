@@ -75,6 +75,7 @@
         if (!result) {
             return;
         }
+        result.style.display = 'block';
         if (!data.enabled) {
             result.textContent = 'Blocklist is disabled.';
             result.className = 'test-result warning';

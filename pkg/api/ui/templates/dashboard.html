@@ -454,14 +454,14 @@ function applyQueryTypeFilters() {
 function initializeDomainCharts() {
     const allowedCtx = document.getElementById('topAllowedChart');
     if (allowedCtx) {
-        topAllowedChart = new Chart(allowedCtx, createDomainBarConfig('#3b82f6'));
-        renderLegend('topAllowedChart-legend', [{ label: 'Queries', color: '#3b82f6' }]);
+        topAllowedChart = new Chart(allowedCtx, createDomainBarConfig('#00ff41'));
+        renderLegend('topAllowedChart-legend', [{ label: 'Queries', color: '#00ff41' }]);
     }
 
     const blockedCtx = document.getElementById('topBlockedChart');
     if (blockedCtx) {
-        topBlockedChart = new Chart(blockedCtx, createDomainBarConfig('#ef4444'));
-        renderLegend('topBlockedChart-legend', [{ label: 'Blocked', color: '#ef4444' }]);
+        topBlockedChart = new Chart(blockedCtx, createDomainBarConfig('#ff006e'));
+        renderLegend('topBlockedChart-legend', [{ label: 'Blocked', color: '#ff006e' }]);
     }
 }
 
