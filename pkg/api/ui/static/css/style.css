@@ -55,12 +55,12 @@ body {
 
 /* Light theme support (but dark is default and preferred) */
 :root[data-theme="light"] body {
-    --primary: #00aa2e;
-    --primary-dark: #008825;
-    --secondary: #4a5578;
-    --success: #00aa2e;
-    --danger: #cc0057;
-    --warning: #cc9709;
+    --primary: #00ff41;
+    --primary-dark: #00cc34;
+    --secondary: #7d8cc4;
+    --success: #00ff41;
+    --danger: #ff006e;
+    --warning: #ffbe0b;
     --background: #f5f7fa;
     --surface: #ffffff;
     --surface-elevated: #fafbfc;
@@ -71,9 +71,9 @@ body {
     --shadow-lg: 0 10px 25px rgba(0, 0, 0, 0.15);
     --chart-axis: rgba(107, 118, 148, 0.7);
     --chart-grid: rgba(107, 118, 148, 0.2);
-    --chart-fill: rgba(0, 170, 46, 0.08);
-    --row-blocked-bg: rgba(204, 0, 87, 0.08);
-    --row-allowed-bg: rgba(0, 170, 46, 0.05);
+    --chart-fill: rgba(0, 255, 65, 0.08);
+    --row-blocked-bg: rgba(255, 0, 110, 0.08);
+    --row-allowed-bg: rgba(0, 255, 65, 0.05);
     background: linear-gradient(180deg, #f5f7fa 0%, #e8ecf1 100%);
     color-scheme: light;
 }
