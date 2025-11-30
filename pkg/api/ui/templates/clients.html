@@ -9,54 +9,36 @@
             <h2>Clients</h2>
             <p class="section-description">Per-client activity derived from query logs. Edit names or assign groups to organize devices.</p>
         </div>
-        <div class="clients-actions">
-            <input type="text" id="client-search" class="filter-input" placeholder="Search by name, IP, or group">
+        <form id="clients-filter-form" class="clients-actions" autocomplete="off">
+            <input type="text" id="client-search" name="search" class="filter-input" placeholder="Search by name, IP, or group">
+            <div class="is-visually-hidden">
+                <input type="hidden" name="limit" id="clients-limit" value="{{.Limit}}">
+                <input type="hidden" name="offset" id="clients-offset" value="{{.Offset}}">
+            </div>
             <button class="btn btn-primary" type="button" data-open-group-modal>Manage Groups</button>
-        </div>
+        </form>
     </div>
 
     <div class="clients-table-wrapper">
-        <table class="clients-table">
-            <thead>
-                <tr>
-                    <th>Client</th>
-                    <th>Group</th>
-                    <th>Total</th>
-                    <th>Blocked</th>
-                    <th>NXDOMAIN</th>
-                    <th>Last Seen</th>
-                    <th></th>
-                </tr>
-            </thead>
-            <tbody id="clients-body">
-                {{range .Clients}}
-                <tr data-client-row data-client="{{.ClientIP}}" data-group="{{.GroupName}}" data-name="{{.DisplayName}}" data-notes="{{.Notes}}">
-                    <td>
-                        <div class="client-name">{{.DisplayName}}</div>
-                        <div class="client-ip">{{.ClientIP}}</div>
-                    </td>
-                    <td>
-                        {{if .GroupName}}
-                        <span class="group-chip" style="--chip-color: {{if .GroupColor}}{{.GroupColor}}{{else}}#3b82f6{{end}}">{{.GroupName}}</span>
-                        {{else}}
-                        <span class="group-chip group-chip-empty">Unassigned</span>
-                        {{end}}
-                    </td>
-                    <td>{{.TotalQueries}}</td>
-                    <td>{{.BlockedQueries}}</td>
-                    <td>{{.NXDomainCount}}</td>
-                    <td><time datetime="{{.LastSeen.Format "2006-01-02T15:04:05Z07:00"}}">{{.LastSeen.Format "Jan 2, 15:04"}}</time></td>
-                    <td>
-                        <button class="btn btn-secondary btn-sm" type="button" data-edit-client="{{.ClientIP}}">Edit</button>
-                    </td>
-                </tr>
-                {{else}}
-                <tr>
-                    <td colspan="7" class="no-data">No clients captured yet.</td>
-                </tr>
-                {{end}}
-            </tbody>
-        </table>
+        <div id="clients-table-container"
+             data-clients-limit="{{.Limit}}"
+             data-clients-offset="{{.Offset}}"
+             data-clients-has-more="{{if eq (len .Clients) .Limit}}true{{else}}false{{end}}"
+             hx-get="/api/ui/clients"
+             hx-trigger="load, refresh, filters-changed, every 30s"
+             hx-swap="morph"
+             hx-ext="idiomorph"
+             hx-indicator="#clients-loading"
+             hx-include="#clients-filter-form">
+            {{template "clients_partial.html" .}}
+        </div>
+    </div>
+    <div id="clients-loading" class="hx-indicator">Refreshing…</div>
+
+    <div class="pagination">
+        <button class="btn btn-secondary" type="button" data-clients-page-shift="-1">Previous</button>
+        <span style="margin: 0 1rem;">Page <span id="clients-current-page">{{.Page}}</span></span>
+        <button class="btn btn-secondary" type="button" data-clients-page-shift="1">Next</button>
     </div>
 </div>
 
@@ -137,13 +119,24 @@
 
 <script>
 (function() {
-    const clients = document.getElementById('clients-body');
+    const clientsContainer = document.getElementById('clients-table-container');
     const searchInput = document.getElementById('client-search');
+    const limitInput = document.getElementById('clients-limit');
+    const offsetInput = document.getElementById('clients-offset');
+    const pageLabel = document.getElementById('clients-current-page');
+    const paginationButtons = document.querySelectorAll('[data-clients-page-shift]');
     const modal = document.getElementById('client-modal');
     const groupModal = document.getElementById('group-modal');
     const groupList = document.getElementById('group-list');
     const groupTemplate = document.getElementById('group-row-template');
     const clientGroupSelect = document.getElementById('client-group');
+    const hx = window.htmx;
+    let searchTimer = null;
+    let paginationMeta = {
+        limit: Number(limitInput?.value) || 1,
+        offset: Number(offsetInput?.value) || 0,
+        has_more: clientsContainer?.dataset.clientsHasMore !== 'false'
+    };
 
     function closeModal(target) {
         if (target) {
@@ -168,6 +161,38 @@
             }
             return res.json();
         });
+    }
+
+    function triggerClientsRefresh(eventName) {
+        if (clientsContainer && hx) {
+            hx.trigger(clientsContainer, eventName || 'refresh');
+        }
+    }
+
+    function updatePaginationControls(meta) {
+        if (!meta) {
+            meta = paginationMeta;
+        }
+        const limit = Number(meta.limit ?? paginationMeta.limit ?? 1);
+        const offset = Number(meta.offset ?? paginationMeta.offset ?? 0);
+        const hasMore = meta.has_more !== undefined ? meta.has_more : paginationMeta.has_more;
+        paginationMeta = { limit, offset, has_more: hasMore };
+        if (pageLabel) {
+            pageLabel.textContent = Math.floor(offset / limit) + 1;
+        }
+        const prevBtn = document.querySelector('[data-clients-page-shift="-1"]');
+        const nextBtn = document.querySelector('[data-clients-page-shift="1"]');
+        if (prevBtn) {
+            prevBtn.disabled = offset === 0;
+        }
+        if (nextBtn) {
+            nextBtn.disabled = hasMore === false;
+        }
+        if (clientsContainer) {
+            clientsContainer.dataset.clientsLimit = String(limit);
+            clientsContainer.dataset.clientsOffset = String(offset);
+            clientsContainer.dataset.clientsHasMore = hasMore === false ? 'false' : 'true';
+        }
     }
 
     function refreshGroups() {
@@ -214,11 +239,14 @@
         openModal(modal);
     }
 
-    clients?.addEventListener('click', (event) => {
+    document.addEventListener('click', (event) => {
         const target = event.target;
-        if (!(target instanceof HTMLElement)) return;
-        if (target.dataset.editClient) {
-            const row = target.closest('[data-client-row]');
+        if (!(target instanceof HTMLElement)) {
+            return;
+        }
+        const trigger = target.closest('[data-edit-client]');
+        if (trigger) {
+            const row = trigger.closest('[data-client-row]');
             if (row) {
                 openClientModal(row);
             }
@@ -249,7 +277,10 @@
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload),
         })
-            .then(() => window.location.reload())
+            .then(() => {
+                closeModal(modal);
+                triggerClientsRefresh('refresh');
+            })
             .catch((err) => alert(err.message || 'Failed to update client'));
     });
 
@@ -268,7 +299,7 @@
                 fetchJSON(`/api/client-groups/${encodeURIComponent(name)}`, { method: 'DELETE' })
                     .then(() => {
                         refreshGroups();
-                        window.location.reload();
+                        triggerClientsRefresh('refresh');
                     })
                     .catch((err) => alert(err.message || 'Failed to delete group'));
             }
@@ -305,16 +336,56 @@
         document.getElementById('group-original-name').value = '';
     });
 
-    searchInput?.addEventListener('input', () => {
-        const value = searchInput.value.toLowerCase();
-        clients.querySelectorAll('[data-client-row]').forEach((row) => {
-            const name = row.dataset.name?.toLowerCase() || '';
-            const ip = row.dataset.client?.toLowerCase() || '';
-            const group = row.dataset.group?.toLowerCase() || '';
-            row.style.display = name.includes(value) || ip.includes(value) || group.includes(value) ? '' : 'none';
+    paginationButtons.forEach((button) => {
+        button.addEventListener('click', () => {
+            const delta = Number(button.dataset.clientsPageShift) || 0;
+            const limit = Number(limitInput?.value) || 1;
+            const currentOffset = Number(offsetInput?.value) || 0;
+            if (delta < 0 && currentOffset === 0) {
+                return;
+            }
+            if (delta > 0 && paginationMeta.has_more === false) {
+                return;
+            }
+            const nextOffset = Math.max(0, currentOffset + delta * limit);
+            offsetInput.value = String(nextOffset);
+            updatePaginationControls({ limit, offset: nextOffset, has_more: true });
+            triggerClientsRefresh('refresh');
         });
     });
 
+    function scheduleSearchRefresh() {
+        if (!offsetInput) {
+            return;
+        }
+        offsetInput.value = '0';
+        if (searchTimer) {
+            window.clearTimeout(searchTimer);
+        }
+        searchTimer = window.setTimeout(() => triggerClientsRefresh('filters-changed'), 275);
+    }
+
+    searchInput?.addEventListener('input', scheduleSearchRefresh);
+
+    document.addEventListener('clients-page-meta', (event) => {
+        const meta = event.detail || {};
+        if (typeof meta.limit === 'number') {
+            limitInput.value = String(meta.limit);
+        }
+        if (typeof meta.offset === 'number') {
+            offsetInput.value = String(meta.offset);
+        }
+        const hasMore = typeof meta.has_more === 'boolean'
+            ? meta.has_more
+            : (typeof meta.count === 'number' && typeof meta.limit === 'number' ? meta.count >= meta.limit : true);
+        updatePaginationControls({
+            limit: Number(limitInput.value) || paginationMeta.limit,
+            offset: Number(offsetInput.value) || 0,
+            has_more: hasMore,
+        });
+    });
+
+    updatePaginationControls();
     refreshGroups();
 })();
 </script>

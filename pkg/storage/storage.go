@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+	"strings"
 	"time"
 )
 
@@ -225,6 +226,28 @@ func DefaultConfig() Config {
 			AggregationInterval: 1 * time.Hour,
 		},
 	}
+}
+
+type clientSearchContextKey struct{}
+
+// WithClientSearch attaches a case-insensitive search term for client summaries to the context.
+func WithClientSearch(ctx context.Context, search string) context.Context {
+	trimmed := strings.ToLower(strings.TrimSpace(search))
+	if trimmed == "" {
+		return ctx
+	}
+	return context.WithValue(ctx, clientSearchContextKey{}, trimmed)
+}
+
+// ClientSearchFromContext extracts the client search term from context if present.
+func ClientSearchFromContext(ctx context.Context) string {
+	if ctx == nil {
+		return ""
+	}
+	if value, ok := ctx.Value(clientSearchContextKey{}).(string); ok {
+		return value
+	}
+	return ""
 }
 
 // Validate validates the storage configuration

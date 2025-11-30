@@ -22,7 +22,7 @@ func (s *SQLiteStorage) GetClientSummaries(ctx context.Context, limit, offset in
 		offset = 0
 	}
 
-	const query = `
+	const baseQuery = `
 		WITH aggregated AS (
 			SELECT
 				client_ip,
@@ -50,11 +50,34 @@ func (s *SQLiteStorage) GetClientSummaries(ctx context.Context, limit, offset in
 		LEFT JOIN client_groups g ON p.group_name = g.name
 		LEFT JOIN queries first_q ON first_q.id = a.first_id
 		LEFT JOIN queries last_q ON last_q.id = a.last_id
-		ORDER BY last_q.timestamp DESC
-		LIMIT ? OFFSET ?;
 	`
 
-	rows, err := s.db.QueryContext(ctx, query, limit, offset)
+	var builder strings.Builder
+	builder.WriteString(baseQuery)
+
+	searchTerm := ClientSearchFromContext(ctx)
+	args := make([]any, 0, 6)
+	if searchTerm != "" {
+		pattern := "%" + searchTerm + "%"
+		builder.WriteString(`
+		WHERE
+			LOWER(a.client_ip) LIKE ?
+			OR LOWER(COALESCE(p.display_name, '')) LIKE ?
+			OR LOWER(COALESCE(p.notes, '')) LIKE ?
+			OR LOWER(COALESCE(p.group_name, '')) LIKE ?
+		`)
+		for i := 0; i < 4; i++ {
+			args = append(args, pattern)
+		}
+	}
+
+	builder.WriteString(`
+		ORDER BY last_q.timestamp DESC
+		LIMIT ? OFFSET ?;
+	`)
+	args = append(args, limit, offset)
+
+	rows, err := s.db.QueryContext(ctx, builder.String(), args...)
 	if err != nil {
 		return nil, fmt.Errorf("query clients failed: %w", err)
 	}

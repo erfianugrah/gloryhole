@@ -6,9 +6,9 @@
 <div class="queries-page">
     <div class="page-header">
         <h2>Query Log</h2>
-        <div class="filters">
-            <input type="text" id="filter-domain" placeholder="Filter by domain..." class="filter-input">
-            <select id="filter-type" class="filter-select">
+        <form id="query-filter-form" class="filters" autocomplete="off">
+            <input type="text" id="filter-domain" name="domain" placeholder="Filter by domain..." class="filter-input">
+            <select id="filter-type" name="type" class="filter-select">
                 <option value="">All Types</option>
                 <option value="A">A</option>
                 <option value="AAAA">AAAA</option>
@@ -17,112 +17,132 @@
                 <option value="PTR">PTR</option>
                 <option value="TXT">TXT</option>
             </select>
-            <select id="filter-status" class="filter-select">
+            <select id="filter-status" name="status" class="filter-select">
                 <option value="">All Queries</option>
                 <option value="blocked">Blocked Only</option>
                 <option value="allowed">Allowed Only</option>
                 <option value="cached">Cached Only</option>
             </select>
-            <input type="datetime-local" id="filter-start" class="filter-input" placeholder="Start time">
-            <input type="datetime-local" id="filter-end" class="filter-input" placeholder="End time">
-            <button class="btn btn-secondary btn-sm" type="button" onclick="resetFilters()">Reset</button>
-        </div>
+            <input type="datetime-local" id="filter-start" name="start" class="filter-input" placeholder="Start time">
+            <input type="datetime-local" id="filter-end" name="end" class="filter-input" placeholder="End time">
+            <button class="btn btn-secondary btn-sm" type="button" data-reset-filters>Reset</button>
+            <div class="is-visually-hidden">
+                <input type="hidden" name="limit" id="queries-limit" value="100">
+                <input type="hidden" name="offset" id="queries-offset" value="0">
+            </div>
+        </form>
     </div>
 
     <div id="queries-container"
-         hx-get="/api/ui/queries?limit=100&offset=0"
-         hx-trigger="load, every 6s"
-         hx-swap="innerHTML"
-         hx-indicator="#queries-loading">
+         hx-get="/api/ui/queries"
+         hx-trigger="load, every 6s, filters-changed, refresh"
+         hx-swap="morph"
+         hx-ext="idiomorph"
+         hx-indicator="#queries-loading"
+         hx-include="#query-filter-form">
         <div class="loading">Loading queries...</div>
     </div>
     <div id="queries-loading" class="hx-indicator">Refreshing…</div>
 
     <div class="pagination">
-        <button id="prev-btn" class="btn btn-secondary" onclick="loadPage(-100)">Previous</button>
+        <button id="prev-btn" class="btn btn-secondary" type="button" data-page-shift="-1">Previous</button>
         <span id="page-info" style="margin: 0 1rem;">Page <span id="current-page">1</span></span>
-        <button class="btn btn-secondary" onclick="loadPage(100)">Next</button>
+        <button class="btn btn-secondary" type="button" data-page-shift="1">Next</button>
     </div>
 </div>
 
 <script>
-    let currentOffset = 0;
-    const limit = 100;
-    const currentFilters = {
-        domain: '',
-        type: '',
-        status: '',
-        start: '',
-        end: ''
-    };
+window.addEventListener('DOMContentLoaded', function () {
+    const container = document.getElementById('queries-container');
+    const filterForm = document.getElementById('query-filter-form');
+    const limitInput = document.getElementById('queries-limit');
+    const offsetInput = document.getElementById('queries-offset');
+    const pageLabel = document.getElementById('current-page');
+    const prevBtn = document.getElementById('prev-btn');
+    const resetBtn = document.querySelector('[data-reset-filters]');
+    const pageButtons = document.querySelectorAll('[data-page-shift]');
+    const hx = window.htmx;
+    let filterTimer = null;
 
-    document.addEventListener('DOMContentLoaded', () => {
-        const domainInput = document.getElementById('filter-domain');
-        const typeSelect = document.getElementById('filter-type');
-        const statusSelect = document.getElementById('filter-status');
-        const startInput = document.getElementById('filter-start');
-        const endInput = document.getElementById('filter-end');
+    function updatePaginationControls() {
+        const limit = Number(limitInput?.value) || 1;
+        const offset = Number(offsetInput?.value) || 0;
+        const currentPage = Math.floor(offset / limit) + 1;
+        if (pageLabel) {
+            pageLabel.textContent = currentPage;
+        }
+        if (prevBtn) {
+            prevBtn.disabled = offset === 0;
+        }
+    }
 
-        domainInput.addEventListener('input', () => updateFilters());
-        typeSelect.addEventListener('change', () => updateFilters());
-        statusSelect.addEventListener('change', () => updateFilters());
-        startInput.addEventListener('change', () => updateFilters());
-        endInput.addEventListener('change', () => updateFilters());
+    function triggerRefresh(eventName) {
+        if (!container || !hx) {
+            return;
+        }
+        hx.trigger(container, eventName || 'refresh');
+    }
 
-        refreshQueries();
+    function shiftPage(deltaPages) {
+        const limit = Number(limitInput?.value) || 100;
+        const offset = Number(offsetInput?.value) || 0;
+        const nextOffset = Math.max(0, offset + deltaPages * limit);
+        if (nextOffset === offset && nextOffset === 0 && deltaPages < 0) {
+            return;
+        }
+        offsetInput.value = String(nextOffset);
+        updatePaginationControls();
+        triggerRefresh('refresh');
+    }
+
+    pageButtons.forEach((button) => {
+        button.addEventListener('click', () => {
+            const delta = Number(button.dataset.pageShift) || 0;
+            shiftPage(delta);
+        });
     });
 
-    function loadPage(offsetDelta) {
-        currentOffset = Math.max(0, currentOffset + offsetDelta);
-        refreshQueries();
-        updatePagination();
+    function scheduleFilterRefresh() {
+        if (!offsetInput) {
+            return;
+        }
+        offsetInput.value = '0';
+        updatePaginationControls();
+        if (filterTimer) {
+            window.clearTimeout(filterTimer);
+        }
+        filterTimer = window.setTimeout(() => triggerRefresh('filters-changed'), 250);
     }
 
-    function buildQueryURL() {
-        const params = new URLSearchParams();
-        params.set('limit', limit);
-        params.set('offset', currentOffset);
-        if (currentFilters.domain) params.set('domain', currentFilters.domain);
-        if (currentFilters.type) params.set('type', currentFilters.type);
-        if (currentFilters.status) params.set('status', currentFilters.status);
-        if (currentFilters.start) params.set('start', currentFilters.start);
-        if (currentFilters.end) params.set('end', currentFilters.end);
-        return `/api/ui/queries?${params.toString()}`;
-    }
+    filterForm?.addEventListener('input', scheduleFilterRefresh);
+    filterForm?.addEventListener('change', scheduleFilterRefresh);
 
-    function updateFilters() {
-        currentOffset = 0;
-        currentFilters.domain = document.getElementById('filter-domain').value.trim();
-        currentFilters.type = document.getElementById('filter-type').value;
-        currentFilters.status = document.getElementById('filter-status').value;
-        currentFilters.start = formatDateInput(document.getElementById('filter-start').value);
-        currentFilters.end = formatDateInput(document.getElementById('filter-end').value);
-        refreshQueries();
-        updatePagination();
-    }
+    resetBtn?.addEventListener('click', () => {
+        filterForm?.reset();
+        scheduleFilterRefresh();
+    });
 
-    function resetFilters() {
-        document.getElementById('filter-domain').value = '';
-        document.getElementById('filter-type').value = '';
-        document.getElementById('filter-status').value = '';
-        document.getElementById('filter-start').value = '';
-        document.getElementById('filter-end').value = '';
-        updateFilters();
-    }
+    document.addEventListener('htmx:configRequest', (event) => {
+        if (event.target !== container) {
+            return;
+        }
+        const params = event.detail?.parameters;
+        if (!params) {
+            return;
+        }
+        ['start', 'end'].forEach((key) => {
+            if (params[key]) {
+                const normalized = normalizeDateValue(params[key]);
+                if (normalized) {
+                    params[key] = normalized;
+                } else {
+                    delete params[key];
+                }
+            }
+        });
+    });
 
-    function refreshQueries() {
-        const container = document.getElementById('queries-container');
-        container.setAttribute('hx-get', buildQueryURL());
-        htmx.trigger(container, 'load');
-    }
-
-    function updatePagination() {
-        const currentPage = Math.floor(currentOffset / limit) + 1;
-        document.getElementById('current-page').textContent = currentPage;
-        document.getElementById('prev-btn').disabled = currentOffset === 0;
-    }
-
-    function formatDateInput(value) {
+    function normalizeDateValue(value) {
         if (!value) {
             return '';
         }
@@ -132,5 +152,8 @@
         }
         return date.toISOString();
     }
+
+    updatePaginationControls();
+});
 </script>
 {{end}}

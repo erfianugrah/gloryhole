@@ -1,0 +1,43 @@
+<table class="clients-table">
+    <thead>
+        <tr>
+            <th>Client</th>
+            <th>Group</th>
+            <th>Total</th>
+            <th>Blocked</th>
+            <th>NXDOMAIN</th>
+            <th>Last Seen</th>
+            <th></th>
+        </tr>
+    </thead>
+    <tbody>
+        {{if .Clients}}
+            {{range .Clients}}
+            <tr data-client-row data-client="{{.ClientIP}}" data-group="{{.GroupName}}" data-name="{{.DisplayName}}" data-notes="{{.Notes}}">
+                <td>
+                    <div class="client-name">{{.DisplayName}}</div>
+                    <div class="client-ip">{{.ClientIP}}</div>
+                </td>
+                <td>
+                    {{if .GroupName}}
+                    <span class="group-chip" style="--chip-color: {{if .GroupColor}}{{.GroupColor}}{{else}}#3b82f6{{end}}">{{.GroupName}}</span>
+                    {{else}}
+                    <span class="group-chip group-chip-empty">Unassigned</span>
+                    {{end}}
+                </td>
+                <td>{{.TotalQueries}}</td>
+                <td>{{.BlockedQueries}}</td>
+                <td>{{.NXDomainCount}}</td>
+                <td><time datetime="{{.LastSeen.Format "2006-01-02T15:04:05Z07:00"}}">{{.LastSeen.Format "Jan 2, 15:04"}}</time></td>
+                <td>
+                    <button class="btn btn-secondary btn-sm" type="button" data-edit-client="{{.ClientIP}}">Edit</button>
+                </td>
+            </tr>
+            {{end}}
+        {{else}}
+        <tr>
+            <td colspan="7" class="no-data">No clients captured yet.</td>
+        </tr>
+        {{end}}
+    </tbody>
+</table>

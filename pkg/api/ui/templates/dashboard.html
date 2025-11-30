@@ -17,7 +17,12 @@
          hx-get="/api/ui/stats"
          hx-trigger="load, every 10s"
          hx-swap="innerHTML">
-        <div class="loading">Loading statistics...</div>
+        <div class="stats-grid" aria-hidden="true">
+            <div class="stat-card skeleton skeleton-card"></div>
+            <div class="stat-card skeleton skeleton-card"></div>
+            <div class="stat-card skeleton skeleton-card"></div>
+            <div class="stat-card skeleton skeleton-card"></div>
+        </div>
     </div>
 
     <!-- Charts Section -->

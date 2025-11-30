@@ -521,6 +521,7 @@ func TestInitTemplates(t *testing.T) {
 		"queries_partial.html":     queriesPartialTemplate,
 		"top_domains_partial.html": topDomainsTemplate,
 		"policies_partial.html":    policiesPartialTemplate,
+		"clients_partial.html":     clientsPartialTemplate,
 	}
 
 	for name, tmpl := range partialTemplates {
@@ -544,7 +545,7 @@ func TestGetStaticFS(t *testing.T) {
 	}
 
 	// Try to open known files
-	files := []string{"css/style.css", "js/mini-htmx.js"}
+	files := []string{"css/style.css", "js/trace-modal.js"}
 	for _, path := range files {
 		f, err := fs.Open(path)
 		if err != nil {

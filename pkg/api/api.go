@@ -146,6 +146,7 @@ func New(cfg *Config) *Server {
 	mux.HandleFunc("GET /api/ui/stats", s.handleStatsPartial)
 	mux.HandleFunc("GET /api/ui/queries", s.handleQueriesPartial)
 	mux.HandleFunc("GET /api/ui/top-domains", s.handleTopDomainsPartial)
+	mux.HandleFunc("GET /api/ui/clients", s.handleClientsPartial)
 	mux.HandleFunc("GET /queries", s.handleQueriesPage)
 	mux.HandleFunc("GET /policies", s.handlePoliciesPage)
 	mux.HandleFunc("GET /settings", s.handleSettingsPage)

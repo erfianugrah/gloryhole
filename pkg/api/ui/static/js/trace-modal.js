@@ -58,8 +58,10 @@
         }
 
         function createTraceChip(content, extraClass) {
-            var cls = extraClass ? ' ' + extraClass : '';
-            return '<span class="trace-chip' + cls + '">' + content + '</span>';
+            const chip = document.createElement('span');
+            chip.className = 'trace-chip' + (extraClass ? ' ' + extraClass : '');
+            chip.textContent = content;
+            return chip;
         }
 
         function chipClassForAction(action) {
@@ -78,58 +80,111 @@
         }
 
         function renderTraceChips(entry) {
-            const chips = [];
+            const elements = [];
             if (entry.action) {
-                chips.push(createTraceChip(formatActionLabel(entry.action), chipClassForAction(entry.action)));
+                elements.push(createTraceChip(formatActionLabel(entry.action), chipClassForAction(entry.action)));
             }
             if (entry.rule) {
-                chips.push(createTraceChip('Rule: ' + entry.rule, 'trace-chip-info'));
+                elements.push(createTraceChip('Rule: ' + String(entry.rule), 'trace-chip-info'));
             }
             if (entry.source) {
-                chips.push(createTraceChip(entry.source, 'trace-chip-muted'));
+                elements.push(createTraceChip(String(entry.source), 'trace-chip-muted'));
             }
-            return chips.join('');
+            if (!elements.length) {
+                return null;
+            }
+            const container = document.createElement('div');
+            container.className = 'trace-chips';
+            elements.forEach(function (chip) {
+                container.appendChild(chip);
+            });
+            return container;
         }
 
         function renderTraceMetadata(metadata) {
             if (!metadata || typeof metadata !== 'object') {
-                return '';
+                return null;
             }
             const entries = Object.entries(metadata).filter(function ([key, value]) {
                 return Boolean(key) && value !== undefined && value !== null && value !== '';
             });
             if (!entries.length) {
-                return '';
+                return null;
             }
-            const rows = entries
-                .map(function ([key, value]) {
-                    return (
-                        '<div class="trace-meta-row">' +
-                        '<div class="trace-meta-key">' + humanizeLabel(key) + '</div>' +
-                        '<div class="trace-meta-value">' + value + '</div>' +
-                        '</div>'
-                    );
-                })
-                .join('');
-            return '<div class="trace-metadata">' + rows + '</div>';
+            const container = document.createElement('div');
+            container.className = 'trace-metadata';
+            entries.forEach(function ([key, value]) {
+                const row = document.createElement('div');
+                row.className = 'trace-meta-row';
+
+                const keyEl = document.createElement('div');
+                keyEl.className = 'trace-meta-key';
+                keyEl.textContent = humanizeLabel(key);
+                row.appendChild(keyEl);
+
+                const valueEl = document.createElement('div');
+                valueEl.className = 'trace-meta-value';
+                let valueText;
+                if (typeof value === 'string') {
+                    valueText = value;
+                } else if (typeof value === 'number' || typeof value === 'boolean') {
+                    valueText = String(value);
+                } else {
+                    try {
+                        valueText = JSON.stringify(value);
+                    } catch (_) {
+                        valueText = String(value);
+                    }
+                }
+                valueEl.textContent = valueText;
+                row.appendChild(valueEl);
+
+                container.appendChild(row);
+            });
+            return container;
         }
 
         function renderTraceRow(entry) {
             const row = document.createElement('div');
             row.className = 'trace-row';
+
+            const header = document.createElement('div');
+            header.className = 'trace-row-header';
+
+            const stageWrapper = document.createElement('div');
+            const stage = document.createElement('div');
+            stage.className = 'trace-stage';
+            stage.textContent = formatStageLabel(entry.stage);
+            stageWrapper.appendChild(stage);
+
+            if (entry.stage) {
+                const stageMeta = document.createElement('div');
+                stageMeta.className = 'trace-stage-meta';
+                stageMeta.textContent = entry.stage;
+                stageWrapper.appendChild(stageMeta);
+            }
+
+            header.appendChild(stageWrapper);
+
             const chips = renderTraceChips(entry);
+            if (chips) {
+                header.appendChild(chips);
+            }
+
+            row.appendChild(header);
+
+            if (entry.detail) {
+                const detail = document.createElement('p');
+                detail.className = 'trace-detail';
+                detail.textContent = entry.detail;
+                row.appendChild(detail);
+            }
+
             const metadata = renderTraceMetadata(entry.metadata);
-            const detail = entry.detail ? '<p class="trace-detail">' + entry.detail + '</p>' : '';
-            row.innerHTML =
-                '<div class="trace-row-header">' +
-                '<div>' +
-                '<div class="trace-stage">' + formatStageLabel(entry.stage) + '</div>' +
-                (entry.stage ? '<div class="trace-stage-meta">' + entry.stage + '</div>' : '') +
-                '</div>' +
-                (chips ? '<div class="trace-chips">' + chips + '</div>' : '') +
-                '</div>' +
-                detail +
-                metadata;
+            if (metadata) {
+                row.appendChild(metadata);
+            }
+
             return row;
         }
 
@@ -137,7 +192,12 @@
             traceBody.innerHTML = '';
             const header = document.createElement('div');
             header.className = 'trace-meta';
-            header.innerHTML = '<strong>' + domain + '</strong><span>' + client + '</span>';
+            const title = document.createElement('strong');
+            title.textContent = domain || 'unknown domain';
+            const clientEl = document.createElement('span');
+            clientEl.textContent = client || 'unknown client';
+            header.appendChild(title);
+            header.appendChild(clientEl);
             traceBody.appendChild(header);
 
             if (!entries || !entries.length) {

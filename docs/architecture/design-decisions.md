@@ -1098,6 +1098,8 @@ func (s *Server) handleStatsPartial(w http.ResponseWriter, r *http.Request) {
 
 ### Consequences
 
+- The production UI currently loads HTMX (1.9.x), the Idiomorph extension, and Chart.js 4 via CDN while we wait to vendor the assets into `pkg/api/ui/static/js`. Once the build environment regains outbound network access, capture those bundles locally to restore the single-binary deployment guarantee described above.
+
 **Positive:**
 - Simple, declarative dynamic updates
 - Minimal JavaScript (~14KB)

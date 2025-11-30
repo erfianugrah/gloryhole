@@ -1,4 +1,5 @@
 /* Glory-Hole DNS UI Styles */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
 :root {
     --primary: #3b82f6;
@@ -28,7 +29,7 @@
 }
 
 body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
     background-color: var(--background);
     color: var(--text);
     line-height: 1.6;
@@ -64,6 +65,51 @@ body {
     padding: 0 1rem;
 }
 
+.is-visually-hidden {
+    position: absolute !important;
+    width: 1px !important;
+    height: 1px !important;
+    padding: 0 !important;
+    margin: -1px !important;
+    overflow: hidden !important;
+    clip: rect(0, 0, 0, 0) !important;
+    border: 0 !important;
+}
+
+.skeleton {
+    background: linear-gradient(90deg, rgba(148, 163, 184, 0.15) 25%, rgba(148, 163, 184, 0.3) 37%, rgba(148, 163, 184, 0.15) 63%);
+    background-size: 400% 100%;
+    animation: skeletonPulse 1.4s ease infinite;
+    border-radius: 0.5rem;
+}
+
+.skeleton-text {
+    height: 0.85rem;
+    margin-bottom: 0.5rem;
+}
+
+.skeleton-text:last-child {
+    margin-bottom: 0;
+}
+
+.skeleton-card {
+    height: 110px;
+}
+
+.skeleton-chart {
+    height: 280px;
+    border-radius: 0.75rem;
+}
+
+@keyframes skeletonPulse {
+    0% {
+        background-position: 200% 0;
+    }
+    100% {
+        background-position: -200% 0;
+    }
+}
+
 /* Navigation */
 .navbar {
     background-color: var(--surface);
@@ -81,12 +127,21 @@ body {
 .nav-brand {
     display: flex;
     align-items: center;
-    gap: 1rem;
+    gap: 0.75rem;
+}
+
+.nav-brand-icon {
+    width: 28px;
+    height: 28px;
+    color: var(--primary);
 }
 
 .nav-brand h1 {
     font-size: 1.5rem;
     font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
 }
 
 .version {
@@ -99,8 +154,29 @@ body {
 
 .nav-links {
     display: flex;
-    gap: 1.5rem;
+    gap: 1.25rem;
     align-items: center;
+}
+
+.nav-toggle {
+    display: none;
+    border: 1px solid var(--border);
+    background-color: var(--surface);
+    border-radius: 0.5rem;
+    padding: 0.45rem;
+    cursor: pointer;
+    color: var(--text);
+    transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.nav-toggle:hover,
+.nav-toggle:focus-visible {
+    background-color: var(--background);
+}
+
+.nav-toggle svg {
+    width: 1.5rem;
+    height: 1.5rem;
 }
 
 .nav-link {
@@ -135,9 +211,11 @@ body {
     transform: translateY(-1px);
 }
 
-.theme-toggle span {
+.theme-toggle svg {
+    width: 1.3rem;
+    height: 1.3rem;
     pointer-events: none;
-    transition: opacity 0.2s ease;
+    transition: opacity 0.2s ease, transform 0.2s ease;
 }
 
 .theme-toggle .icon-dark {
@@ -149,7 +227,42 @@ body {
 }
 
 :root[data-theme="dark"] .theme-toggle .icon-dark {
-    display: inline;
+    display: inline-block;
+}
+
+@media (max-width: 768px) {
+    .navbar .container {
+        flex-wrap: wrap;
+        gap: 0.75rem;
+    }
+
+    .nav-links {
+        width: 100%;
+        flex-direction: column;
+        align-items: flex-start;
+        display: none;
+        padding-top: 0.5rem;
+    }
+
+    .nav-links.is-open {
+        display: flex;
+    }
+
+    .nav-link {
+        width: 100%;
+        padding-left: 0;
+    }
+
+    .nav-toggle {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .theme-toggle {
+        width: 2.25rem;
+        height: 2.25rem;
+    }
 }
 
 /* Main Content */
@@ -1010,11 +1123,19 @@ main {
 .btn-icon {
     background: none;
     border: 1px solid var(--border);
-    padding: 0.5rem 1rem;
+    padding: 0.45rem 0.9rem;
     border-radius: 0.375rem;
     cursor: pointer;
     font-size: 0.875rem;
     transition: all 0.2s;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+
+.btn-icon svg {
+    width: 1rem;
+    height: 1rem;
 }
 
 .btn-icon:hover {

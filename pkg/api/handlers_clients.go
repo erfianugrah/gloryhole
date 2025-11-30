@@ -22,6 +22,9 @@ type clientsPageData struct {
 	Version string
 	Clients []*storage.ClientSummary
 	Groups  []*storage.ClientGroup
+	Limit   int
+	Offset  int
+	Page    int
 }
 
 type clientUpdateRequest struct {
@@ -67,6 +70,9 @@ func (s *Server) handleClientsPage(w http.ResponseWriter, r *http.Request) {
 		Version: s.uiVersion(),
 		Clients: clients,
 		Groups:  groups,
+		Limit:   defaultClientPageSize,
+		Offset:  0,
+		Page:    1,
 	}
 
 	if err := clientsTemplate.ExecuteTemplate(w, "clients.html", data); err != nil {
@@ -91,6 +97,10 @@ func (s *Server) handleGetClients(w http.ResponseWriter, r *http.Request) {
 
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
+
+	if search := strings.TrimSpace(r.URL.Query().Get("search")); search != "" {
+		ctx = storage.WithClientSearch(ctx, search)
+	}
 
 	clients, err := s.storage.GetClientSummaries(ctx, limit, offset)
 	if err != nil {

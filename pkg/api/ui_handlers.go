@@ -34,6 +34,7 @@ var (
 	queriesPartialTemplate  *template.Template
 	topDomainsTemplate      *template.Template
 	policiesPartialTemplate *template.Template
+	clientsPartialTemplate  *template.Template
 )
 
 const dnsRcodeNameError = 3
@@ -106,6 +107,9 @@ func initTemplates() error {
 	if clientsTemplate, err = parsePage("clients.html"); err != nil {
 		return err
 	}
+	if _, err = clientsTemplate.ParseFS(tmplFS, "clients_partial.html"); err != nil {
+		return err
+	}
 	if blocklistsTemplate, err = parsePage("blocklists.html"); err != nil {
 		return err
 	}
@@ -124,6 +128,9 @@ func initTemplates() error {
 		return err
 	}
 	if policiesPartialTemplate, err = parseStandalone("policies_partial.html"); err != nil {
+		return err
+	}
+	if clientsPartialTemplate, err = parseStandalone("clients_partial.html"); err != nil {
 		return err
 	}
 
@@ -404,6 +411,60 @@ func (s *Server) handleQueriesPartial(w http.ResponseWriter, r *http.Request) {
 
 	if err := queriesPartialTemplate.ExecuteTemplate(w, "queries_partial.html", data); err != nil {
 		s.logger.Error("Failed to render queries partial", "error", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+}
+
+// handleClientsPartial renders the clients table as an HTML fragment for HTMX.
+func (s *Server) handleClientsPartial(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	limit := parsePositiveInt(r.URL.Query().Get("limit"), defaultClientPageSize, maxClientPageSize)
+	offset := parseNonNegativeInt(r.URL.Query().Get("offset"), 0)
+	search := strings.TrimSpace(r.URL.Query().Get("search"))
+
+	clients := []*storage.ClientSummary{}
+
+	if s.storage != nil {
+		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+		defer cancel()
+
+		if search != "" {
+			ctx = storage.WithClientSearch(ctx, search)
+		}
+
+		if records, err := s.storage.GetClientSummaries(ctx, limit, offset); err == nil {
+			clients = records
+		} else {
+			s.logger.Error("Failed to list client summaries", "error", err)
+		}
+	}
+
+	data := struct {
+		Clients []*storage.ClientSummary
+	}{
+		Clients: clients,
+	}
+
+	meta := map[string]any{
+		"limit":    limit,
+		"offset":   offset,
+		"count":    len(clients),
+		"has_more": len(clients) >= limit,
+	}
+	if search != "" {
+		meta["search"] = search
+	}
+	if payload, err := json.Marshal(map[string]any{"clients-page-meta": meta}); err == nil {
+		w.Header().Set("HX-Trigger", string(payload))
+	}
+
+	if err := clientsPartialTemplate.ExecuteTemplate(w, "clients_partial.html", data); err != nil {
+		s.logger.Error("Failed to render clients partial", "error", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
