@@ -97,6 +97,12 @@ dockers:
     goos: linux
     goarch: amd64
     dockerfile: Dockerfile
+    extra_files:
+      - go.mod
+      - go.sum
+      - config/config.example.yml
+      - cmd/
+      - pkg/
     build_flag_templates:
       - "--platform=linux/amd64"
       - "--label=org.opencontainers.image.created={{.Date}}"
@@ -113,6 +119,12 @@ dockers:
     goos: linux
     goarch: arm64
     dockerfile: Dockerfile
+    extra_files:
+      - go.mod
+      - go.sum
+      - config/config.example.yml
+      - cmd/
+      - pkg/
     build_flag_templates:
       - "--platform=linux/arm64"
       - "--label=org.opencontainers.image.created={{.Date}}"
