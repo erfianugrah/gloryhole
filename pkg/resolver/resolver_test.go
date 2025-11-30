@@ -180,18 +180,20 @@ func TestResolver_NewHTTPClient(t *testing.T) {
 				t.Errorf("Client timeout = %v, want 30s", client.Timeout)
 			}
 
-			// Test HTTP request
-			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-			defer cancel()
-
-			req, _ := http.NewRequestWithContext(ctx, "HEAD", "https://google.com", nil)
-			resp, err := client.Do(req)
-			if err != nil {
-				t.Fatalf("HTTP request failed: %v", err)
+			// Verify transport is configured for upstreams
+			if len(tt.upstreams) > 0 {
+				if transport, ok := client.Transport.(*http.Transport); ok {
+					if transport.TLSHandshakeTimeout != 10*time.Second {
+						t.Errorf("TLS handshake timeout = %v, want 10s", transport.TLSHandshakeTimeout)
+					}
+				} else {
+					t.Error("Client transport should be *http.Transport when upstreams are configured")
+				}
+			} else {
+				if client.Transport != nil {
+					t.Error("Client transport should be nil when no upstreams are configured")
+				}
 			}
-			defer resp.Body.Close()
-
-			t.Logf("HTTP request successful: %s", resp.Status)
 		})
 	}
 }
