@@ -1283,6 +1283,7 @@ main {
     align-items: center;
     flex-wrap: wrap;
     gap: 1rem;
+    margin-bottom: 2rem;
     animation: fadeInUp 0.5s ease-out;
 }
 
@@ -1917,9 +1918,12 @@ form {
 }
 
 /* Blocked Domain Styling */
+.domain-item.blocked {
+    border-left-color: var(--danger);
+}
+
 .domain-item.blocked:hover {
     background-color: rgba(255, 0, 110, 0.05);
-    border-left-color: var(--danger);
 }
 
 .domain-item.blocked .domain-rank {

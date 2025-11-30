@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/shirou/gopsutil/v3/host"
 	"github.com/shirou/gopsutil/v3/mem"
@@ -25,8 +26,9 @@ func collectSystemMetrics(ctx context.Context) systemMetrics {
 	// Get process-specific metrics
 	proc, err := process.NewProcessWithContext(ctx, int32(os.Getpid()))
 	if err == nil {
-		// Get CPU percent for this process
-		if cpuPercent, err := proc.PercentWithContext(ctx, 0); err == nil {
+		// Get CPU percent for this process (500ms sample interval for better accuracy)
+		// This blocks for 500ms to measure actual CPU usage during that period
+		if cpuPercent, err := proc.PercentWithContext(ctx, 500*time.Millisecond); err == nil {
 			metrics.CPUPercent = cpuPercent
 		}
 
