@@ -2,6 +2,8 @@
 
 This guide explains how to deploy Glory-Hole with Cloudflare D1 as the database backend for query logging.
 
+> **Status (December 2025)**: The D1 backend is not yet available in released builds. The implementation was deferred, but this document remains for future reference once the feature ships.
+
 ---
 
 ## What is D1?

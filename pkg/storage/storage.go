@@ -167,12 +167,10 @@ type BackendType string
 
 const (
 	BackendSQLite BackendType = "sqlite"
-	BackendD1     BackendType = "d1"
 )
 
 // Config represents storage configuration
 type Config struct {
-	D1            D1Config         `yaml:"d1"`
 	Backend       BackendType      `yaml:"backend"`
 	SQLite        SQLiteConfig     `yaml:"sqlite"`
 	Statistics    StatisticsConfig `yaml:"statistics"`
@@ -190,13 +188,6 @@ type SQLiteConfig struct {
 	WALMode     bool   `yaml:"wal_mode"`     // Enable WAL mode
 	CacheSize   int    `yaml:"cache_size"`   // Cache size in KB
 	MMapSize    int64  `yaml:"mmap_size"`    // mmap window in bytes
-}
-
-// D1Config represents D1-specific configuration
-type D1Config struct {
-	AccountID  string `yaml:"account_id"`  // Cloudflare account ID
-	DatabaseID string `yaml:"database_id"` // D1 database ID
-	APIToken   string `yaml:"api_token"`   // Cloudflare API token
 }
 
 // StatisticsConfig represents statistics aggregation configuration
@@ -256,7 +247,7 @@ func (c *Config) Validate() error {
 		return nil
 	}
 
-	if c.Backend != BackendSQLite && c.Backend != BackendD1 {
+	if c.Backend != BackendSQLite {
 		return ErrInvalidBackend
 	}
 

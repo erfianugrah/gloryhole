@@ -39,7 +39,7 @@ var (
 	apiAddress     = flag.String("api-address", "", "Override API address for health check (default: from config)")
 
 	// Build-time variables set via ldflags
-	// Example: go build -ldflags "-X main.version=0.7.2 -X main.buildTime=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+	// Example: go build -ldflags "-X main.version=$(git describe --tags) -X main.buildTime=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 	version   = "dev"     // Set via -ldflags "-X main.version=x.y.z"
 	buildTime = "unknown" // Set via -ldflags "-X main.buildTime=$(date)"
 	gitCommit = "unknown" // Set via -ldflags "-X main.gitCommit=$(git rev-parse --short HEAD)"

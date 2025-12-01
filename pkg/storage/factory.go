@@ -28,8 +28,6 @@ func New(cfg *Config, metrics MetricsRecorder) (Storage, error) {
 	switch cfg.Backend {
 	case BackendSQLite:
 		return NewSQLiteStorage(cfg, metrics)
-	case BackendD1:
-		return NewD1Storage(cfg, metrics)
 	default:
 		return nil, fmt.Errorf("%w: %s", ErrInvalidBackend, cfg.Backend)
 	}

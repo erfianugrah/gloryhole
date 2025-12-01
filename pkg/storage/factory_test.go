@@ -44,17 +44,6 @@ func TestConfigValidation(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "valid d1 config",
-			config: Config{
-				Enabled:       true,
-				Backend:       BackendD1,
-				BufferSize:    100,
-				BatchSize:     50,
-				RetentionDays: 7,
-			},
-			wantErr: false,
-		},
-		{
 			name: "invalid backend",
 			config: Config{
 				Enabled: true,
