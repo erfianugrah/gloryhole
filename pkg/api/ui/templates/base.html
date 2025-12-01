@@ -28,7 +28,7 @@
     <script src="/static/js/trace-modal.js" defer></script>
     <link rel="stylesheet" href="/static/css/style.css">
 </head>
-<body>
+<body class="app-shell {{block "body_class" .}}{{end}}">
     <nav class="navbar">
         <div class="container">
             <div class="nav-brand">
@@ -53,6 +53,9 @@
                 <a href="/clients" class="nav-link">Clients</a>
                 <a href="/blocklists" class="nav-link">Blocklists</a>
                 <a href="/settings" class="nav-link">Settings</a>
+                <form method="post" action="/logout" class="nav-logout-form">
+                    <button type="submit" class="nav-link nav-link-button">Logout</button>
+                </form>
                 <button type="button" class="theme-toggle" data-theme-toggle aria-pressed="false" title="Toggle theme">
                     <svg class="icon-light" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
                         <circle cx="12" cy="12" r="4"></circle>

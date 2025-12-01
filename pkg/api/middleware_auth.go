@@ -3,6 +3,7 @@ package api
 import (
 	"crypto/subtle"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"golang.org/x/crypto/bcrypt"
@@ -12,6 +13,8 @@ var authBypassPaths = map[string]struct{}{
 	"/health":     {},
 	"/ready":      {},
 	"/api/health": {},
+	"/login":      {},
+	"/logout":     {},
 }
 
 func (s *Server) authMiddleware(next http.Handler) http.Handler {
@@ -30,7 +33,12 @@ func (s *Server) authMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
-		if s.hasBasicCredentials() {
+		if s.shouldRedirectToLogin(r) {
+			http.Redirect(w, r, buildLoginRedirectURL(r), http.StatusFound)
+			return
+		}
+
+		if s.hasBasicCredentials() && strings.HasPrefix(r.URL.Path, "/api/") {
 			w.Header().Set("WWW-Authenticate", `Basic realm="Glory-Hole", charset="UTF-8"`)
 		}
 		s.writeError(w, http.StatusUnauthorized, "Unauthorized")
@@ -54,6 +62,10 @@ func (s *Server) isAuthRequired(r *http.Request) bool {
 		return false
 	}
 
+	if strings.HasPrefix(r.URL.Path, "/static/") {
+		return false
+	}
+
 	return true
 }
 
@@ -64,6 +76,10 @@ func (s *Server) hasBasicCredentials() bool {
 }
 
 func (s *Server) authorizeRequest(r *http.Request) bool {
+	if s.hasValidSession(r) {
+		return true
+	}
+
 	s.authMu.RLock()
 	apiKey := s.apiKey
 	header := s.authHeader
@@ -84,26 +100,7 @@ func (s *Server) authorizeRequest(r *http.Request) bool {
 	// Try Basic Auth (username/password or username/passwordHash)
 	if username != "" {
 		if user, pass, ok := r.BasicAuth(); ok {
-			// Username must match
-			if subtle.ConstantTimeCompare([]byte(user), []byte(username)) != 1 {
-				return false
-			}
-
-			// Try bcrypt hash first (preferred)
-			if passwordHash != "" {
-				if err := bcrypt.CompareHashAndPassword([]byte(passwordHash), []byte(pass)); err == nil {
-					return true
-				}
-				// If hash exists but doesn't match, don't fall back to plaintext
-				return false
-			}
-
-			// Fall back to plaintext password (deprecated)
-			if password != "" {
-				if subtle.ConstantTimeCompare([]byte(pass), []byte(password)) == 1 {
-					return true
-				}
-			}
+			return matchBasicCredentials(user, pass, username, password, passwordHash)
 		}
 	}
 
@@ -127,4 +124,111 @@ func extractAPIKey(r *http.Request, header string) string {
 		return parts[0]
 	}
 	return ""
+}
+
+func matchBasicCredentials(user, pass, expectedUser, expectedPass, expectedHash string) bool {
+	if expectedUser == "" {
+		return false
+	}
+	if subtle.ConstantTimeCompare([]byte(user), []byte(expectedUser)) != 1 {
+		return false
+	}
+	if expectedHash != "" {
+		if err := bcrypt.CompareHashAndPassword([]byte(expectedHash), []byte(pass)); err == nil {
+			return true
+		}
+		return false
+	}
+	if expectedPass != "" {
+		if subtle.ConstantTimeCompare([]byte(pass), []byte(expectedPass)) == 1 {
+			return true
+		}
+	}
+	return false
+}
+
+func acceptsHTML(r *http.Request) bool {
+	accept := strings.ToLower(r.Header.Get("Accept"))
+	if accept == "" {
+		return true
+	}
+	return strings.Contains(accept, "text/html") || strings.Contains(accept, "*/*")
+}
+
+func (s *Server) shouldRedirectToLogin(r *http.Request) bool {
+	if r == nil {
+		return false
+	}
+	if s == nil {
+		return false
+	}
+	if strings.HasPrefix(r.URL.Path, "/api/") {
+		return false
+	}
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		return false
+	}
+	return acceptsHTML(r)
+}
+
+func buildLoginRedirectURL(r *http.Request) string {
+	if r == nil {
+		return "/login"
+	}
+	next := sanitizeRedirectTarget(r.URL.RequestURI())
+	if next == "" {
+		next = "/"
+	}
+	values := url.Values{}
+	values.Set("next", next)
+	return "/login?" + values.Encode()
+}
+
+func (s *Server) validateAPIKeyInput(candidate string) bool {
+	candidate = strings.TrimSpace(candidate)
+	if candidate == "" {
+		return false
+	}
+	s.authMu.RLock()
+	apiKey := s.apiKey
+	s.authMu.RUnlock()
+	if apiKey == "" {
+		return false
+	}
+	return subtle.ConstantTimeCompare([]byte(candidate), []byte(apiKey)) == 1
+}
+
+func (s *Server) validateUserPasswordInput(user, pass string) bool {
+	username, password, passwordHash := s.basicCredentials()
+	return matchBasicCredentials(user, pass, username, password, passwordHash)
+}
+
+func (s *Server) basicCredentials() (string, string, string) {
+	s.authMu.RLock()
+	defer s.authMu.RUnlock()
+	return s.basicUser, s.basicPass, s.passwordHash
+}
+
+func sanitizeRedirectTarget(next string) string {
+	next = strings.TrimSpace(next)
+	if next == "" {
+		return "/"
+	}
+	if !strings.HasPrefix(next, "/") {
+		return "/"
+	}
+	if strings.HasPrefix(next, "//") {
+		return "/"
+	}
+	return next
+}
+
+func (s *Server) isAuthenticationEnabled() bool {
+	if s == nil {
+		return false
+	}
+	s.authMu.RLock()
+	enabled := s.authEnabled
+	s.authMu.RUnlock()
+	return enabled
 }

@@ -1,0 +1,56 @@
+{{template "base.html" .}}
+
+{{define "title"}}Sign In - Gloryhole{{end}}
+
+{{define "body_class"}}auth-layout{{end}}
+
+{{define "content"}}
+<section class="auth-page">
+    <div class="auth-card">
+        <header class="auth-header">
+            <p class="auth-version">{{.Version}}</p>
+            <h2>Secure Console Access</h2>
+            <p>Verify yourself to manage queries, policies, and clients.</p>
+        </header>
+
+        {{if .Error}}
+        <div class="auth-alert">{{.Error}}</div>
+        {{end}}
+
+        <form method="post" action="/login" class="auth-form">
+            <input type="hidden" name="next" value="{{.Next}}">
+
+            {{if .HasAPIKey}}
+            <div class="form-group">
+                <label for="api-key">API Key</label>
+                <input type="password" id="api-key" name="api_key" placeholder="Paste your API key" autocomplete="off">
+                <small class="form-help">Paste the configured API key if you prefer token-based access.</small>
+            </div>
+            {{end}}
+
+            {{if and .HasAPIKey .HasUserAccount}}
+            <div class="auth-divider"><span>or</span></div>
+            {{end}}
+
+            {{if .HasUserAccount}}
+            <div class="form-grid">
+                <div class="form-group">
+                    <label for="username">Username</label>
+                    <input type="text" id="username" name="username" placeholder="admin" autocomplete="username">
+                </div>
+                <div class="form-group">
+                    <label for="password">Password</label>
+                    <input type="password" id="password" name="password" placeholder="••••••" autocomplete="current-password">
+                </div>
+            </div>
+            {{end}}
+
+            {{if not (or .HasAPIKey .HasUserAccount)}}
+            <p class="text-muted">Authentication is not configured. Update your server config to enable secure access.</p>
+            {{end}}
+
+            <button type="submit" class="btn btn-primary auth-submit">Enter Control Room</button>
+        </form>
+    </div>
+</section>
+{{end}}

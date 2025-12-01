@@ -7,10 +7,10 @@
     <div class="page-header">
         <h2>DNS Policies</h2>
         <div class="policy-actions">
-            <a class="btn btn-secondary" href="/api/policies/export" download>
-                ⬇️ Export
-            </a>
-            <button class="btn btn-primary" onclick="showAddPolicyModal()">
+            <button class="btn btn-secondary" type="button" onclick="downloadPolicies()">
+                ⤓ Export
+            </button>
+            <button class="btn btn-primary" type="button" onclick="showAddPolicyModal()">
                 ➕ Add Policy
             </button>
         </div>
@@ -130,6 +130,14 @@
 
 <script>
 let editingPolicyId = null;
+function downloadPolicies() {
+    const link = document.createElement('a');
+    link.href = '/api/policies/export';
+    link.download = 'gloryhole-policies.json';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+}
 const POLICY_BUILDER_FIELDS = [
     {
         key: 'domain',

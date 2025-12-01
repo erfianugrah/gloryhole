@@ -20,9 +20,12 @@ import (
 	"glory-hole/pkg/storage"
 )
 
+const sessionCookieName = "gh_session"
+
 // Server represents the API server
 type Server struct {
 	handler          http.Handler
+	sessionManager   *sessionManager
 	storage          storage.Storage
 	httpServer       *http.Server
 	logger           *slog.Logger
@@ -90,6 +93,7 @@ func New(cfg *Config) *Server {
 		configSnapshot:   cfg.InitialConfig,
 		startTime:        time.Now(),
 		rateLimiter:      cfg.RateLimiter,
+		sessionManager:   newSessionManager(24 * time.Hour),
 	}
 
 	if cfg.InitialConfig != nil {
@@ -187,6 +191,9 @@ func New(cfg *Config) *Server {
 	mux.HandleFunc("GET /settings", s.handleSettingsPage)
 	mux.HandleFunc("GET /clients", s.handleClientsPage)
 	mux.HandleFunc("GET /blocklists", s.handleBlocklistsPage)
+	mux.HandleFunc("GET /login", s.handleLoginPage)
+	mux.HandleFunc("POST /login", s.handleLoginPost)
+	mux.HandleFunc("POST /logout", s.handleLogout)
 	mux.HandleFunc("GET /{$}", s.handleDashboard) // {$} matches exact path only
 
 	// Client management APIs

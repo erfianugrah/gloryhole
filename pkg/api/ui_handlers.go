@@ -30,6 +30,7 @@ var (
 	settingsTemplate        *template.Template
 	clientsTemplate         *template.Template
 	blocklistsTemplate      *template.Template
+	loginTemplate           *template.Template
 	statsPartialTemplate    *template.Template
 	queriesPartialTemplate  *template.Template
 	topDomainsTemplate      *template.Template
@@ -113,6 +114,9 @@ func initTemplates() error {
 	if blocklistsTemplate, err = parsePage("blocklists.html"); err != nil {
 		return err
 	}
+	if loginTemplate, err = parsePage("login.html"); err != nil {
+		return err
+	}
 
 	parseStandalone := func(name string) (*template.Template, error) {
 		return template.New(name).Funcs(funcMap).ParseFS(tmplFS, name)
@@ -165,6 +169,111 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 		s.logger.Error("Failed to render dashboard template", "error", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
+	}
+}
+
+type loginPageData struct {
+	Version        string
+	Next           string
+	Error          string
+	HasAPIKey      bool
+	HasUserAccount bool
+}
+
+func (s *Server) handleLoginPage(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if !s.isAuthenticationEnabled() {
+		http.Redirect(w, r, "/", http.StatusFound)
+		return
+	}
+	next := sanitizeRedirectTarget(r.URL.Query().Get("next"))
+	if s.hasValidSession(r) {
+		http.Redirect(w, r, next, http.StatusFound)
+		return
+	}
+	s.renderLoginPage(w, http.StatusOK, s.newLoginPageData(next, ""))
+}
+
+func (s *Server) handleLoginPost(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if !s.isAuthenticationEnabled() {
+		http.Redirect(w, r, "/", http.StatusFound)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		s.renderLoginPage(w, http.StatusBadRequest, s.newLoginPageData("/", "Invalid form submission"))
+		return
+	}
+	next := sanitizeRedirectTarget(r.FormValue("next"))
+	apiKey := strings.TrimSpace(r.FormValue("api_key"))
+	username := strings.TrimSpace(r.FormValue("username"))
+	password := r.FormValue("password")
+
+	var subject string
+	switch {
+	case apiKey != "" && s.validateAPIKeyInput(apiKey):
+		subject = "api-key"
+	case username != "" && password != "" && s.validateUserPasswordInput(username, password):
+		subject = username
+	default:
+		s.renderLoginPage(w, http.StatusUnauthorized, s.newLoginPageData(next, "Invalid credentials"))
+		return
+	}
+
+	if err := s.createSession(w, r, subject); err != nil {
+		s.logger.Error("failed to create session", "error", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	http.Redirect(w, r, next, http.StatusSeeOther)
+}
+
+func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	s.revokeSession(w, r)
+	redirectTo := sanitizeRedirectTarget(r.FormValue("next"))
+	if redirectTo == "/" {
+		redirectTo = "/login"
+	}
+	http.Redirect(w, r, redirectTo, http.StatusSeeOther)
+}
+
+func (s *Server) newLoginPageData(next, errMsg string) loginPageData {
+	next = sanitizeRedirectTarget(next)
+	s.authMu.RLock()
+	apiKeyConfigured := s.apiKey != ""
+	userConfigured := s.basicUser != ""
+	s.authMu.RUnlock()
+	return loginPageData{
+		Version:        s.uiVersion(),
+		Next:           next,
+		Error:          errMsg,
+		HasAPIKey:      apiKeyConfigured,
+		HasUserAccount: userConfigured,
+	}
+}
+
+func (s *Server) renderLoginPage(w http.ResponseWriter, status int, data loginPageData) {
+	if loginTemplate == nil {
+		http.Error(w, "Login unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	if status != 0 {
+		w.WriteHeader(status)
+	}
+	if err := loginTemplate.ExecuteTemplate(w, "login.html", data); err != nil {
+		s.logger.Error("failed to render login template", "error", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
 	}
 }
 
