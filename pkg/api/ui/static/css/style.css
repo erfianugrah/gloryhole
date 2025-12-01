@@ -168,14 +168,22 @@ code, .stat-value, .domain-name, pre {
 }
 
 .app-shell main.container {
-    padding-top: 3rem;
+    padding-top: 4rem;
     padding-bottom: 3rem;
+}
+
+.navbar {
+    margin-bottom: 1.5rem;
 }
 
 @media (max-width: 768px) {
     .app-shell main.container {
-        padding-top: 2rem;
+        padding-top: 3rem;
         padding-bottom: 2.5rem;
+    }
+
+    .navbar {
+        margin-bottom: 1rem;
     }
 }
 
@@ -291,6 +299,12 @@ code, .stat-value, .domain-name, pre {
     color: inherit;
 }
 
+.nav-logout-form .nav-link-button {
+    border: 1px solid var(--border);
+    border-radius: 0.375rem;
+    padding: 0.35rem 0.9rem;
+}
+
 .nav-toggle {
     display: none;
     border: 1px solid var(--border);
@@ -338,6 +352,7 @@ code, .stat-value, .domain-name, pre {
     border-bottom: none;
     box-shadow: none;
     background: transparent;
+    margin-bottom: 0;
 }
 
 .auth-layout .nav-links,
@@ -1008,6 +1023,11 @@ main {
 .btn-icon svg {
     width: 1rem;
     height: 1rem;
+}
+
+.btn-icon-symbol {
+    font-size: 1rem;
+    line-height: 1;
 }
 
 .btn-icon:hover {
@@ -1847,6 +1867,12 @@ form {
     margin-bottom: 0.5rem;
 }
 
+.auth-subtitle {
+    font-size: 0.95rem;
+    color: var(--text-muted);
+    margin-top: 0.5rem;
+}
+
 .auth-version {
     font-size: 0.8rem;
     color: var(--text-muted);
@@ -1902,6 +1928,73 @@ form {
 .auth-submit {
     width: 100%;
     margin-top: 0.5rem;
+}
+
+.auth-method-toggle {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    border: 1px solid var(--border);
+    border-radius: 0.5rem;
+    overflow: hidden;
+    margin-bottom: 1.25rem;
+    background: var(--surface-panel-bg);
+}
+
+.auth-method-btn {
+    background: transparent;
+    border: none;
+    padding: 0.75rem;
+    font-family: 'JetBrains Mono', monospace;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    cursor: pointer;
+    color: var(--text-muted);
+    transition: all 0.2s ease;
+}
+
+.auth-method-btn.is-active {
+    background: var(--surface);
+    color: var(--text);
+    box-shadow: inset 0 -2px 0 var(--primary);
+}
+
+.auth-panels {
+    border: 1px solid var(--border);
+    border-radius: 0.75rem;
+    background: var(--surface-panel-bg);
+    padding: 1.25rem;
+    margin-bottom: 1rem;
+}
+
+.auth-panel {
+    display: none;
+}
+
+.auth-panel.is-active {
+    display: block;
+}
+
+.auth-panel header {
+    margin-bottom: 1rem;
+}
+
+.auth-panel header h3 {
+    margin-bottom: 0.35rem;
+    text-transform: uppercase;
+    font-size: 0.95rem;
+}
+
+.auth-footer {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+}
+
+.auth-help {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    text-align: center;
 }
 
 @media (max-width: 600px) {

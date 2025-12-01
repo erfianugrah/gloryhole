@@ -9,48 +9,97 @@
     <div class="auth-card">
         <header class="auth-header">
             <p class="auth-version">{{.Version}}</p>
-            <h2>Secure Console Access</h2>
-            <p>Verify yourself to manage queries, policies, and clients.</p>
+            <h2>Log In To Gloryhole</h2>
+            <p class="auth-subtitle">Use an operator account or drop in an API key – we’ll remember your choice on this device.</p>
         </header>
 
         {{if .Error}}
-        <div class="auth-alert">{{.Error}}</div>
+        <div class="auth-alert" role="alert">{{.Error}}</div>
         {{end}}
 
-        <form method="post" action="/login" class="auth-form">
+        <form method="post" action="/login" class="auth-form" novalidate>
             <input type="hidden" name="next" value="{{.Next}}">
 
-            {{if .HasAPIKey}}
-            <div class="form-group">
-                <label for="api-key">API Key</label>
-                <input type="password" id="api-key" name="api_key" placeholder="Paste your API key" autocomplete="off">
-                <small class="form-help">Paste the configured API key if you prefer token-based access.</small>
-            </div>
-            {{end}}
-
             {{if and .HasAPIKey .HasUserAccount}}
-            <div class="auth-divider"><span>or</span></div>
-            {{end}}
-
-            {{if .HasUserAccount}}
-            <div class="form-grid">
-                <div class="form-group">
-                    <label for="username">Username</label>
-                    <input type="text" id="username" name="username" placeholder="admin" autocomplete="username">
-                </div>
-                <div class="form-group">
-                    <label for="password">Password</label>
-                    <input type="password" id="password" name="password" placeholder="••••••" autocomplete="current-password">
-                </div>
+            <div class="auth-method-toggle" role="tablist">
+                <button type="button" class="auth-method-btn is-active" data-auth-panel="auth-panel-api" aria-controls="auth-panel-api" aria-selected="true">API Key</button>
+                <button type="button" class="auth-method-btn" data-auth-panel="auth-panel-credentials" aria-controls="auth-panel-credentials" aria-selected="false">Username</button>
             </div>
             {{end}}
+
+            <div class="auth-panels">
+                {{if .HasAPIKey}}
+                <section id="auth-panel-api" class="auth-panel {{if .HasAPIKey}}is-active{{end}}">
+                    <header>
+                        <h3>API Key</h3>
+                        <p class="text-muted">Paste the operator key from your <code>config.yml</code>. We keep it client-side only.</p>
+                    </header>
+                    <div class="form-group">
+                        <label for="api-key">API Key</label>
+                        <input type="password" id="api-key" name="api_key" placeholder="gh-api-XXXXXXXXXXXXXXXX" autocomplete="off" spellcheck="false">
+                    </div>
+                </section>
+                {{end}}
+
+                {{if .HasUserAccount}}
+                <section id="auth-panel-credentials" class="auth-panel {{if not .HasAPIKey}}is-active{{end}}">
+                    <header>
+                        <h3>Operator Account</h3>
+                        <p class="text-muted">Use the username/password configured on this node.</p>
+                    </header>
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label for="username">Username</label>
+                            <input type="text" id="username" name="username" placeholder="admin" autocomplete="username">
+                        </div>
+                        <div class="form-group">
+                            <label for="password">Password</label>
+                            <input type="password" id="password" name="password" placeholder="••••••" autocomplete="current-password">
+                        </div>
+                    </div>
+                </section>
+                {{end}}
+            </div>
 
             {{if not (or .HasAPIKey .HasUserAccount)}}
-            <p class="text-muted">Authentication is not configured. Update your server config to enable secure access.</p>
+            <p class="text-muted">Authentication is currently disabled. Update <code>config.auth</code> to protect the UI.</p>
             {{end}}
 
-            <button type="submit" class="btn btn-primary auth-submit">Enter Control Room</button>
+            <div class="auth-footer">
+                <button type="submit" class="btn btn-primary auth-submit">Enter Console</button>
+                <p class="auth-help">Need help? Review <code>auth</code> settings in <code>config.yml</code> and restart Gloryhole.</p>
+            </div>
         </form>
     </div>
 </section>
-{{end}}
+<script>
+(function() {
+    const toggleButtons = document.querySelectorAll('.auth-method-btn');
+    const panels = document.querySelectorAll('.auth-panel');
+    if (!toggleButtons.length) {
+        return;
+    }
+    function activate(panelId) {
+        panels.forEach((panel) => {
+            panel.classList.toggle('is-active', panel.id === panelId);
+        });
+        toggleButtons.forEach((btn) => {
+            const active = btn.dataset.authPanel === panelId;
+            btn.classList.toggle('is-active', active);
+            btn.setAttribute('aria-selected', active ? 'true' : 'false');
+        });
+        const firstInput = document.querySelector(`#${panelId} input`);
+        if (firstInput) {
+            firstInput.focus();
+        }
+    }
+    toggleButtons.forEach((btn) => {
+        btn.addEventListener('click', () => activate(btn.dataset.authPanel));
+    });
+    const initial = document.querySelector('.auth-panel.is-active input');
+    if (initial) {
+        initial.focus();
+    }
+})();
+</script>
+ {{end}}
