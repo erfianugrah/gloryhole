@@ -1,3 +1,5 @@
+// Package api hosts the HTTP API, HTMX UI handlers, and supporting middleware
+// for the Gloryhole DNS control plane.
 package api
 
 import (
@@ -44,8 +46,8 @@ type Server struct {
 	authHeader       string
 	apiKey           string
 	basicUser        string
-	basicPass        string   // Plaintext password (backward compat)
-	passwordHash     string   // Bcrypt hash of password
+	basicPass        string // Plaintext password (backward compat)
+	passwordHash     string // Bcrypt hash of password
 }
 
 // Config holds API server configuration
@@ -262,7 +264,7 @@ func (s *Server) applyAuthConfig(auth config.AuthConfig) {
 
 	s.apiKey = apiKey
 	s.basicUser = username
-	s.basicPass = password       // For backward compatibility
+	s.basicPass = password        // For backward compatibility
 	s.passwordHash = passwordHash // Preferred
 	s.authHeader = strings.ToLower(header)
 }

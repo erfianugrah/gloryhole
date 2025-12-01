@@ -1,3 +1,5 @@
+// Package resolver centralizes outbound DNS resolution so other packages avoid
+// relying on the host resolver.
 package resolver
 
 import (

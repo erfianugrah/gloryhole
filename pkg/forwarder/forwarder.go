@@ -1,3 +1,5 @@
+// Package forwarder implements upstream DNS forwarding with conditional rules
+// and connection pooling.
 package forwarder
 
 import (

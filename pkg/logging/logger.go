@@ -1,3 +1,4 @@
+// Package logging wraps slog with Gloryhole-specific helpers and config wiring.
 package logging
 
 import (

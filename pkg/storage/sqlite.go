@@ -1,3 +1,5 @@
+// Package storage contains the pluggable persistence layer; this file provides
+// the SQLite implementation used for query logs and analytics.
 package storage
 
 import (

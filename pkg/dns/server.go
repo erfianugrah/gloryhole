@@ -1,3 +1,5 @@
+// Package dns contains the authoritative/recursive handler used by glory-hole,
+// including DoH endpoints, blocklist enforcement, and local overrides.
 package dns
 
 import (

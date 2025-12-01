@@ -1,3 +1,5 @@
+// Package policy implements the expression-based DNS policy engine used to
+// block, allow, or redirect queries.
 package policy
 
 import (

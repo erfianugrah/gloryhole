@@ -1,3 +1,5 @@
+// Package localrecords manages authoritative local DNS records that bypass
+// upstream lookups inside the DNS handler.
 package localrecords
 
 import (

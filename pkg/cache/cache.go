@@ -1,3 +1,5 @@
+// Package cache implements the sharded TTL-aware DNS response cache used by
+// the API and DNS handlers.
 package cache
 
 import (
