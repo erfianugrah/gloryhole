@@ -241,10 +241,12 @@ func (m *acmeManager) obtainCert() (*tls.Certificate, error) {
 
 	// Honor configured upstream DNS servers for ACME/Cloudflare HTTP traffic
 	// instead of relying on the host resolver (which might be blocked).
+	var httpClient *http.Client
 	var dnsChallengeOpts []dns01.ChallengeOption
 	if len(m.upstreams) > 0 {
 		res := resolver.New(m.upstreams, m.logger)
-		cfg.HTTPClient = res.NewHTTPClient(60 * time.Second)
+		httpClient = res.NewHTTPClient(60 * time.Second)
+		cfg.HTTPClient = httpClient
 		dnsChallengeOpts = append(dnsChallengeOpts, dns01.AddRecursiveNameservers(m.upstreams))
 	}
 
@@ -255,6 +257,9 @@ func (m *acmeManager) obtainCert() (*tls.Certificate, error) {
 
 	cfCfg := cloudflare.NewDefaultConfig()
 	cfCfg.AuthToken = m.providerTok
+	if httpClient != nil {
+		cfCfg.HTTPClient = httpClient
+	}
 	provider, err := cloudflare.NewDNSProviderConfig(cfCfg)
 	if err != nil {
 		return nil, fmt.Errorf("init cloudflare provider: %w", err)
