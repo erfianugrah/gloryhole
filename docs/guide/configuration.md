@@ -113,6 +113,7 @@ server:
 | `tcp_enabled` | bool | `true` | Enable TCP DNS queries (RFC requirement) |
 | `udp_enabled` | bool | `true` | Enable UDP DNS queries (most common) |
 | `web_ui_address` | string | `:8080` | Web UI and REST API address |
+| `decision_trace` | bool | `false` | Capture block decision breadcrumbs for UI/API troubleshooting |
 | `dot_enabled` | bool | `false` | Enable DNS-over-TLS listener (Android Private DNS needs this) |
 | `dot_address` | string | `:853` | DoT bind address |
 | `tls.cert_file` | string | "" | PEM certificate for DoT (required if autocert disabled) |
@@ -129,113 +130,48 @@ server:
 | `tls.acme.renew_before` | duration | `720h` | Renew when expiring within this window |
 | `tls.acme.cloudflare.api_token` | string | "" | Cloudflare API token (prefer env CF_DNS_API_TOKEN) |
 
-### Android Private DNS (DoT) Quickstart
+### DNS-over-TLS (DoT) with Cloudflare DNS-01 (native) — recommended
 
-1. **DNS hostname**: Use a dedicated FQDN (e.g., `dot.erfi.dev`) and disable Cloudflare proxy (grey-cloud) so TCP:853 can reach your host directly. Cloudflare orange-proxy only carries HTTP(S) and will not pass DoT.
-2. **Ports**: Open TCP 853 to the Gloryhole host. For ACME HTTP-01, also expose TCP 80 (temporarily is fine) on the same hostname. If you cannot open 80, use manual certs or DNS-01 via an external tool, then point `tls.cert_file`/`tls.key_file` to the issued PEMs.
-3. **Config snippet**:
+1. **DNS**: Create a dedicated A/AAAA record (e.g., `dot-dns.erfi.dev` → `195.240.81.42`) and **grey-cloud** it so TCP 853 reaches Gloryhole directly. Keep your UI/DoH host (e.g., `gloryhole.erfi.dev/dns-query`) proxied if you like.
+2. **Credentials**: Export a scoped Cloudflare token (`Zone:DNS:Edit` is enough): `export CF_DNS_API_TOKEN=<token>`. You can also set `tls.acme.cloudflare.api_token` in config, but env is safer.
+3. **Config**:
    ```yaml
    server:
      dot_enabled: true
      dot_address: ":853"
      tls:
-       autocert:
+       acme:
          enabled: true
-         hosts: ["dot.erfi.dev"]
-         cache_dir: "./.cache/autocert"
-         http01_address: ":80"
+         dns_provider: cloudflare
+         hosts: ["dot-dns.erfi.dev"]
+         cache_dir: "./.cache/acme"
+         email: "ops@erfi.dev"
    ```
-4. **Restart Gloryhole** to fetch certs and start DoT.
-5. **Android setup**: Settings → Network & internet → Private DNS → Private DNS provider hostname → `dot.erfi.dev` → Save. Android will verify the TLS cert; self-signed certs will fail.
-6. **Verification**: From another host: `kdig @dot.erfi.dev +tls-ca +tls-host=dot.erfi.dev example.com` should return answers. You should see DoT start logs and queries in Gloryhole.
+4. **Restart Gloryhole**. It will complete DNS-01 with Cloudflare, store certs in `cache_dir`, and auto‑renew ~30 days before expiry.
+5. **Verify DoT**: `kdig @dot-dns.erfi.dev +tls-ca +tls-host=dot-dns.erfi.dev example.com`.
+6. **Android Private DNS**: Settings → Network & internet → Private DNS → Private DNS provider hostname → `dot-dns.erfi.dev` → Save.
 
-> Tip: Keep DoH behind your existing Cloudflare proxy (e.g., `https://gloryhole.erfi.dev/dns-query`) while serving DoT on a separate grey-cloud hostname. This avoids exposing your UI directly and keeps HTTP/S traffic cached/accelerated by Cloudflare, while DoT flows directly.
+> Tip: Run DoH behind your existing Cloudflare proxy while exposing DoT on a grey-cloud host. That keeps the UI cached/hidden while DoT flows directly.
 
-### DoT + Cloudflare DNS-01 (native) Quickstart
-1. Set DNS record: grey-cloud `dot-dns.erfi.dev` → your Gloryhole IP (TCP 853 open).  
-2. Provide Cloudflare token (Zone:DNS:Edit): `export CF_DNS_API_TOKEN=<token>`.  
-3. Configure Gloryhole:
-```yaml
-server:
-  dot_enabled: true
-  dot_address: ":853"
-  tls:
-    acme:
-      enabled: true
-      dns_provider: cloudflare
-      hosts: ["dot-dns.erfi.dev"]
-      cache_dir: "./.cache/acme"
-      email: "ops@erfi.dev"
-```
-4. Restart Gloryhole. It will issue and cache the cert, and auto‑renew ~30 days before expiry.  
-5. Verify DoT: `kdig @dot-dns.erfi.dev +tls-ca +tls-host=dot-dns.erfi.dev example.com`.  
-6. Android Private DNS: set hostname to `dot-dns.erfi.dev`.
+### Other ways to supply TLS certificates
 
-### Certificates via DNS-01 (Cloudflare)
-
-Gloryhole’s built-in autocert uses HTTP-01. If you terminate TLS yourself, you can obtain/renew certs with Cloudflare DNS-01 and point Gloryhole at the PEMs:
-
-**Using Certbot + Cloudflare DNS plugin**
-1. Create a Cloudflare API token with `Zone:DNS:Edit` limited to your zone.
-2. Save token (chmod 600) at `~/.secrets/certbot/cloudflare.ini`:
-   ```
-   dns_cloudflare_api_token = <TOKEN>
-   ```
-3. Issue cert:
-   ```bash
-   certbot certonly \
-     --dns-cloudflare \
-     --dns-cloudflare-credentials ~/.secrets/certbot/cloudflare.ini \
-     -d dot.example.com
-   ```
-4. Configure Gloryhole:
-   ```yaml
-   server:
-     dot_enabled: true
-     dot_address: ":853"
-     tls:
-       cert_file: "/etc/letsencrypt/live/dot.example.com/fullchain.pem"
-       key_file: "/etc/letsencrypt/live/dot.example.com/privkey.pem"
-   ```
-5. Renew hook (restart Gloryhole after renewal):
-   ```bash
-   certbot renew --post-hook "systemctl restart gloryhole"
-   ```
-
-**Using lego (Go ACME client) with Cloudflare**
-```bash
-export CF_DNS_API_TOKEN=<TOKEN>
-lego --email you@example.com --dns cloudflare --domains dot.example.com run
-```
-PEMs will be in `~/.lego/certificates/`; reference them in `server.tls.cert_file/key_file`.
-
-> Remember: keep the DoT hostname grey-clouded so TCP 853 reaches your host; DNS-01 only proves domain control—it doesn’t proxy DoT traffic.
-
-**Using lego (single static binary, good for CI/cron)**
-
-```bash
-export CF_DNS_API_TOKEN=<ZONE_DNS_EDIT_TOKEN>
-lego --email you@example.com --dns cloudflare --domains dot.example.com run
-
-# renew (e.g., cron daily, renew if <=30 days left)
-lego --email you@example.com --dns cloudflare --domains dot.example.com renew --days 30
-
-# after renew, restart Gloryhole so it reloads the PEMs
-systemctl restart gloryhole
-```
-
-Point Gloryhole at the issued certs:
-```yaml
-server:
-  dot_enabled: true
-  dot_address: ":853"
-  tls:
-    cert_file: "/path/to/.lego/certificates/dot.example.com.crt"
-    key_file: "/path/to/.lego/certificates/dot.example.com.key"
-```
-| `enable_blocklist` | bool | `true` | Runtime kill switch for blocklists (used by Web UI/API). |
-| `enable_policies` | bool | `true` | Runtime kill switch for the policy engine. |
-| `decision_trace` | bool | `false` | Capture multi-stage breadcrumbs for blocked queries (higher storage/log volume) |
+- **Autocert HTTP-01 (built-in)**: Open TCP 80 on the DoT hostname, set `tls.autocert.enabled: true`, `hosts: ["dot.example.com"]`, `http01_address: ":80"`. Ideal when not behind Cloudflare proxy.
+- **Bring your own PEMs**: Point `tls.cert_file` / `tls.key_file` to an existing certificate (corporate CA, appliance, etc.).
+- **External ACME (Cloudflare DNS-01)**: Use certbot or lego externally, then reference the PEMs. Example with lego:
+  ```bash
+  export CF_DNS_API_TOKEN=<token>
+  lego --email you@example.com --dns cloudflare --domains dot.example.com run
+  lego --email you@example.com --dns cloudflare --domains dot.example.com renew --days 30
+  ```
+  Configure Gloryhole:
+  ```yaml
+  server:
+    dot_enabled: true
+    dot_address: ":853"
+    tls:
+      cert_file: "/path/to/.lego/certificates/dot.example.com.crt"
+      key_file: "/path/to/.lego/certificates/dot.example.com.key"
+  ```
 
 ### Examples
 

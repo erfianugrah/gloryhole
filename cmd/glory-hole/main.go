@@ -461,43 +461,39 @@ func main() {
 		)
 	}
 
-	// Initialize policy engine if configured (even if no rules yet so UI/API can add later)
-	var policyEngine *policy.Engine
-	if cfg.Policy.Enabled {
-		logger.Info("Initializing policy engine", "rules", len(cfg.Policy.Rules))
-		policyEngine = policy.NewEngine()
+	// Initialize policy engine so the API/UI can add rules even when none exist yet.
+	// Evaluation is gated by the runtime kill-switch (server.enable_policies).
+	policyEngine := policy.NewEngine()
 
-		for _, entry := range cfg.Policy.Rules {
-			rule := &policy.Rule{
-				Name:       entry.Name,
-				Logic:      entry.Logic,
-				Action:     entry.Action,
-				ActionData: entry.ActionData,
-				Enabled:    entry.Enabled,
-			}
-
-			if err := policyEngine.AddRule(rule); err != nil {
-				logger.Error("Failed to add policy rule",
-					"name", entry.Name,
-					"error", err,
-				)
-				continue
-			}
-
-			logger.Debug("Added policy rule",
-				"name", entry.Name,
-				"action", entry.Action,
-				"enabled", entry.Enabled,
-			)
+	for _, entry := range cfg.Policy.Rules {
+		rule := &policy.Rule{
+			Name:       entry.Name,
+			Logic:      entry.Logic,
+			Action:     entry.Action,
+			ActionData: entry.ActionData,
+			Enabled:    entry.Enabled,
 		}
 
-		handler.SetPolicyEngine(policyEngine)
-		logger.Info("Policy engine initialized",
-			"total_rules", policyEngine.Count(),
+		if err := policyEngine.AddRule(rule); err != nil {
+			logger.Error("Failed to add policy rule",
+				"name", entry.Name,
+				"error", err,
+			)
+			continue
+		}
+
+		logger.Debug("Added policy rule",
+			"name", entry.Name,
+			"action", entry.Action,
+			"enabled", entry.Enabled,
 		)
-	} else if len(cfg.Policy.Rules) > 0 {
-		logger.Warn("Policy rules configured but policy engine disabled; rules will be ignored", "rules", len(cfg.Policy.Rules))
 	}
+
+	handler.SetPolicyEngine(policyEngine)
+	logger.Info("Policy engine initialized",
+		"total_rules", policyEngine.Count(),
+		"enabled", cfg.Server.EnablePolicies,
+	)
 
 	// Initialize conditional forwarding rule evaluator
 	if cfg.ConditionalForwarding.Enabled {
