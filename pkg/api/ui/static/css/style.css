@@ -1139,6 +1139,21 @@ main {
     flex-wrap: wrap;
 }
 
+.btn-ghost {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-primary);
+    padding: 0.6rem 0.9rem;
+    border-radius: 0.45rem;
+    transition: all 0.2s ease;
+}
+
+.btn-ghost:hover {
+    border-color: var(--primary);
+    color: var(--primary);
+    box-shadow: 0 8px 20px rgba(0, 255, 65, 0.12);
+}
+
 .logic-mode-toggle {
     display: flex;
     gap: 1rem;
