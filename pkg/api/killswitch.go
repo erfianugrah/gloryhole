@@ -14,12 +14,13 @@ import (
 // This is separate from the permanent enable/disable flags in the config.
 // Temporary disables take precedence over permanent enables.
 type KillSwitchManager struct {
-	logger *slog.Logger
-	stopChan chan struct{}
+	logger                 *slog.Logger
+	stopChan               chan struct{}
 	blocklistDisabledUntil time.Time
 	policiesDisabledUntil  time.Time
-	mu sync.RWMutex
-	wg       sync.WaitGroup
+	mu                     sync.RWMutex
+	wg                     sync.WaitGroup
+	stopOnce               sync.Once
 }
 
 // NewKillSwitchManager creates a new kill-switch manager
@@ -38,7 +39,9 @@ func (k *KillSwitchManager) Start(ctx context.Context) {
 
 // Stop gracefully stops the kill-switch manager
 func (k *KillSwitchManager) Stop() {
-	close(k.stopChan)
+	k.stopOnce.Do(func() {
+		close(k.stopChan)
+	})
 	k.wg.Wait()
 }
 

@@ -61,7 +61,7 @@ Complete, accurate map of every Markdown/text asset that ships with Glory-Hole.
 
 - **[Docker Deployment](deployment/docker.md)** – Compose stack and images
 - **[VyOS + Docker](deployment/vyos-docker-guide.md)** – On-router container workflows
-- **[Cloudflare D1](deployment/cloudflare-d1.md)** – Edge deployment steps
+- **[Cloudflare D1](deployment/cloudflare-d1.md)** – Deferred backend; guide kept for future releases (v0.9 is SQLite-only)
 - **[Monitoring](deployment/monitoring.md)** – Prometheus, Grafana, and alerting
 - **[Kubernetes Manifests](../deploy/kubernetes/README.md)** – Cluster deployment reference
 - **[Deploy Directory](../deploy/README.md)** – Additional manifests and automation

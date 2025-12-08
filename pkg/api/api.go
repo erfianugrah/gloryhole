@@ -321,6 +321,30 @@ func (s *Server) SetHTTPRateLimiter(rl *ratelimit.Manager) {
 	s.rateLimiter = rl
 }
 
+// SetTrustedProxies refreshes the list of CIDRs considered trusted for XFF/X-Real-IP extraction.
+func (s *Server) SetTrustedProxies(cidrs []string) {
+	s.trustedProxies = s.trustedProxies[:0]
+	for _, cidr := range cidrs {
+		_, network, err := net.ParseCIDR(cidr)
+		if err != nil {
+			s.logger.Warn("Invalid trusted proxy CIDR, skipping", "cidr", cidr, "error", err)
+			continue
+		}
+		s.trustedProxies = append(s.trustedProxies, network)
+	}
+
+	if len(s.trustedProxies) > 0 {
+		s.logger.Info("Trusted proxy CIDRs configured for rate limiting", "count", len(s.trustedProxies))
+	} else {
+		s.logger.Debug("Trusted proxy CIDRs cleared")
+	}
+}
+
+// SetPolicyEngine updates the policy engine reference used by API handlers.
+func (s *Server) SetPolicyEngine(pe *policy.Engine) {
+	s.policyEngine = pe
+}
+
 // SetLogger updates the server logger reference.
 func (s *Server) SetLogger(l *slog.Logger) {
 	if l == nil {

@@ -44,7 +44,7 @@ Deploy Glory-Hole in production.
 
 - **[VyOS & Docker Guide](deployment/vyos-docker-guide.md)** - VyOS container and Docker deployment
 - **[Docker](deployment/docker.md)** - Containerized deployment
-- **[Cloudflare D1](deployment/cloudflare-d1.md)** - Edge deployment with D1
+- **[Cloudflare D1](deployment/cloudflare-d1.md)** - Deferred; guide retained for future D1 reintroduction (v0.9 supports SQLite only)
 - **[Monitoring](deployment/monitoring.md)** - Observability and monitoring
 
 ### [API Reference](api/)

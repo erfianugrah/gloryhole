@@ -107,3 +107,23 @@ func TestClientIPFromRequest_TrustedProxy(t *testing.T) {
 		t.Fatalf("expected X-Forwarded-For to be used from trusted proxy, got %s", ip)
 	}
 }
+
+func TestClientIPFromRequest_SetTrustedProxiesHotReload(t *testing.T) {
+	server := New(&Config{ListenAddress: ":0"})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/test", nil)
+	req.RemoteAddr = "198.51.100.5:9999" // not trusted initially
+	req.Header.Set("X-Forwarded-For", "203.0.113.30, 198.51.100.5")
+
+	// Should ignore headers because no trusted proxies configured yet
+	if ip := server.clientIPFromRequest(req); ip != "198.51.100.5" {
+		t.Fatalf("expected RemoteAddr before trusted proxies, got %s", ip)
+	}
+
+	// Hot-reload trusted proxy list
+	server.SetTrustedProxies([]string{"198.51.100.0/24"})
+
+	if ip := server.clientIPFromRequest(req); ip != "203.0.113.30" {
+		t.Fatalf("expected X-Forwarded-For after trusted proxies set, got %s", ip)
+	}
+}
