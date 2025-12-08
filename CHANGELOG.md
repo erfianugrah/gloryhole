@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Documentation + sample configs now describe the new validation flag, kill-switch defaults, and modern database layout so users have accurate, deduplicated guidance.
 - `make lint` now runs `golangci-lint` per package directory to avoid toolchain path-resolution bugs and ensure the target passes reliably.
 - Top-domain analytics now stream directly from query logs which fixes inaccurate allowed/blocked listings and preserves first/last seen timestamps for both domains and clients.
+- DoT: Native Cloudflare DNS-01 ACME added alongside HTTP-01 autocert/manual PEMs; see configuration guide for setup and Android Private DNS quickstart.
 - Storage: Cloudflare D1 backend has been removed from the factory; deployments must use `backend: sqlite` (D1 docs remain for future reintroduction). This is a breaking config change for anyone running `backend: d1`.
 
 ### Phase 3 - Advanced Features (Future)

@@ -151,6 +151,26 @@ server:
 
 > Tip: Keep DoH behind your existing Cloudflare proxy (e.g., `https://gloryhole.erfi.dev/dns-query`) while serving DoT on a separate grey-cloud hostname. This avoids exposing your UI directly and keeps HTTP/S traffic cached/accelerated by Cloudflare, while DoT flows directly.
 
+### DoT + Cloudflare DNS-01 (native) Quickstart
+1. Set DNS record: grey-cloud `dot-dns.erfi.dev` → your Gloryhole IP (TCP 853 open).  
+2. Provide Cloudflare token (Zone:DNS:Edit): `export CF_DNS_API_TOKEN=<token>`.  
+3. Configure Gloryhole:
+```yaml
+server:
+  dot_enabled: true
+  dot_address: ":853"
+  tls:
+    acme:
+      enabled: true
+      dns_provider: cloudflare
+      hosts: ["dot-dns.erfi.dev"]
+      cache_dir: "./.cache/acme"
+      email: "ops@erfi.dev"
+```
+4. Restart Gloryhole. It will issue and cache the cert, and auto‑renew ~30 days before expiry.  
+5. Verify DoT: `kdig @dot-dns.erfi.dev +tls-ca +tls-host=dot-dns.erfi.dev example.com`.  
+6. Android Private DNS: set hostname to `dot-dns.erfi.dev`.
+
 ### Certificates via DNS-01 (Cloudflare)
 
 Gloryhole’s built-in autocert uses HTTP-01. If you terminate TLS yourself, you can obtain/renew certs with Cloudflare DNS-01 and point Gloryhole at the PEMs:

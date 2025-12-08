@@ -46,6 +46,24 @@ Deploy Glory-Hole in production.
 - **[Docker](deployment/docker.md)** - Containerized deployment
 - **[Cloudflare D1](deployment/cloudflare-d1.md)** - Deferred; guide retained for future D1 reintroduction (v0.9 supports SQLite only)
 - **DNS-over-TLS (DoT)** – configurable listener with manual TLS, HTTP-01 autocert, or native Cloudflare DNS-01 (see configuration guide). Use a grey-cloud hostname and open TCP 853 for Android Private DNS.
+
+### Quickstart: DoT with Cloudflare DNS-01 (native)
+1) Create/grey-cloud `dot-dns.erfi.dev` → your public IP (TCP 853 open).  
+2) Set env on the host: `export CF_DNS_API_TOKEN=<Zone:DNS:Edit token>`.  
+3) Config:
+```yaml
+server:
+  dot_enabled: true
+  dot_address: ":853"
+  tls:
+    acme:
+      enabled: true
+      dns_provider: cloudflare
+      hosts: ["dot-dns.erfi.dev"]
+      cache_dir: "./.cache/acme"
+```
+4) Restart Gloryhole; it will issue/renew via DNS-01 and hot-reload DoT TLS.  
+5) Verify: `kdig @dot-dns.erfi.dev +tls-ca +tls-host=dot-dns.erfi.dev example.com` and set Android Private DNS hostname to `dot-dns.erfi.dev`.
 - **[Monitoring](deployment/monitoring.md)** - Observability and monitoring
 
 ### [API Reference](api/)
