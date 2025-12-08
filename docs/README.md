@@ -45,7 +45,7 @@ Deploy Glory-Hole in production.
 - **[VyOS & Docker Guide](deployment/vyos-docker-guide.md)** - VyOS container and Docker deployment
 - **[Docker](deployment/docker.md)** - Containerized deployment
 - **[Cloudflare D1](deployment/cloudflare-d1.md)** - Deferred; guide retained for future D1 reintroduction (v0.9 supports SQLite only)
-- **DNS-over-TLS (DoT)** – configurable listener with manual TLS or ACME autocert (see configuration guide). Use a grey-cloud hostname and open TCP 853 for Android Private DNS.
+- **DNS-over-TLS (DoT)** – configurable listener with manual TLS, HTTP-01 autocert, or native Cloudflare DNS-01 (see configuration guide). Use a grey-cloud hostname and open TCP 853 for Android Private DNS.
 - **[Monitoring](deployment/monitoring.md)** - Observability and monitoring
 
 ### [API Reference](api/)

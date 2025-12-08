@@ -24,6 +24,15 @@ server:
       cache_dir: "./.cache/autocert" # Where to store cert cache
       email: ""                 # Contact email for ACME
       http01_address: ":80"     # Address for ACME HTTP-01 challenge server
+    acme:                        # Native DNS-01 (Cloudflare) – alternative to autocert/manual
+      enabled: false
+      dns_provider: "cloudflare"
+      hosts: []                  # e.g., dot.example.com
+      cache_dir: "./.cache/acme"
+      email: ""
+      renew_before: "720h"      # Renew 30d before expiry
+      cloudflare:
+        api_token: ""           # Prefer env CF_DNS_API_TOKEN
 
 # Authentication (API/UI protection)
 auth:

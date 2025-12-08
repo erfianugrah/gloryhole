@@ -55,6 +55,7 @@ type TLSConfig struct {
 	CertFile string         `yaml:"cert_file"`
 	KeyFile  string         `yaml:"key_file"`
 	Autocert AutocertConfig `yaml:"autocert"`
+	ACME     ACMEConfig     `yaml:"acme"`
 }
 
 // AutocertConfig controls automatic certificate provisioning via ACME.
@@ -64,6 +65,22 @@ type AutocertConfig struct {
 	CacheDir       string   `yaml:"cache_dir"`
 	Email          string   `yaml:"email"`
 	HTTP01Address  string   `yaml:"http01_address"`
+}
+
+// ACMEConfig enables native DNS-01 issuance (Cloudflare-only for now).
+type ACMEConfig struct {
+	Enabled      bool          `yaml:"enabled"`
+	DNSProvider  string        `yaml:"dns_provider"` // "cloudflare"
+	Hosts        []string      `yaml:"hosts"`
+	CacheDir     string        `yaml:"cache_dir"`
+	Email        string        `yaml:"email"`
+	RenewBefore  time.Duration `yaml:"renew_before"` // duration before expiry to renew
+	Cloudflare   CFConfig      `yaml:"cloudflare"`
+}
+
+// CFConfig holds Cloudflare credentials for DNS-01 (prefer env CF_DNS_API_TOKEN).
+type CFConfig struct {
+	APIToken string `yaml:"api_token"`
 }
 
 // AuthConfig controls static authentication for the API/UI layer.
@@ -298,6 +315,12 @@ func (c *Config) applyDefaults() {
 	if c.Server.TLS.Autocert.HTTP01Address == "" {
 		c.Server.TLS.Autocert.HTTP01Address = ":80"
 	}
+	if c.Server.TLS.ACME.CacheDir == "" {
+		c.Server.TLS.ACME.CacheDir = "./.cache/acme"
+	}
+	if c.Server.TLS.ACME.RenewBefore == 0 {
+		c.Server.TLS.ACME.RenewBefore = 30 * 24 * time.Hour // 30 days
+	}
 
 	// Kill-switch defaults: Enable both if neither is explicitly configured
 	// This provides backward compatibility (both enabled by default)
@@ -480,8 +503,17 @@ func (c *Config) Validate() error {
 			}
 		}
 
-		if !certSet && !c.Server.TLS.Autocert.Enabled {
-			return fmt.Errorf("DoT requires either TLS cert/key or autocert to be configured")
+		if !certSet && !c.Server.TLS.Autocert.Enabled && !c.Server.TLS.ACME.Enabled {
+			return fmt.Errorf("DoT requires TLS: provide cert/key, autocert, or acme.dns_provider")
+		}
+
+		if c.Server.TLS.ACME.Enabled {
+			if len(c.Server.TLS.ACME.Hosts) == 0 {
+				return fmt.Errorf("tls.acme.hosts must be set when ACME is enabled")
+			}
+			if c.Server.TLS.ACME.DNSProvider != "cloudflare" {
+				return fmt.Errorf("tls.acme.dns_provider must be 'cloudflare' (only provider supported)")
+			}
 		}
 	}
 

@@ -93,6 +93,16 @@ server:
       cache_dir: "./.cache/autocert"
       email: ""                 # Contact email for ACME
       http01_address: ":80"     # Address to run the ACME HTTP-01 listener
+
+    acme:                        # Native DNS-01 (Cloudflare)
+      enabled: false
+      dns_provider: "cloudflare"
+      hosts: []                  # Hostnames for the cert (e.g., dot.example.com)
+      cache_dir: "./.cache/acme"
+      email: ""
+      renew_before: "720h"      # Renew 30 days before expiry
+      cloudflare:
+        api_token: ""           # Prefer env CF_DNS_API_TOKEN to avoid storing secrets in config
 ```
 
 ### Options
@@ -112,6 +122,12 @@ server:
 | `tls.autocert.cache_dir` | string | `./.cache/autocert` | Cache location for issued certs |
 | `tls.autocert.http01_address` | string | `:80` | Address to serve ACME HTTP-01 challenges |
 | `tls.autocert.email` | string | "" | Contact email for ACME | 
+| `tls.acme.enabled` | bool | `false` | Enable native DNS-01 ACME (Cloudflare) |
+| `tls.acme.dns_provider` | string | `cloudflare` | DNS provider (only Cloudflare supported) |
+| `tls.acme.hosts` | []string | `[]` | Hostnames for the certificate |
+| `tls.acme.cache_dir` | string | `./.cache/acme` | Where to store issued certs/keys |
+| `tls.acme.renew_before` | duration | `720h` | Renew when expiring within this window |
+| `tls.acme.cloudflare.api_token` | string | "" | Cloudflare API token (prefer env CF_DNS_API_TOKEN) |
 
 ### Android Private DNS (DoT) Quickstart
 
