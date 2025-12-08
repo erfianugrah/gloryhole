@@ -65,6 +65,10 @@ func NewServer(cfg *config.Config, handler *Handler, logger *logging.Logger, met
 	if err != nil {
 		logger.Error("Failed to prepare TLS for DoT", "error", err)
 	}
+	if res == nil {
+		// Ensure we never panic when TLS prep fails; DoT will be skipped.
+		res = &tlsResources{}
+	}
 
 	return &Server{
 		cfg:            cfg,
