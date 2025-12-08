@@ -31,6 +31,7 @@ type Server struct {
 	dotServer      *dns.Server
 	acmeHTTPServer *http.Server
 	tlsConfig      *tls.Config
+	acmeRenew      *acmeManager
 	running        bool
 	mu             sync.RWMutex
 }
@@ -59,8 +60,8 @@ func NewServer(cfg *config.Config, handler *Handler, logger *logging.Logger, met
 		handler.SetForwarder(fwd)
 	}
 
-	// Prepare TLS config for DoT (if enabled)
-	tlsCfg, acmeHTTP, err := buildTLSConfig(&cfg.Server, logger)
+	// Prepare TLS resources for DoT (if enabled)
+	res, err := buildTLSResources(&cfg.Server, logger)
 	if err != nil {
 		logger.Error("Failed to prepare TLS for DoT", "error", err)
 	}
@@ -70,8 +71,9 @@ func NewServer(cfg *config.Config, handler *Handler, logger *logging.Logger, met
 		handler:        handler,
 		logger:         logger,
 		metrics:        metrics,
-		tlsConfig:      tlsCfg,
-		acmeHTTPServer: acmeHTTP,
+		tlsConfig:      res.TLSConfig,
+		acmeHTTPServer: res.ACMEHTTPServer,
+		acmeRenew:      res.ACMERenewer,
 	}
 }
 
@@ -173,6 +175,7 @@ func (s *Server) Start(ctx context.Context) error {
 		}()
 	}
 
+
 	s.logger.Info("DNS server started",
 		"address", s.cfg.Server.ListenAddress,
 		"udp", s.cfg.Server.UDPEnabled,
@@ -229,6 +232,10 @@ func (s *Server) Shutdown(ctx context.Context) error {
 		if err := s.acmeHTTPServer.Shutdown(ctx); err != nil {
 			errs = append(errs, fmt.Errorf("ACME HTTP shutdown: %w", err))
 		}
+	}
+
+	if s.acmeRenew != nil {
+		s.acmeRenew.Stop()
 	}
 
 	s.running = false

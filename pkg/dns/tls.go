@@ -153,7 +153,7 @@ func newACMEManager(cfg *config.ServerConfig, logger *logging.Logger) (*acmeMana
 		token = cfg.TLS.ACME.Cloudflare.APIToken
 	}
 	if token == "" {
-		return nil, nil, errors.New("Cloudflare DNS-01 requires CF_DNS_API_TOKEN (or tls.acme.cloudflare.api_token)")
+		return nil, nil, errors.New("cloudflare DNS-01 requires CF_DNS_API_TOKEN (or tls.acme.cloudflare.api_token)")
 	}
 
 	mgr := &acmeManager{
@@ -247,7 +247,7 @@ func (m *acmeManager) obtainCert() (*tls.Certificate, error) {
 		return nil, fmt.Errorf("init cloudflare provider: %w", err)
 	}
 
-	if err := client.Challenge.SetDNS01Provider(provider); err != nil {
+	if err = client.Challenge.SetDNS01Provider(provider); err != nil {
 		return nil, fmt.Errorf("set dns01 provider: %w", err)
 	}
 
@@ -268,10 +268,10 @@ func (m *acmeManager) obtainCert() (*tls.Certificate, error) {
 		return nil, fmt.Errorf("obtain certificate: %w", err)
 	}
 
-	if err := os.WriteFile(filepath.Join(m.cacheDir, "cert.pem"), certRes.Certificate, 0o600); err != nil {
+	if err = os.WriteFile(filepath.Join(m.cacheDir, "cert.pem"), certRes.Certificate, 0o600); err != nil {
 		return nil, fmt.Errorf("write cert: %w", err)
 	}
-	if err := os.WriteFile(filepath.Join(m.cacheDir, "key.pem"), certRes.PrivateKey, 0o600); err != nil {
+	if err = os.WriteFile(filepath.Join(m.cacheDir, "key.pem"), certRes.PrivateKey, 0o600); err != nil {
 		return nil, fmt.Errorf("write key: %w", err)
 	}
 
