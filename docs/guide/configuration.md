@@ -134,6 +134,46 @@ server:
 6. **Verification**: From another host: `kdig @dot.erfi.dev +tls-ca +tls-host=dot.erfi.dev example.com` should return answers. You should see DoT start logs and queries in Gloryhole.
 
 > Tip: Keep DoH behind your existing Cloudflare proxy (e.g., `https://gloryhole.erfi.dev/dns-query`) while serving DoT on a separate grey-cloud hostname. This avoids exposing your UI directly and keeps HTTP/S traffic cached/accelerated by Cloudflare, while DoT flows directly.
+
+### Certificates via DNS-01 (Cloudflare)
+
+Gloryhole’s built-in autocert uses HTTP-01. If you terminate TLS yourself, you can obtain/renew certs with Cloudflare DNS-01 and point Gloryhole at the PEMs:
+
+**Using Certbot + Cloudflare DNS plugin**
+1. Create a Cloudflare API token with `Zone:DNS:Edit` limited to your zone.
+2. Save token (chmod 600) at `~/.secrets/certbot/cloudflare.ini`:
+   ```
+   dns_cloudflare_api_token = <TOKEN>
+   ```
+3. Issue cert:
+   ```bash
+   certbot certonly \
+     --dns-cloudflare \
+     --dns-cloudflare-credentials ~/.secrets/certbot/cloudflare.ini \
+     -d dot.example.com
+   ```
+4. Configure Gloryhole:
+   ```yaml
+   server:
+     dot_enabled: true
+     dot_address: ":853"
+     tls:
+       cert_file: "/etc/letsencrypt/live/dot.example.com/fullchain.pem"
+       key_file: "/etc/letsencrypt/live/dot.example.com/privkey.pem"
+   ```
+5. Renew hook (restart Gloryhole after renewal):
+   ```bash
+   certbot renew --post-hook "systemctl restart gloryhole"
+   ```
+
+**Using lego (Go ACME client) with Cloudflare**
+```bash
+export CF_DNS_API_TOKEN=<TOKEN>
+lego --email you@example.com --dns cloudflare --domains dot.example.com run
+```
+PEMs will be in `~/.lego/certificates/`; reference them in `server.tls.cert_file/key_file`.
+
+> Remember: keep the DoT hostname grey-clouded so TCP 853 reaches your host; DNS-01 only proves domain control—it doesn’t proxy DoT traffic.
 | `enable_blocklist` | bool | `true` | Runtime kill switch for blocklists (used by Web UI/API). |
 | `enable_policies` | bool | `true` | Runtime kill switch for the policy engine. |
 | `decision_trace` | bool | `false` | Capture multi-stage breadcrumbs for blocked queries (higher storage/log volume) |
