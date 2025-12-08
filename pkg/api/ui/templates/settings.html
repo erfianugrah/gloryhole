@@ -280,7 +280,7 @@
                 </div>
                 <div class="form-group">
                     <label for="ac-email">Email</label>
-                    <input id="ac-email" type="email" name="autocert_email" value="{{$cfg.Server.TLS.Autocert.Email}}">
+                    <input id="ac-email" class="filter-input" type="email" name="autocert_email" value="{{$cfg.Server.TLS.Autocert.Email}}" placeholder="you@example.com">
                 </div>
             </div>
             <div class="form-group">
@@ -306,7 +306,7 @@
                 </div>
                 <div class="form-group">
                     <label for="acme-email">Email</label>
-                    <input id="acme-email" type="email" name="acme_email" value="{{$cfg.Server.TLS.ACME.Email}}">
+                    <input id="acme-email" class="filter-input" type="email" name="acme_email" value="{{$cfg.Server.TLS.ACME.Email}}" placeholder="you@example.com">
                 </div>
             </div>
             <div class="form-group">
