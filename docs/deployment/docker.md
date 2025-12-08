@@ -24,7 +24,7 @@ docker run -d \
   -p 53:53/udp \
   -p 53:53/tcp \
   -p 8080:8080 \
-  -v $(pwd)/config.yml:/etc/glory-hole/config.yml:ro \
+  -v $(pwd)/config.yml:/etc/glory-hole/config.yml \
   -v glory-hole-data:/var/lib/glory-hole \
   erfianugrah/gloryhole:latest
 ```
@@ -55,11 +55,11 @@ docker build \
 docker run -d \
   --name glory-hole \
   --restart unless-stopped \
-  -p 53:53/udp \
-  -p 53:53/tcp \
-  -p 8080:8080 \
-  -p 9090:9090 \
-  -v $(pwd)/config.yml:/etc/glory-hole/config.yml:ro \
+-p 53:53/udp \
+-p 53:53/tcp \
+-p 8080:8080 \
+-p 9090:9090 \
+  -v $(pwd)/config.yml:/etc/glory-hole/config.yml \
   -v glory-hole-data:/var/lib/glory-hole \
   erfianugrah/gloryhole:latest
 ```
@@ -85,7 +85,7 @@ docker run -d \
   -p 53:53/tcp \
   -p 8080:8080 \
   -p 9090:9090 \
-  -v $(pwd)/config.yml:/etc/glory-hole/config.yml:ro \
+  -v $(pwd)/config.yml:/etc/glory-hole/config.yml \
   -v glory-hole-data:/var/lib/glory-hole \
   -v glory-hole-logs:/var/log/glory-hole \
   -e TZ=America/New_York \
@@ -104,6 +104,8 @@ docker run -d \
 - `--log-driver json-file` - Use JSON file logging
 - `--log-opt max-size=10m` - 10MB per log file
 - `--log-opt max-file=3` - Keep 3 old files
+
+> UI edits and policy changes only persist if the mounted `config.yml` is writable and passed with `--config /etc/glory-hole/config.yml` (default). Use `:ro` only when you intend read-only config.
 
 ## Docker Compose
 

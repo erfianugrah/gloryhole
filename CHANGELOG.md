@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.5] - 2025-12-08
+
+### Added
+- Settings UI now edits/persists DoT/TLS (manual PEM, autocert HTTP-01, native Cloudflare DNS-01) and rate limiting.
+- REST: `PUT /api/config/tls` and `PUT /api/config/rate-limit` endpoints.
+
+### Fixed
+- DoT startup no longer panics when ACME/DNS-01 fails; DoT is skipped and the server stays up.
+- Policy add/update/delete persists to config when a writable `--config` path is provided; otherwise remains in-memory without errors.
+- Policy Export button styling aligned with Add Policy.
+
+## [0.9.4] - 2025-12-07
+
+### Added
+- Settings UI surfaces TLS/DoT mode, decision trace, CORS origins, rate-limit status.
+- Docs consolidated for DoT + Cloudflare DNS-01 and Android Private DNS steps.
+
+### Fixed
+- Policy engine always initializes so UI/API can add rules even with empty config.
+- Config saves clone full config to avoid losing fields; clarified writable-config requirement in docs.
+
 ### Added
 - `cmd/glory-hole`: `--validate-config` flag that loads `config.yml`, reports validation errors, and exits without binding sockets.
 - REST/UI: Guided policy builder with builder/expression toggle, inline rule tester, and `/api/policies/export` for downloading the active rule set.

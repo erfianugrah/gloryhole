@@ -21,6 +21,8 @@
 
 The Policy Engine is a powerful, flexible DNS filtering system that allows you to create custom rules for handling DNS queries. Unlike simple blocklists, the Policy Engine uses expression-based logic to make intelligent decisions about how to handle each DNS query.
 
+> Persistence: Rules added via the REST API or UI are written back to the config file when the server is started with a writable `--config` path. If the config is read-only or unset, changes remain in memory until restart.
+
 ### Key Features
 
 - **Expression-Based Rules**: Write complex logic using a simple expression language

@@ -27,6 +27,17 @@ All error responses follow this format:
 }
 ```
 
+## Configuration Endpoints (used by Settings UI)
+
+- `GET /api/config` — return the live configuration snapshot (non-secret fields).
+- `PUT /api/config/upstreams` — update `upstream_dns_servers`.
+- `PUT /api/config/cache` — update cache settings (enabled, TTL bounds, shard count).
+- `PUT /api/config/logging` — update logging level/format/output.
+- `PUT /api/config/rate-limit` — update global rate limiter (enabled, rps, burst, action, cleanup, max tracked).
+- `PUT /api/config/tls` — update DoT/TLS mode (manual PEM paths, autocert HTTP-01, native ACME DNS-01) and `dot_enabled`/`dot_address`.
+
+> Writes persist only when the server is started with `--config /path/to/config.yml` and the file is writable; otherwise changes remain in memory.
+
 ## Health Endpoints
 
 ### GET /api/health

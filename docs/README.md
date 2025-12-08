@@ -6,9 +6,8 @@ Welcome to the Glory-Hole DNS Server documentation. This guide will help you und
 
 ## Latest Release
 
-- **[v0.7.22 Final Summary](FINAL_SUMMARY.md)** - Complete optimization summary
-- **[Verification Checklist](VERIFICATION_CHECKLIST.md)** - Quality assurance results
-- **[Performance Results](performance/OPTIMIZATION_RESULTS.md)** - Benchmark comparisons
+- **Current:** v0.9.5 (see [Changelog](../CHANGELOG.md))
+- Config/UI now support DoT TLS modes (manual PEM, autocert HTTP-01, native Cloudflare DNS-01) and editable rate limiting.
 
 ## Documentation Structure
 
@@ -96,6 +95,6 @@ All Glory-Hole documentation follows these principles:
 
 ---
 
-**Version:** 0.7.22
-**Last Updated:** 2025-11-25
+**Version:** 0.9.5
+**Last Updated:** 2025-12-08
 **Status:** Production Ready

@@ -24,6 +24,8 @@ This guide provides comprehensive documentation for all Glory-Hole DNS Server co
 
 Glory-Hole uses YAML for configuration. By default, it looks for `config.yml` in the current directory.
 
+> UI writes (upstreams/cache/logging/rate-limit/TLS) require the config file to be mounted **read-write** and passed via `--config`. If the path is read-only or missing, changes apply in-memory only.
+
 ### Specifying Config File
 
 ```bash

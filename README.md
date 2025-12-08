@@ -4,7 +4,7 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/erfianugrah/gloryhole)](https://goreportcard.com/report/github.com/erfianugrah/gloryhole)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-Glory-Hole is a self-contained DNS resolver that combines blocklists, an expression-based policy engine, local-zone management, rate limiting, telemetry, and a responsive Web UI in a single Go binary.
+Glory-Hole is a self-contained DNS resolver that combines blocklists, an expression-based policy engine, local-zone management, rate limiting, telemetry, and a responsive Web UI in a single Go binary. It now includes native Cloudflare DNS-01 certificate issuance for DoT alongside HTTP-01 autocert and manual PEMs.
 
 ## Highlights
 
@@ -74,7 +74,7 @@ Make targets:
 docker compose up -d
 ```
 
-The container uses `/etc/glory-hole/config.yml`; mount your `config.yml` there or bake an image via the provided `Dockerfile`.
+The container uses `/etc/glory-hole/config.yml`; mount your `config.yml` there (read/write if you want UI/Policies to persist) or bake an image via the provided `Dockerfile`.
 
 ## Configuration
 
