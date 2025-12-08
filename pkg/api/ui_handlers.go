@@ -348,10 +348,17 @@ func (s *Server) handlePoliciesPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	var cfgResp ConfigResponse
+	if cfg := s.currentConfig(); cfg != nil {
+		cfgResp = convertConfigResponse(cfg)
+	}
+
 	data := struct {
 		Version string
+		Config  ConfigResponse
 	}{
 		Version: s.uiVersion(),
+		Config:  cfgResp,
 	}
 
 	if err := policiesTemplate.ExecuteTemplate(w, "policies.html", data); err != nil {

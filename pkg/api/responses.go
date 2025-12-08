@@ -241,13 +241,25 @@ type ConfigResponse struct {
 }
 
 type ConfigServerResponse struct {
-	ListenAddress   string `json:"listen_address"`
-	WebUIAddress    string `json:"web_ui_address"`
-	TCPEnabled      bool   `json:"tcp_enabled"`
-	UDPEnabled      bool   `json:"udp_enabled"`
-	EnableBlocklist bool   `json:"enable_blocklist"`
-	EnablePolicies  bool   `json:"enable_policies"`
-	DecisionTrace   bool   `json:"decision_trace"`
+	ListenAddress      string            `json:"listen_address"`
+	WebUIAddress       string            `json:"web_ui_address"`
+	TCPEnabled         bool              `json:"tcp_enabled"`
+	UDPEnabled         bool              `json:"udp_enabled"`
+	EnableBlocklist    bool              `json:"enable_blocklist"`
+	EnablePolicies     bool              `json:"enable_policies"`
+	DecisionTrace      bool              `json:"decision_trace"`
+	DotEnabled         bool              `json:"dot_enabled"`
+	DotAddress         string            `json:"dot_address"`
+	CORSAllowedOrigins []string          `json:"cors_allowed_origins"`
+	TLS                ConfigTLSResponse `json:"tls"`
+}
+
+// ConfigTLSResponse surfaces TLS/ACME settings without secrets.
+type ConfigTLSResponse struct {
+	CertFile string                `json:"cert_file"`
+	KeyFile  string                `json:"key_file"`
+	Autocert config.AutocertConfig `json:"autocert"`
+	ACME     config.ACMEConfig     `json:"acme"`
 }
 
 type ConfigCacheResponse struct {
@@ -283,15 +295,28 @@ type ConfigStorageResponse struct {
 }
 
 func convertConfigResponse(cfg *config.Config) ConfigResponse {
+	// Avoid leaking secrets: blank any API tokens before serializing.
+	acmeCfg := cfg.Server.TLS.ACME
+	acmeCfg.Cloudflare.APIToken = ""
+
 	return ConfigResponse{
 		Server: ConfigServerResponse{
-			ListenAddress:   cfg.Server.ListenAddress,
-			WebUIAddress:    cfg.Server.WebUIAddress,
-			TCPEnabled:      cfg.Server.TCPEnabled,
-			UDPEnabled:      cfg.Server.UDPEnabled,
-			EnableBlocklist: cfg.Server.EnableBlocklist,
-			EnablePolicies:  cfg.Server.EnablePolicies,
-			DecisionTrace:   cfg.Server.DecisionTrace,
+			ListenAddress:      cfg.Server.ListenAddress,
+			WebUIAddress:       cfg.Server.WebUIAddress,
+			TCPEnabled:         cfg.Server.TCPEnabled,
+			UDPEnabled:         cfg.Server.UDPEnabled,
+			EnableBlocklist:    cfg.Server.EnableBlocklist,
+			EnablePolicies:     cfg.Server.EnablePolicies,
+			DecisionTrace:      cfg.Server.DecisionTrace,
+			DotEnabled:         cfg.Server.DotEnabled,
+			DotAddress:         cfg.Server.DotAddress,
+			CORSAllowedOrigins: cfg.Server.CORSAllowedOrigins,
+			TLS: ConfigTLSResponse{
+				CertFile: cfg.Server.TLS.CertFile,
+				KeyFile:  cfg.Server.TLS.KeyFile,
+				Autocert: cfg.Server.TLS.Autocert,
+				ACME:     acmeCfg,
+			},
 		},
 		Cache: ConfigCacheResponse{
 			Enabled:     cfg.Cache.Enabled,

@@ -16,8 +16,24 @@
         </div>
     </div>
 
+    {{$cfg := .Config}}
     <div class="policies-info">
         <p>Policies allow you to define advanced filtering rules based on time, client IP, and domain patterns.</p>
+        <div class="status-grid">
+            <div class="status-card">
+                <h4>Policy Engine</h4>
+                <p class="status-text">{{if $cfg.Server.EnablePolicies}}Enabled{{else}}Disabled via kill-switch{{end}}</p>
+            </div>
+            <div class="status-card">
+                <h4>Rules Loaded</h4>
+                <p class="status-text">{{len $cfg.Policy.Rules}}</p>
+            </div>
+            <div class="status-card">
+                <h4>Rate Limiting</h4>
+                <p class="status-text">{{if $cfg.RateLimit.Enabled}}{{$cfg.RateLimit.RequestsPerSecond}} rps / {{$cfg.RateLimit.Burst}} burst ({{$cfg.RateLimit.Action}}){{else}}Disabled{{end}}</p>
+                <small class="text-muted">Configure in Settings &rarr; Rate Limiting</small>
+            </div>
+        </div>
     </div>
 
     <!-- Policies List -->

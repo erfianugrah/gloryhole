@@ -195,6 +195,83 @@
                 <code>{{if $cfg.Server.UDPEnabled}}UDP{{end}}{{if and $cfg.Server.UDPEnabled $cfg.Server.TCPEnabled}}, {{end}}{{if $cfg.Server.TCPEnabled}}TCP{{end}}</code>
             </div>
         </div>
+        <div class="setting-row">
+            <div class="setting-label">
+                <h4>Decision Trace</h4>
+                <p>Capture block breadcrumbs for UI/API troubleshooting</p>
+            </div>
+            <div class="setting-value">
+                <label class="toggle-switch">
+                    <input type="checkbox" {{if $cfg.Server.DecisionTrace}}checked{{end}} disabled>
+                    <span class="toggle-slider"></span>
+                </label>
+            </div>
+        </div>
+    </div>
+
+    <!-- DoT / TLS -->
+    <div class="settings-section">
+        <h3>DNS-over-TLS (DoT) & TLS</h3>
+        <div class="setting-row">
+            <div class="setting-label">
+                <h4>DoT Listener</h4>
+                <p>TCP 853 endpoint for Android Private DNS and RFC 7858 clients</p>
+            </div>
+            <div class="setting-value">
+                <code>{{if $cfg.Server.DotEnabled}}Enabled on {{$cfg.Server.DotAddress}}{{else}}Disabled{{end}}</code>
+            </div>
+        </div>
+
+        <div class="setting-row">
+            <div class="setting-label">
+                <h4>TLS Mode</h4>
+                <p>Certificate source for DoT</p>
+            </div>
+            <div class="setting-value">
+                {{if and $cfg.Server.TLS.CertFile $cfg.Server.TLS.KeyFile}}
+                    <code>Manual PEMs</code>
+                {{else if $cfg.Server.TLS.Autocert.Enabled}}
+                    <code>Autocert HTTP-01 &middot; hosts: {{join ", " $cfg.Server.TLS.Autocert.Hosts}}</code>
+                {{else if $cfg.Server.TLS.ACME.Enabled}}
+                    <code>Native DNS-01 ({{lower $cfg.Server.TLS.ACME.DNSProvider}}) &middot; hosts: {{join ", " $cfg.Server.TLS.ACME.Hosts}}</code>
+                {{else}}
+                    <code>Not configured</code>
+                {{end}}
+            </div>
+        </div>
+
+        {{if $cfg.Server.TLS.Autocert.Enabled}}
+        <div class="setting-row nested">
+            <div class="setting-label">
+                <h4>Autocert Listener</h4>
+                <p>HTTP-01 challenge address</p>
+            </div>
+            <div class="setting-value">
+                <code>{{$cfg.Server.TLS.Autocert.HTTP01Address}}</code>
+            </div>
+        </div>
+        {{end}}
+
+        {{if $cfg.Server.TLS.ACME.Enabled}}
+        <div class="setting-row nested">
+            <div class="setting-label">
+                <h4>ACME Cache</h4>
+                <p>Issued cert/key storage</p>
+            </div>
+            <div class="setting-value">
+                <code>{{$cfg.Server.TLS.ACME.CacheDir}}</code>
+            </div>
+        </div>
+        <div class="setting-row nested">
+            <div class="setting-label">
+                <h4>Renewal Lead Time</h4>
+                <p>Renew before expiry</p>
+            </div>
+            <div class="setting-value">
+                <code>{{$cfg.Server.TLS.ACME.RenewBefore}}</code>
+            </div>
+        </div>
+        {{end}}
     </div>
 
     {{template "settings-upstreams" .}}
@@ -325,6 +402,63 @@
         </div>
     </div>
 
+    <!-- Rate Limiting -->
+    <div class="settings-section">
+        <h3>Rate Limiting</h3>
+        <p class="section-description">Global per-client token bucket applied to all queries before policy/blocklist evaluation.</p>
+        <div class="setting-row">
+            <div class="setting-label">
+                <h4>Status</h4>
+                <p>Limiter toggle</p>
+            </div>
+            <div class="setting-value">
+                <label class="toggle-switch">
+                    <input type="checkbox" {{if $cfg.RateLimit.Enabled}}checked{{end}} disabled>
+                    <span class="toggle-slider"></span>
+                </label>
+            </div>
+        </div>
+        <div class="setting-row">
+            <div class="setting-label">
+                <h4>Budget</h4>
+                <p>Requests per second / burst</p>
+            </div>
+            <div class="setting-value">
+                <code>{{$cfg.RateLimit.RequestsPerSecond}} rps / {{$cfg.RateLimit.Burst}} burst</code>
+            </div>
+        </div>
+        <div class="setting-row">
+            <div class="setting-label">
+                <h4>On Exceed</h4>
+                <p>Action when over limit</p>
+            </div>
+            <div class="setting-value">
+                <code>{{$cfg.RateLimit.Action}}</code>
+            </div>
+        </div>
+        <div class="setting-row">
+            <div class="setting-label">
+                <h4>Logging</h4>
+                <p>Emit violation logs</p>
+            </div>
+            <div class="setting-value">
+                <label class="toggle-switch">
+                    <input type="checkbox" {{if $cfg.RateLimit.LogViolations}}checked{{end}} disabled>
+                    <span class="toggle-slider"></span>
+                </label>
+            </div>
+        </div>
+        <div class="setting-row">
+            <div class="setting-label">
+                <h4>Overrides</h4>
+                <p>Per-client/CIDR custom budgets</p>
+            </div>
+            <div class="setting-value">
+                <code>{{len $cfg.RateLimit.Overrides}} configured</code>
+            </div>
+        </div>
+    </div>
+
     <!-- Danger Zone -->
     <div class="settings-section danger-zone">
         <h3>Danger Zone</h3>
@@ -359,10 +493,11 @@
                 <p>Allow cross-origin requests</p>
             </div>
             <div class="setting-value">
-                <label class="toggle-switch">
-                    <input type="checkbox" checked disabled>
-                    <span class="toggle-slider"></span>
-                </label>
+                {{if $cfg.Server.CORSAllowedOrigins}}
+                    <code>{{join ", " $cfg.Server.CORSAllowedOrigins}}</code>
+                {{else}}
+                    <code>Disabled (no allowed origins)</code>
+                {{end}}
             </div>
         </div>
     </div>
