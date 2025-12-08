@@ -13,6 +13,12 @@ import (
 )
 
 const maxConfigPayloadSize = 64 * 1024 // 64KB
+const (
+	settingsTemplateRateLimit = "settings-rate-limit"
+	settingsTemplateTLS       = "settings-tls"
+	flashKeyRateLimit         = "rate_limit"
+	flashKeyTLS               = "tls"
+)
 
 // handleUpdateUpstreams handles PUT /api/config/upstreams
 func (s *Server) handleUpdateUpstreams(w http.ResponseWriter, r *http.Request) {
@@ -117,6 +123,77 @@ func (s *Server) handleUpdateLogging(w http.ResponseWriter, r *http.Request) {
 
 	data := s.newSettingsPageData(cfg)
 	s.respondConfigUpdate(w, r, settingsTemplateLogging, flashKeyLogging, "Logging settings updated", data)
+}
+
+// handleUpdateRateLimit handles PUT /api/config/rate-limit
+func (s *Server) handleUpdateRateLimit(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPut {
+		s.writeError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		return
+	}
+
+	cfg, err := s.mutableConfig()
+	if err != nil {
+		s.writeError(w, http.StatusServiceUnavailable, err.Error())
+		return
+	}
+
+	r.Body = http.MaxBytesReader(w, r.Body, maxConfigPayloadSize)
+	payload, err := parseRateLimitPayload(r, cfg.RateLimit)
+	if err != nil {
+		s.respondConfigValidationError(w, r, settingsTemplateRateLimit, flashKeyRateLimit, err.Error(), cfg, http.StatusBadRequest)
+		return
+	}
+
+	updated := *cfg
+	updated.RateLimit.Enabled = payload.Enabled
+	updated.RateLimit.RequestsPerSecond = payload.RequestsPerSecond
+	updated.RateLimit.Burst = payload.Burst
+	updated.RateLimit.Action = payload.Action
+	updated.RateLimit.LogViolations = payload.LogViolations
+	updated.RateLimit.CleanupInterval = payload.CleanupInterval
+	updated.RateLimit.MaxTrackedClients = payload.MaxTrackedClients
+	// Keep overrides/trusted proxies untouched for now
+
+	if !s.persistConfigSection(w, r, &updated, settingsTemplateRateLimit, flashKeyRateLimit, cfg) {
+		return
+	}
+
+	data := s.newSettingsPageData(cfg)
+	s.respondConfigUpdate(w, r, settingsTemplateRateLimit, flashKeyRateLimit, "Rate limiting updated", data)
+}
+
+// handleUpdateTLS handles PUT /api/config/tls
+func (s *Server) handleUpdateTLS(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPut {
+		s.writeError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		return
+	}
+
+	cfg, err := s.mutableConfig()
+	if err != nil {
+		s.writeError(w, http.StatusServiceUnavailable, err.Error())
+		return
+	}
+
+	r.Body = http.MaxBytesReader(w, r.Body, maxConfigPayloadSize)
+	payload, err := parseTLSPayload(r, cfg.Server)
+	if err != nil {
+		s.respondConfigValidationError(w, r, settingsTemplateTLS, flashKeyTLS, err.Error(), cfg, http.StatusBadRequest)
+		return
+	}
+
+	updated := *cfg
+	updated.Server.DotEnabled = payload.DotEnabled
+	updated.Server.DotAddress = payload.DotAddress
+	updated.Server.TLS = payload.TLS
+
+	if !s.persistConfigSection(w, r, &updated, settingsTemplateTLS, flashKeyTLS, cfg) {
+		return
+	}
+
+	data := s.newSettingsPageData(cfg)
+	s.respondConfigUpdate(w, r, settingsTemplateTLS, flashKeyTLS, "DoT/TLS settings updated", data)
 }
 
 func parseUpstreamServers(r *http.Request) ([]string, error) {
@@ -292,6 +369,229 @@ func parseCachePayload(r *http.Request, current config.CacheConfig) (cachePayloa
 	payload.ShardCount = *req.ShardCount
 
 	return payload, nil
+}
+
+type rateLimitPayload struct {
+	Enabled           bool
+	RequestsPerSecond float64
+	Burst             int
+	Action            config.RateLimitAction
+	LogViolations     bool
+	CleanupInterval   time.Duration
+	MaxTrackedClients int
+}
+
+func parseRateLimitPayload(r *http.Request, current config.RateLimitConfig) (rateLimitPayload, error) {
+	type request struct {
+		Enabled           *bool    `json:"enabled,omitempty"`
+		RequestsPerSecond *float64 `json:"requests_per_second,omitempty"`
+		Burst             *int     `json:"burst,omitempty"`
+		Action            string   `json:"on_exceed"`
+		LogViolations     *bool    `json:"log_violations,omitempty"`
+		CleanupInterval   string   `json:"cleanup_interval"`
+		MaxTrackedClients *int     `json:"max_tracked_clients,omitempty"`
+	}
+
+	var req request
+	if isJSONContent(r) {
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			return rateLimitPayload{}, fmt.Errorf("invalid JSON payload: %w", err)
+		}
+	} else {
+		if err := r.ParseForm(); err != nil {
+			return rateLimitPayload{}, fmt.Errorf("invalid form payload: %w", err)
+		}
+		if val := r.FormValue("enabled"); val != "" {
+			enabled := parseCheckbox(val)
+			req.Enabled = &enabled
+		}
+		if val := r.FormValue("requests_per_second"); val != "" {
+			if f, err := strconv.ParseFloat(val, 64); err == nil {
+				req.RequestsPerSecond = &f
+			} else {
+				return rateLimitPayload{}, fmt.Errorf("invalid requests_per_second: %v", err)
+			}
+		}
+		if val := r.FormValue("burst"); val != "" {
+			if i, err := strconv.Atoi(val); err == nil {
+				req.Burst = &i
+			} else {
+				return rateLimitPayload{}, fmt.Errorf("invalid burst: %v", err)
+			}
+		}
+		if val := r.FormValue("on_exceed"); val != "" {
+			req.Action = val
+		}
+		if val := r.FormValue("log_violations"); val != "" {
+			lv := parseCheckbox(val)
+			req.LogViolations = &lv
+		}
+		if val := r.FormValue("cleanup_interval"); val != "" {
+			req.CleanupInterval = val
+		}
+		if val := r.FormValue("max_tracked_clients"); val != "" {
+			if i, err := strconv.Atoi(val); err == nil {
+				req.MaxTrackedClients = &i
+			} else {
+				return rateLimitPayload{}, fmt.Errorf("invalid max_tracked_clients: %v", err)
+			}
+		}
+	}
+
+	result := rateLimitPayload{
+		Enabled:           current.Enabled,
+		RequestsPerSecond: current.RequestsPerSecond,
+		Burst:             current.Burst,
+		Action:            current.Action,
+		LogViolations:     current.LogViolations,
+		CleanupInterval:   current.CleanupInterval,
+		MaxTrackedClients: current.MaxTrackedClients,
+	}
+
+	if req.Enabled != nil {
+		result.Enabled = *req.Enabled
+	}
+	if req.RequestsPerSecond != nil {
+		result.RequestsPerSecond = *req.RequestsPerSecond
+	}
+	if req.Burst != nil {
+		result.Burst = *req.Burst
+	}
+	if strings.TrimSpace(req.Action) != "" {
+		act := config.RateLimitAction(strings.ToLower(req.Action))
+		if act != config.RateLimitActionDrop && act != config.RateLimitActionNXDOMAIN && act != "nxdomain" {
+			return rateLimitPayload{}, fmt.Errorf("on_exceed must be 'drop' or 'nxdomain'")
+		}
+		if act == "nxdomain" {
+			act = config.RateLimitActionNXDOMAIN
+		}
+		result.Action = act
+	}
+	if req.LogViolations != nil {
+		result.LogViolations = *req.LogViolations
+	}
+	if strings.TrimSpace(req.CleanupInterval) != "" {
+		d, err := time.ParseDuration(req.CleanupInterval)
+		if err != nil {
+			return rateLimitPayload{}, fmt.Errorf("invalid cleanup_interval: %v", err)
+		}
+		result.CleanupInterval = d
+	}
+	if req.MaxTrackedClients != nil {
+		result.MaxTrackedClients = *req.MaxTrackedClients
+	}
+
+	if result.RequestsPerSecond <= 0 {
+		return rateLimitPayload{}, fmt.Errorf("requests_per_second must be > 0")
+	}
+	if result.Burst <= 0 {
+		result.Burst = int(result.RequestsPerSecond)
+	}
+
+	return result, nil
+}
+
+type tlsPayload struct {
+	DotEnabled bool
+	DotAddress string
+	TLS        config.TLSConfig
+}
+
+func parseTLSPayload(r *http.Request, current config.ServerConfig) (tlsPayload, error) {
+	type request struct {
+		DotEnabled *bool                  `json:"dot_enabled,omitempty"`
+		DotAddress string                 `json:"dot_address"`
+		CertFile   string                 `json:"cert_file"`
+		KeyFile    string                 `json:"key_file"`
+		Autocert   *config.AutocertConfig `json:"autocert,omitempty"`
+		ACME       *config.ACMEConfig     `json:"acme,omitempty"`
+	}
+
+	var req request
+	if isJSONContent(r) {
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			return tlsPayload{}, fmt.Errorf("invalid JSON payload: %w", err)
+		}
+	} else {
+		if err := r.ParseForm(); err != nil {
+			return tlsPayload{}, fmt.Errorf("invalid form payload: %w", err)
+		}
+		if val := r.FormValue("dot_enabled"); val != "" {
+			enabled := parseCheckbox(val)
+			req.DotEnabled = &enabled
+		}
+		req.DotAddress = r.FormValue("dot_address")
+		req.CertFile = r.FormValue("cert_file")
+		req.KeyFile = r.FormValue("key_file")
+
+		if r.Form.Has("autocert_enabled") || r.Form.Has("autocert_hosts") {
+			ac := current.TLS.Autocert
+			ac.Enabled = parseCheckbox(r.FormValue("autocert_enabled"))
+			if val := strings.TrimSpace(r.FormValue("autocert_hosts")); val != "" {
+				ac.Hosts = splitList(val)
+			}
+			if val := strings.TrimSpace(r.FormValue("autocert_cache_dir")); val != "" {
+				ac.CacheDir = val
+			}
+			if val := strings.TrimSpace(r.FormValue("autocert_email")); val != "" {
+				ac.Email = val
+			}
+			if val := strings.TrimSpace(r.FormValue("autocert_http01_address")); val != "" {
+				ac.HTTP01Address = val
+			}
+			req.Autocert = &ac
+		}
+
+		if r.Form.Has("acme_enabled") || r.Form.Has("acme_hosts") {
+			acme := current.TLS.ACME
+			acme.Enabled = parseCheckbox(r.FormValue("acme_enabled"))
+			if val := strings.TrimSpace(r.FormValue("acme_dns_provider")); val != "" {
+				acme.DNSProvider = val
+			}
+			if val := strings.TrimSpace(r.FormValue("acme_hosts")); val != "" {
+				acme.Hosts = splitList(val)
+			}
+			if val := strings.TrimSpace(r.FormValue("acme_cache_dir")); val != "" {
+				acme.CacheDir = val
+			}
+			if val := strings.TrimSpace(r.FormValue("acme_email")); val != "" {
+				acme.Email = val
+			}
+			if val := strings.TrimSpace(r.FormValue("acme_renew_before")); val != "" {
+				if d, err := time.ParseDuration(val); err == nil {
+					acme.RenewBefore = d
+				}
+			}
+			req.ACME = &acme
+		}
+	}
+
+	result := tlsPayload{
+		DotEnabled: current.DotEnabled,
+		DotAddress: current.DotAddress,
+		TLS:        current.TLS,
+	}
+
+	if req.DotEnabled != nil {
+		result.DotEnabled = *req.DotEnabled
+	}
+	if strings.TrimSpace(req.DotAddress) != "" {
+		result.DotAddress = req.DotAddress
+	}
+	if strings.TrimSpace(req.CertFile) != "" {
+		result.TLS.CertFile = req.CertFile
+	}
+	if strings.TrimSpace(req.KeyFile) != "" {
+		result.TLS.KeyFile = req.KeyFile
+	}
+	if req.Autocert != nil {
+		result.TLS.Autocert = *req.Autocert
+	}
+	if req.ACME != nil {
+		result.TLS.ACME = *req.ACME
+	}
+
+	return result, nil
 }
 
 type loggingPayload struct {

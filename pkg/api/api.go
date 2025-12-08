@@ -182,6 +182,8 @@ func New(cfg *Config) *Server {
 	mux.HandleFunc("PUT /api/config/upstreams", s.handleUpdateUpstreams)
 	mux.HandleFunc("PUT /api/config/cache", s.handleUpdateCache)
 	mux.HandleFunc("PUT /api/config/logging", s.handleUpdateLogging)
+	mux.HandleFunc("PUT /api/config/rate-limit", s.handleUpdateRateLimit)
+	mux.HandleFunc("PUT /api/config/tls", s.handleUpdateTLS)
 
 	// UI routes (add after API routes to avoid conflicts)
 	mux.HandleFunc("GET /api/ui/stats", s.handleStatsPartial)

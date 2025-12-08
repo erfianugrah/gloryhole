@@ -167,6 +167,165 @@
 </div>
 {{end}}
 
+{{define "settings-rate-limit"}}
+{{$cfg := .Config}}
+<div class="settings-section" id="rate-limit-section">
+    <h3>Rate Limiting</h3>
+    <p class="section-description">Global per-client token bucket before policy/blocklist evaluation.</p>
+
+    {{with index .Flash "rate_limit"}}
+        <div class="alert alert-success">{{.}}</div>
+    {{end}}
+    {{with index .Errors "rate_limit"}}
+        <div class="alert alert-danger">{{.}}</div>
+    {{end}}
+
+    <form hx-put="/api/config/rate-limit" hx-target="#rate-limit-section" hx-swap="outerHTML">
+        <label class="checkbox-label" for="rl-enabled">
+            <input id="rl-enabled" type="checkbox" name="enabled" {{if $cfg.RateLimit.Enabled}}checked{{end}}>
+            Enable rate limiting
+        </label>
+
+        <div class="form-grid">
+            <div class="form-group">
+                <label for="rl-rps">Requests per second</label>
+                <input id="rl-rps" type="number" min="1" step="1" name="requests_per_second" value="{{$cfg.RateLimit.RequestsPerSecond}}">
+            </div>
+            <div class="form-group">
+                <label for="rl-burst">Burst</label>
+                <input id="rl-burst" type="number" min="1" step="1" name="burst" value="{{$cfg.RateLimit.Burst}}">
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label for="rl-action">On exceed</label>
+            <select id="rl-action" name="on_exceed">
+                <option value="nxdomain" {{if eq $cfg.RateLimit.Action "nxdomain"}}selected{{end}}>NXDOMAIN</option>
+                <option value="drop" {{if eq $cfg.RateLimit.Action "drop"}}selected{{end}}>Drop</option>
+            </select>
+        </div>
+
+        <div class="form-grid">
+            <div class="form-group">
+                <label for="rl-cleanup">Cleanup interval</label>
+                <input id="rl-cleanup" type="text" name="cleanup_interval" value="{{$cfg.RateLimit.CleanupInterval}}" placeholder="e.g., 10m">
+            </div>
+            <div class="form-group">
+                <label for="rl-max-tracked">Max tracked clients</label>
+                <input id="rl-max-tracked" type="number" min="1" step="1" name="max_tracked_clients" value="{{$cfg.RateLimit.MaxTrackedClients}}">
+            </div>
+        </div>
+
+        <label class="checkbox-label" for="rl-log">
+            <input id="rl-log" type="checkbox" name="log_violations" {{if $cfg.RateLimit.LogViolations}}checked{{end}}>
+            Log violations
+        </label>
+
+        <p class="form-help">Overrides ({{len $cfg.RateLimit.Overrides}}) and trusted proxies remain unchanged; edit in config.yml if needed.</p>
+
+        <div class="form-actions">
+            <button type="reset" class="btn btn-secondary btn-sm">Reset</button>
+            <button type="submit" class="btn btn-primary btn-sm">Save Rate Limit</button>
+        </div>
+    </form>
+</div>
+{{end}}
+
+{{define "settings-tls"}}
+{{$cfg := .Config}}
+<div class="settings-section" id="tls-section">
+    <h3>DNS-over-TLS (DoT) & TLS</h3>
+    <p class="section-description">Control DoT listener and certificate source.</p>
+
+    {{with index .Flash "tls"}}
+        <div class="alert alert-success">{{.}}</div>
+    {{end}}
+    {{with index .Errors "tls"}}
+        <div class="alert alert-danger">{{.}}</div>
+    {{end}}
+
+    <form hx-put="/api/config/tls" hx-target="#tls-section" hx-swap="outerHTML">
+        <label class="checkbox-label" for="dot-enabled">
+            <input id="dot-enabled" type="checkbox" name="dot_enabled" {{if $cfg.Server.DotEnabled}}checked{{end}}>
+            Enable DNS-over-TLS listener
+        </label>
+
+        <div class="form-group">
+            <label for="dot-address">DoT address</label>
+            <input id="dot-address" type="text" name="dot_address" value="{{$cfg.Server.DotAddress}}" placeholder=":853">
+        </div>
+
+        <div class="form-group">
+            <label>Manual certificates (PEM paths)</label>
+            <div class="form-grid">
+                <input type="text" name="cert_file" placeholder="/path/to/fullchain.pem" value="{{$cfg.Server.TLS.CertFile}}">
+                <input type="text" name="key_file" placeholder="/path/to/privkey.pem" value="{{$cfg.Server.TLS.KeyFile}}">
+            </div>
+        </div>
+
+        <div class="fieldset">
+            <h4>Autocert (HTTP-01)</h4>
+            <label class="checkbox-label" for="ac-enabled">
+                <input id="ac-enabled" type="checkbox" name="autocert_enabled" {{if $cfg.Server.TLS.Autocert.Enabled}}checked{{end}}>
+                Enable autocert
+            </label>
+            <div class="form-group">
+                <label for="ac-hosts">Hosts (comma/line separated)</label>
+                <textarea id="ac-hosts" name="autocert_hosts" rows="2">{{join $cfg.Server.TLS.Autocert.Hosts "\n"}}</textarea>
+            </div>
+            <div class="form-grid">
+                <div class="form-group">
+                    <label for="ac-cache">Cache dir</label>
+                    <input id="ac-cache" type="text" name="autocert_cache_dir" value="{{$cfg.Server.TLS.Autocert.CacheDir}}">
+                </div>
+                <div class="form-group">
+                    <label for="ac-email">Email</label>
+                    <input id="ac-email" type="email" name="autocert_email" value="{{$cfg.Server.TLS.Autocert.Email}}">
+                </div>
+            </div>
+            <div class="form-group">
+                <label for="ac-http01">HTTP-01 address</label>
+                <input id="ac-http01" type="text" name="autocert_http01_address" value="{{$cfg.Server.TLS.Autocert.HTTP01Address}}">
+            </div>
+        </div>
+
+        <div class="fieldset">
+            <h4>Native ACME (DNS-01)</h4>
+            <label class="checkbox-label" for="acme-enabled">
+                <input id="acme-enabled" type="checkbox" name="acme_enabled" {{if $cfg.Server.TLS.ACME.Enabled}}checked{{end}}>
+                Enable ACME DNS-01
+            </label>
+            <div class="form-group">
+                <label for="acme-hosts">Hosts (comma/line separated)</label>
+                <textarea id="acme-hosts" name="acme_hosts" rows="2">{{join $cfg.Server.TLS.ACME.Hosts "\n"}}</textarea>
+            </div>
+            <div class="form-grid">
+                <div class="form-group">
+                    <label for="acme-cache">Cache dir</label>
+                    <input id="acme-cache" type="text" name="acme_cache_dir" value="{{$cfg.Server.TLS.ACME.CacheDir}}">
+                </div>
+                <div class="form-group">
+                    <label for="acme-email">Email</label>
+                    <input id="acme-email" type="email" name="acme_email" value="{{$cfg.Server.TLS.ACME.Email}}">
+                </div>
+            </div>
+            <div class="form-group">
+                <label for="acme-renew-before">Renew before</label>
+                <input id="acme-renew-before" type="text" name="acme_renew_before" value="{{$cfg.Server.TLS.ACME.RenewBefore}}" placeholder="720h">
+                <span class="form-help">Go duration, e.g., 720h (30d).</span>
+            </div>
+            <input type="hidden" name="acme_dns_provider" value="{{$cfg.Server.TLS.ACME.DNSProvider}}">
+        </div>
+
+        <div class="form-actions">
+            <button type="reset" class="btn btn-secondary btn-sm">Reset</button>
+            <button type="submit" class="btn btn-primary btn-sm">Save DoT/TLS</button>
+        </div>
+        <p class="form-help">API tokens are read from environment (e.g., CF_DNS_API_TOKEN); they are not shown here.</p>
+    </form>
+</div>
+{{end}}
+
 {{define "content"}}
 {{$cfg := .Config}}
 <div class="settings-page">
@@ -209,70 +368,7 @@
         </div>
     </div>
 
-    <!-- DoT / TLS -->
-    <div class="settings-section">
-        <h3>DNS-over-TLS (DoT) & TLS</h3>
-        <div class="setting-row">
-            <div class="setting-label">
-                <h4>DoT Listener</h4>
-                <p>TCP 853 endpoint for Android Private DNS and RFC 7858 clients</p>
-            </div>
-            <div class="setting-value">
-                <code>{{if $cfg.Server.DotEnabled}}Enabled on {{$cfg.Server.DotAddress}}{{else}}Disabled{{end}}</code>
-            </div>
-        </div>
-
-        <div class="setting-row">
-            <div class="setting-label">
-                <h4>TLS Mode</h4>
-                <p>Certificate source for DoT</p>
-            </div>
-            <div class="setting-value">
-                {{if and $cfg.Server.TLS.CertFile $cfg.Server.TLS.KeyFile}}
-                    <code>Manual PEMs</code>
-                {{else if $cfg.Server.TLS.Autocert.Enabled}}
-                    <code>Autocert HTTP-01 &middot; hosts: {{join ", " $cfg.Server.TLS.Autocert.Hosts}}</code>
-                {{else if $cfg.Server.TLS.ACME.Enabled}}
-                    <code>Native DNS-01 ({{lower $cfg.Server.TLS.ACME.DNSProvider}}) &middot; hosts: {{join ", " $cfg.Server.TLS.ACME.Hosts}}</code>
-                {{else}}
-                    <code>Not configured</code>
-                {{end}}
-            </div>
-        </div>
-
-        {{if $cfg.Server.TLS.Autocert.Enabled}}
-        <div class="setting-row nested">
-            <div class="setting-label">
-                <h4>Autocert Listener</h4>
-                <p>HTTP-01 challenge address</p>
-            </div>
-            <div class="setting-value">
-                <code>{{$cfg.Server.TLS.Autocert.HTTP01Address}}</code>
-            </div>
-        </div>
-        {{end}}
-
-        {{if $cfg.Server.TLS.ACME.Enabled}}
-        <div class="setting-row nested">
-            <div class="setting-label">
-                <h4>ACME Cache</h4>
-                <p>Issued cert/key storage</p>
-            </div>
-            <div class="setting-value">
-                <code>{{$cfg.Server.TLS.ACME.CacheDir}}</code>
-            </div>
-        </div>
-        <div class="setting-row nested">
-            <div class="setting-label">
-                <h4>Renewal Lead Time</h4>
-                <p>Renew before expiry</p>
-            </div>
-            <div class="setting-value">
-                <code>{{$cfg.Server.TLS.ACME.RenewBefore}}</code>
-            </div>
-        </div>
-        {{end}}
-    </div>
+    {{template "settings-tls" .}}
 
     {{template "settings-upstreams" .}}
 
@@ -402,62 +498,7 @@
         </div>
     </div>
 
-    <!-- Rate Limiting -->
-    <div class="settings-section">
-        <h3>Rate Limiting</h3>
-        <p class="section-description">Global per-client token bucket applied to all queries before policy/blocklist evaluation.</p>
-        <div class="setting-row">
-            <div class="setting-label">
-                <h4>Status</h4>
-                <p>Limiter toggle</p>
-            </div>
-            <div class="setting-value">
-                <label class="toggle-switch">
-                    <input type="checkbox" {{if $cfg.RateLimit.Enabled}}checked{{end}} disabled>
-                    <span class="toggle-slider"></span>
-                </label>
-            </div>
-        </div>
-        <div class="setting-row">
-            <div class="setting-label">
-                <h4>Budget</h4>
-                <p>Requests per second / burst</p>
-            </div>
-            <div class="setting-value">
-                <code>{{$cfg.RateLimit.RequestsPerSecond}} rps / {{$cfg.RateLimit.Burst}} burst</code>
-            </div>
-        </div>
-        <div class="setting-row">
-            <div class="setting-label">
-                <h4>On Exceed</h4>
-                <p>Action when over limit</p>
-            </div>
-            <div class="setting-value">
-                <code>{{$cfg.RateLimit.Action}}</code>
-            </div>
-        </div>
-        <div class="setting-row">
-            <div class="setting-label">
-                <h4>Logging</h4>
-                <p>Emit violation logs</p>
-            </div>
-            <div class="setting-value">
-                <label class="toggle-switch">
-                    <input type="checkbox" {{if $cfg.RateLimit.LogViolations}}checked{{end}} disabled>
-                    <span class="toggle-slider"></span>
-                </label>
-            </div>
-        </div>
-        <div class="setting-row">
-            <div class="setting-label">
-                <h4>Overrides</h4>
-                <p>Per-client/CIDR custom budgets</p>
-            </div>
-            <div class="setting-value">
-                <code>{{len $cfg.RateLimit.Overrides}} configured</code>
-            </div>
-        </div>
-    </div>
+    {{template "settings-rate-limit" .}}
 
     <!-- Danger Zone -->
     <div class="settings-section danger-zone">
