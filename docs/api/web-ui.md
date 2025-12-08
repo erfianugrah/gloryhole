@@ -1,8 +1,6 @@
 # Web UI User Guide
 
-Complete guide to using the Glory-Hole DNS Server web interface.
-
-> **Note**: The dashboard activity chart currently displays mock data for visualization purposes. Real-time chart integration is planned for a future release. All other statistics and features display live data from the DNS server.
+Complete guide to using the Glory-Hole DNS Server web interface. All statistics and charts are live data.
 
 ## Accessing the Web UI
 
