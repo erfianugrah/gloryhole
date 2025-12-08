@@ -22,11 +22,17 @@ server:
       enabled: false
       dns_provider: "cloudflare"
       hosts: []
+      upstream_dns_servers: []
       cache_dir: "./.cache/acme"
       email: ""
       renew_before: "720h"
       cloudflare:
         api_token: ""
+        zone_id: ""
+        ttl: 120
+        propagation_timeout: "2m"
+        polling_interval: "2s"
+        skip_authoritative_check: false
 
 upstream_dns_servers:
   - "10.0.10.2:53"

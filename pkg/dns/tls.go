@@ -1,15 +1,19 @@
 package dns
 
 import (
+	"bytes"
+	"context"
 	"crypto"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -23,6 +27,7 @@ import (
 
 	"github.com/go-acme/lego/v4/certcrypto"
 	"github.com/go-acme/lego/v4/certificate"
+	"github.com/go-acme/lego/v4/challenge"
 	"github.com/go-acme/lego/v4/challenge/dns01"
 	"github.com/go-acme/lego/v4/lego"
 	"github.com/go-acme/lego/v4/providers/dns/cloudflare"
@@ -53,7 +58,11 @@ func buildTLSResources(cfg *config.ServerConfig, upstreams []string, logger *log
 
 	// Native DNS-01 via Cloudflare
 	if cfg.TLS.ACME.Enabled {
-		mgr, tlsCfg, err := newACMEManager(cfg, upstreams, logger)
+		acmeUpstreams := upstreams
+		if len(cfg.TLS.ACME.Upstreams) > 0 {
+			acmeUpstreams = cfg.TLS.ACME.Upstreams
+		}
+		mgr, tlsCfg, err := newACMEManager(cfg, acmeUpstreams, logger)
 		if err != nil {
 			return nil, err
 		}
@@ -239,8 +248,8 @@ func (m *acmeManager) obtainCert() (*tls.Certificate, error) {
 		cfg.Certificate.KeyType = certcrypto.RSA2048
 	}
 
-	// Honor configured upstream DNS servers for ACME/Cloudflare HTTP traffic
-	// instead of relying on the host resolver (which might be blocked).
+	// Honor configured upstream DNS servers (ACME-specific override already resolved by config)
+	// for ACME/Cloudflare HTTP traffic instead of relying on the host resolver.
 	var httpClient *http.Client
 	var dnsChallengeOpts []dns01.ChallengeOption
 	if len(m.upstreams) > 0 {
@@ -260,12 +269,31 @@ func (m *acmeManager) obtainCert() (*tls.Certificate, error) {
 
 	cfCfg := cloudflare.NewDefaultConfig()
 	cfCfg.AuthToken = m.providerTok
+	cfCfg.TTL = m.cfg.TLS.ACME.Cloudflare.TTL
+	cfCfg.PropagationTimeout = m.cfg.TLS.ACME.Cloudflare.PropagationTimeout
+	cfCfg.PollingInterval = m.cfg.TLS.ACME.Cloudflare.PollingInterval
 	if httpClient != nil {
 		cfCfg.HTTPClient = httpClient
 	}
-	provider, err := cloudflare.NewDNSProviderConfig(cfCfg)
-	if err != nil {
-		return nil, fmt.Errorf("init cloudflare provider: %w", err)
+
+	var provider challenge.ProviderTimeout
+	// Prefer recursive propagation checks (skip authoritative) when requested.
+	if m.cfg.TLS.ACME.Cloudflare.SkipAuthNSCheck {
+		dnsChallengeOpts = append(dnsChallengeOpts,
+			dns01.DisableAuthoritativeNssPropagationRequirement(),
+			dns01.RecursiveNSsPropagationRequirement(),
+		)
+	}
+	if m.cfg.TLS.ACME.Cloudflare.ZoneID != "" {
+		provider, err = newCFZoneProvider(m.cfg.TLS.ACME.Cloudflare, m.providerTok, httpClient, m.logger)
+		if err != nil {
+			return nil, fmt.Errorf("init cloudflare provider with zone: %w", err)
+		}
+	} else {
+		provider, err = cloudflare.NewDNSProviderConfig(cfCfg)
+		if err != nil {
+			return nil, fmt.Errorf("init cloudflare provider: %w", err)
+		}
 	}
 
 	if err = client.Challenge.SetDNS01Provider(provider, dnsChallengeOpts...); err != nil {
@@ -360,6 +388,128 @@ func (m *acmeManager) maybeRenew() {
 func (m *acmeManager) Stop() {
 	close(m.stopCh)
 	m.wg.Wait()
+}
+
+// ------------------------------------------------------------------
+// Cloudflare DNS-01 provider with fixed ZoneID (bypasses zone discovery)
+// ------------------------------------------------------------------
+
+type cfZoneProvider struct {
+	zoneID      string
+	token       string
+	ttl         int
+	timeout     time.Duration
+	interval    time.Duration
+	httpClient  *http.Client
+	logger      *logging.Logger
+	recordIDs   map[string]string
+	recordIDsMu sync.Mutex
+}
+
+type cfRecordResponse struct {
+	Result struct {
+		ID string `json:"id"`
+	} `json:"result"`
+	Success bool            `json:"success"`
+	Errors  json.RawMessage `json:"errors"`
+}
+
+func newCFZoneProvider(cfg config.CFConfig, token string, httpClient *http.Client, logger *logging.Logger) (*cfZoneProvider, error) {
+	if token == "" {
+		return nil, errors.New("cloudflare: api token required")
+	}
+	if strings.TrimSpace(cfg.ZoneID) == "" {
+		return nil, errors.New("cloudflare: zone_id is required when using zone override")
+	}
+	client := httpClient
+	if client == nil {
+		client = &http.Client{Timeout: 30 * time.Second}
+	}
+	return &cfZoneProvider{
+		zoneID:     cfg.ZoneID,
+		token:      token,
+		ttl:        cfg.TTL,
+		timeout:    cfg.PropagationTimeout,
+		interval:   cfg.PollingInterval,
+		httpClient: client,
+		logger:     logger,
+		recordIDs:  make(map[string]string),
+	}, nil
+}
+
+// Present creates the TXT using the configured ZoneID, skipping zone discovery.
+func (p *cfZoneProvider) Present(domain, token, keyAuth string) error {
+	info := dns01.GetChallengeInfo(domain, keyAuth)
+	fqdn := dns01.UnFqdn(info.EffectiveFQDN)
+
+	body, _ := json.Marshal(map[string]any{
+		"type":    "TXT",
+		"name":    fqdn,
+		"content": `"` + info.Value + `"`,
+		"ttl":     p.ttl,
+		"proxied": false,
+	})
+
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost,
+		fmt.Sprintf("https://api.cloudflare.com/client/v4/zones/%s/dns_records", url.PathEscape(p.zoneID)),
+		bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", "Bearer "+p.token)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := p.httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	var parsed cfRecordResponse
+	if err := json.NewDecoder(resp.Body).Decode(&parsed); err != nil {
+		return fmt.Errorf("cloudflare: decode response: %w", err)
+	}
+	if !parsed.Success {
+		return fmt.Errorf("cloudflare: API create failed: status %d body %s", resp.StatusCode, string(parsed.Errors))
+	}
+
+	p.recordIDsMu.Lock()
+	p.recordIDs[token] = parsed.Result.ID
+	p.recordIDsMu.Unlock()
+	p.logger.Info("cloudflare: new record (zone_id override)", "fqdn", fqdn, "id", parsed.Result.ID)
+	return nil
+}
+
+// CleanUp deletes the TXT created in Present.
+func (p *cfZoneProvider) CleanUp(domain, token, keyAuth string) error {
+	p.recordIDsMu.Lock()
+	id := p.recordIDs[token]
+	p.recordIDsMu.Unlock()
+	if id == "" {
+		return nil // nothing to clean
+	}
+
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodDelete,
+		fmt.Sprintf("https://api.cloudflare.com/client/v4/zones/%s/dns_records/%s", url.PathEscape(p.zoneID), url.PathEscape(id)),
+		nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", "Bearer "+p.token)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := p.httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	// Ignore body; best-effort delete
+	return nil
+}
+
+// Timeout satisfies challenge.ProviderTimeout.
+func (p *cfZoneProvider) Timeout() (timeout, interval time.Duration) {
+	return p.timeout, p.interval
 }
 
 // acmeUser implements lego.User

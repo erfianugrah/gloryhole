@@ -37,16 +37,16 @@ type Config struct {
 
 // ServerConfig holds server-specific settings
 type ServerConfig struct {
-	ListenAddress      string   `yaml:"listen_address"`
-	WebUIAddress       string   `yaml:"web_ui_address"`
-	TCPEnabled         bool     `yaml:"tcp_enabled"`
-	UDPEnabled         bool     `yaml:"udp_enabled"`
-	EnableBlocklist    bool     `yaml:"enable_blocklist"`     // Kill-switch for ad-blocking
-	EnablePolicies     bool     `yaml:"enable_policies"`      // Kill-switch for policy engine
-	DecisionTrace      bool     `yaml:"decision_trace"`       // Capture block decision traces
-	CORSAllowedOrigins []string `yaml:"cors_allowed_origins"` // Allowed CORS origins (empty = none, "*" = all)
-	DotEnabled         bool     `yaml:"dot_enabled"`
-	DotAddress         string   `yaml:"dot_address"`
+	ListenAddress      string    `yaml:"listen_address"`
+	WebUIAddress       string    `yaml:"web_ui_address"`
+	TCPEnabled         bool      `yaml:"tcp_enabled"`
+	UDPEnabled         bool      `yaml:"udp_enabled"`
+	EnableBlocklist    bool      `yaml:"enable_blocklist"`     // Kill-switch for ad-blocking
+	EnablePolicies     bool      `yaml:"enable_policies"`      // Kill-switch for policy engine
+	DecisionTrace      bool      `yaml:"decision_trace"`       // Capture block decision traces
+	CORSAllowedOrigins []string  `yaml:"cors_allowed_origins"` // Allowed CORS origins (empty = none, "*" = all)
+	DotEnabled         bool      `yaml:"dot_enabled"`
+	DotAddress         string    `yaml:"dot_address"`
 	TLS                TLSConfig `yaml:"tls"`
 }
 
@@ -60,27 +60,33 @@ type TLSConfig struct {
 
 // AutocertConfig controls automatic certificate provisioning via ACME.
 type AutocertConfig struct {
-	Enabled        bool     `yaml:"enabled"`
-	Hosts          []string `yaml:"hosts"`
-	CacheDir       string   `yaml:"cache_dir"`
-	Email          string   `yaml:"email"`
-	HTTP01Address  string   `yaml:"http01_address"`
+	Enabled       bool     `yaml:"enabled"`
+	Hosts         []string `yaml:"hosts"`
+	CacheDir      string   `yaml:"cache_dir"`
+	Email         string   `yaml:"email"`
+	HTTP01Address string   `yaml:"http01_address"`
 }
 
 // ACMEConfig enables native DNS-01 issuance (Cloudflare-only for now).
 type ACMEConfig struct {
-	Enabled      bool          `yaml:"enabled"`
-	DNSProvider  string        `yaml:"dns_provider"` // "cloudflare"
-	Hosts        []string      `yaml:"hosts"`
-	CacheDir     string        `yaml:"cache_dir"`
-	Email        string        `yaml:"email"`
-	RenewBefore  time.Duration `yaml:"renew_before"` // duration before expiry to renew
-	Cloudflare   CFConfig      `yaml:"cloudflare"`
+	Enabled     bool          `yaml:"enabled"`
+	DNSProvider string        `yaml:"dns_provider"` // "cloudflare"
+	Hosts       []string      `yaml:"hosts"`
+	Upstreams   []string      `yaml:"upstream_dns_servers"` // optional: override ACME/CF resolver
+	CacheDir    string        `yaml:"cache_dir"`
+	Email       string        `yaml:"email"`
+	RenewBefore time.Duration `yaml:"renew_before"` // duration before expiry to renew
+	Cloudflare  CFConfig      `yaml:"cloudflare"`
 }
 
 // CFConfig holds Cloudflare credentials for DNS-01 (prefer env CF_DNS_API_TOKEN).
 type CFConfig struct {
-	APIToken string `yaml:"api_token"`
+	APIToken           string        `yaml:"api_token"`
+	ZoneID             string        `yaml:"zone_id"`                  // optional: skip zone discovery
+	TTL                int           `yaml:"ttl"`                      // TXT record TTL (min 120)
+	PropagationTimeout time.Duration `yaml:"propagation_timeout"`      // how long to wait for TXT to show up
+	PollingInterval    time.Duration `yaml:"polling_interval"`         // how often to poll during propagation
+	SkipAuthNSCheck    bool          `yaml:"skip_authoritative_check"` // if true, rely on recursive NS only
 }
 
 // AuthConfig controls static authentication for the API/UI layer.
@@ -321,6 +327,19 @@ func (c *Config) applyDefaults() {
 	if c.Server.TLS.ACME.RenewBefore == 0 {
 		c.Server.TLS.ACME.RenewBefore = 30 * 24 * time.Hour // 30 days
 	}
+	// ACME upstream default: inherit global upstreams if none specified
+	if len(c.Server.TLS.ACME.Upstreams) == 0 {
+		c.Server.TLS.ACME.Upstreams = append([]string{}, c.UpstreamDNSServers...)
+	}
+	if c.Server.TLS.ACME.Cloudflare.TTL == 0 {
+		c.Server.TLS.ACME.Cloudflare.TTL = 120
+	}
+	if c.Server.TLS.ACME.Cloudflare.PropagationTimeout == 0 {
+		c.Server.TLS.ACME.Cloudflare.PropagationTimeout = 2 * time.Minute
+	}
+	if c.Server.TLS.ACME.Cloudflare.PollingInterval == 0 {
+		c.Server.TLS.ACME.Cloudflare.PollingInterval = 2 * time.Second
+	}
 
 	// Kill-switch defaults: Enable both if neither is explicitly configured
 	// This provides backward compatibility (both enabled by default)
@@ -513,6 +532,15 @@ func (c *Config) Validate() error {
 			}
 			if c.Server.TLS.ACME.DNSProvider != "cloudflare" {
 				return fmt.Errorf("tls.acme.dns_provider must be 'cloudflare' (only provider supported)")
+			}
+			if c.Server.TLS.ACME.Cloudflare.TTL > 0 && c.Server.TLS.ACME.Cloudflare.TTL < 120 {
+				return fmt.Errorf("tls.acme.cloudflare.ttl must be >= 120 seconds")
+			}
+			if c.Server.TLS.ACME.Cloudflare.PropagationTimeout < 0 {
+				return fmt.Errorf("tls.acme.cloudflare.propagation_timeout must be >= 0")
+			}
+			if c.Server.TLS.ACME.Cloudflare.PollingInterval < 0 {
+				return fmt.Errorf("tls.acme.cloudflare.polling_interval must be >= 0")
 			}
 		}
 	}

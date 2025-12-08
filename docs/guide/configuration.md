@@ -96,15 +96,21 @@ server:
       email: ""                 # Contact email for ACME
       http01_address: ":80"     # Address to run the ACME HTTP-01 listener
 
-    acme:                        # Native DNS-01 (Cloudflare)
-      enabled: false
-      dns_provider: "cloudflare"
-      hosts: []                  # Hostnames for the cert (e.g., dot.example.com)
-      cache_dir: "./.cache/acme"
-      email: ""
-      renew_before: "720h"      # Renew 30 days before expiry
-      cloudflare:
+   acme:                        # Native DNS-01 (Cloudflare)
+     enabled: false
+     dns_provider: "cloudflare"
+     hosts: []                  # Hostnames for the cert (e.g., dot.example.com)
+     upstream_dns_servers: []   # Optional: override resolvers just for ACME/Cloudflare; inherit global if empty
+     cache_dir: "./.cache/acme"
+     email: ""
+     renew_before: "720h"      # Renew 30 days before expiry
+     cloudflare:
         api_token: ""           # Prefer env CF_DNS_API_TOKEN to avoid storing secrets in config
+        zone_id: ""             # Optional: skip zone discovery
+        ttl: 120
+        propagation_timeout: "2m"
+        polling_interval: "2s"
+        skip_authoritative_check: false
 ```
 
 ### Options
@@ -128,9 +134,15 @@ server:
 | `tls.acme.enabled` | bool | `false` | Enable native DNS-01 ACME (Cloudflare) |
 | `tls.acme.dns_provider` | string | `cloudflare` | DNS provider (only Cloudflare supported) |
 | `tls.acme.hosts` | []string | `[]` | Hostnames for the certificate |
+| `tls.acme.upstream_dns_servers` | []string | inherits global upstreams | Resolver list used only for ACME/Cloudflare HTTP + DNS |
 | `tls.acme.cache_dir` | string | `./.cache/acme` | Where to store issued certs/keys |
 | `tls.acme.renew_before` | duration | `720h` | Renew when expiring within this window |
 | `tls.acme.cloudflare.api_token` | string | "" | Cloudflare API token (prefer env CF_DNS_API_TOKEN) |
+| `tls.acme.cloudflare.zone_id` | string | "" | Optional: force zone ID (skips discovery) |
+| `tls.acme.cloudflare.ttl` | int | `120` | TXT TTL (must be ≥120) |
+| `tls.acme.cloudflare.propagation_timeout` | duration | `2m` | Max wait for TXT to propagate |
+| `tls.acme.cloudflare.polling_interval` | duration | `2s` | Poll interval during propagation |
+| `tls.acme.cloudflare.skip_authoritative_check` | bool | `false` | If true, propagation check uses recursive-only |
 
 ### DNS-over-TLS (DoT) with Cloudflare DNS-01 (native) — recommended
 

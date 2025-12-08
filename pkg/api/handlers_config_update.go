@@ -548,6 +548,9 @@ func parseTLSPayload(r *http.Request, current config.ServerConfig) (tlsPayload, 
 			if val := strings.TrimSpace(r.FormValue("acme_dns_provider")); val != "" {
 				acme.DNSProvider = val
 			}
+			if val := strings.TrimSpace(r.FormValue("acme_upstreams")); val != "" {
+				acme.Upstreams = splitList(val)
+			}
 			if val := strings.TrimSpace(r.FormValue("acme_hosts")); val != "" {
 				acme.Hosts = splitList(val)
 			}
@@ -561,6 +564,30 @@ func parseTLSPayload(r *http.Request, current config.ServerConfig) (tlsPayload, 
 				if d, err := time.ParseDuration(val); err == nil {
 					acme.RenewBefore = d
 				}
+			}
+			if val := strings.TrimSpace(r.FormValue("acme_cf_api_token")); val != "" {
+				acme.Cloudflare.APIToken = val
+			}
+			if val := strings.TrimSpace(r.FormValue("acme_cf_zone_id")); val != "" {
+				acme.Cloudflare.ZoneID = val
+			}
+			if val := strings.TrimSpace(r.FormValue("acme_cf_ttl")); val != "" {
+				if ttl, err := strconv.Atoi(val); err == nil {
+					acme.Cloudflare.TTL = ttl
+				}
+			}
+			if val := strings.TrimSpace(r.FormValue("acme_cf_propagation_timeout")); val != "" {
+				if d, err := time.ParseDuration(val); err == nil {
+					acme.Cloudflare.PropagationTimeout = d
+				}
+			}
+			if val := strings.TrimSpace(r.FormValue("acme_cf_polling_interval")); val != "" {
+				if d, err := time.ParseDuration(val); err == nil {
+					acme.Cloudflare.PollingInterval = d
+				}
+			}
+			if r.Form.Has("acme_cf_skip_auth_check") {
+				acme.Cloudflare.SkipAuthNSCheck = parseCheckbox(r.FormValue("acme_cf_skip_auth_check"))
 			}
 			req.ACME = &acme
 		}

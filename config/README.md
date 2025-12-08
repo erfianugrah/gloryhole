@@ -76,9 +76,15 @@ Minimal configuration for automated testing.
 - **web_ui_address**: HTTP API/UI endpoint (default: ":8080")
 - **tcp_enabled**: Enable TCP DNS queries (default: true)
 - **udp_enabled**: Enable UDP DNS queries (default: true)
+- **upstream_dns_servers**: Recursive resolvers used by the server (ACME can override with its own list)
 - **enable_blocklist**: Runtime kill-switch for blocklist evaluation (default: true)
 - **enable_policies**: Runtime kill-switch for the policy engine (default: true)
 - **decision_trace**: Include per-stage breadcrumbs for blocked queries (default: false)
+
+### TLS / ACME (DNS-01)
+- **server.tls.acme.upstream_dns_servers**: Optional resolver list used only for ACME/Cloudflare traffic (defaults to global upstreams).
+- **server.tls.acme.cloudflare.zone_id**: Skip zone discovery for faster/safer issuance.
+- **server.tls.acme.cloudflare.ttl / propagation_timeout / polling_interval / skip_authoritative_check**: Tune DNS-01 propagation behavior (e.g., skip auth NS if they’re unreachable).
 
 ### Upstreams
 List of upstream DNS servers to forward queries to.

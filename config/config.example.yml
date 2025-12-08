@@ -28,11 +28,17 @@ server:
       enabled: false
       dns_provider: "cloudflare"
       hosts: []                  # e.g., dot.example.com
+      upstream_dns_servers: []   # optional: override just for ACME/DNS-01 (defaults to global upstreams)
       cache_dir: "./.cache/acme"
       email: ""
       renew_before: "720h"      # Renew 30d before expiry
       cloudflare:
         api_token: ""           # Prefer env CF_DNS_API_TOKEN
+        zone_id: ""             # Optional: skip zone discovery when set
+        ttl: 120                # TXT record TTL (min 120)
+        propagation_timeout: "2m" # How long to wait for DNS-01 TXT to propagate
+        polling_interval: "2s"  # How often to poll during propagation
+        skip_authoritative_check: false # true = only check recursive resolvers (helpful if NS unreachable)
 
 # Authentication (API/UI protection)
 auth:
