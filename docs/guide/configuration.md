@@ -174,6 +174,29 @@ lego --email you@example.com --dns cloudflare --domains dot.example.com run
 PEMs will be in `~/.lego/certificates/`; reference them in `server.tls.cert_file/key_file`.
 
 > Remember: keep the DoT hostname grey-clouded so TCP 853 reaches your host; DNS-01 only proves domain control—it doesn’t proxy DoT traffic.
+
+**Using lego (single static binary, good for CI/cron)**
+
+```bash
+export CF_DNS_API_TOKEN=<ZONE_DNS_EDIT_TOKEN>
+lego --email you@example.com --dns cloudflare --domains dot.example.com run
+
+# renew (e.g., cron daily, renew if <=30 days left)
+lego --email you@example.com --dns cloudflare --domains dot.example.com renew --days 30
+
+# after renew, restart Gloryhole so it reloads the PEMs
+systemctl restart gloryhole
+```
+
+Point Gloryhole at the issued certs:
+```yaml
+server:
+  dot_enabled: true
+  dot_address: ":853"
+  tls:
+    cert_file: "/path/to/.lego/certificates/dot.example.com.crt"
+    key_file: "/path/to/.lego/certificates/dot.example.com.key"
+```
 | `enable_blocklist` | bool | `true` | Runtime kill switch for blocklists (used by Web UI/API). |
 | `enable_policies` | bool | `true` | Runtime kill switch for the policy engine. |
 | `decision_trace` | bool | `false` | Capture multi-stage breadcrumbs for blocked queries (higher storage/log volume) |
