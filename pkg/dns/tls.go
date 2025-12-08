@@ -245,9 +245,12 @@ func (m *acmeManager) obtainCert() (*tls.Certificate, error) {
 	var dnsChallengeOpts []dns01.ChallengeOption
 	if len(m.upstreams) > 0 {
 		res := resolver.NewStrict(m.upstreams, m.logger)
+		m.logger.Info("ACME using strict upstream resolvers", "upstreams", m.upstreams)
 		httpClient = res.NewHTTPClient(60 * time.Second)
 		cfg.HTTPClient = httpClient
 		dnsChallengeOpts = append(dnsChallengeOpts, dns01.AddRecursiveNameservers(m.upstreams))
+	} else {
+		m.logger.Warn("ACME using system resolver (no upstreams configured); API/DNS lookups may be blocked")
 	}
 
 	client, err := lego.NewClient(cfg)
