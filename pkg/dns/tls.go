@@ -23,6 +23,7 @@ import (
 
 	"github.com/go-acme/lego/v4/certcrypto"
 	"github.com/go-acme/lego/v4/certificate"
+	"github.com/go-acme/lego/v4/challenge/dns01"
 	"github.com/go-acme/lego/v4/lego"
 	"github.com/go-acme/lego/v4/providers/dns/cloudflare"
 	"github.com/go-acme/lego/v4/registration"
@@ -240,9 +241,11 @@ func (m *acmeManager) obtainCert() (*tls.Certificate, error) {
 
 	// Honor configured upstream DNS servers for ACME/Cloudflare HTTP traffic
 	// instead of relying on the host resolver (which might be blocked).
+	var dnsChallengeOpts []dns01.ChallengeOption
 	if len(m.upstreams) > 0 {
 		res := resolver.New(m.upstreams, m.logger)
 		cfg.HTTPClient = res.NewHTTPClient(60 * time.Second)
+		dnsChallengeOpts = append(dnsChallengeOpts, dns01.AddRecursiveNameservers(m.upstreams))
 	}
 
 	client, err := lego.NewClient(cfg)
@@ -257,7 +260,7 @@ func (m *acmeManager) obtainCert() (*tls.Certificate, error) {
 		return nil, fmt.Errorf("init cloudflare provider: %w", err)
 	}
 
-	if err = client.Challenge.SetDNS01Provider(provider); err != nil {
+	if err = client.Challenge.SetDNS01Provider(provider, dnsChallengeOpts...); err != nil {
 		return nil, fmt.Errorf("set dns01 provider: %w", err)
 	}
 
