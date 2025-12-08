@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"glory-hole/pkg/config"
 	"glory-hole/pkg/policy"
 )
 
@@ -198,6 +199,23 @@ func (s *Server) handleAddPolicy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Persist to config file if available
+	if err := s.persistPoliciesConfig(func(cfg *config.Config) error {
+		cfg.Policy.Rules = append(cfg.Policy.Rules, config.PolicyRuleEntry{
+			Name:       rule.Name,
+			Logic:      rule.Logic,
+			Action:     rule.Action,
+			ActionData: rule.ActionData,
+			Enabled:    rule.Enabled,
+		})
+		return nil
+	}); err != nil {
+		_ = s.policyEngine.RemoveRule(rule.Name) // rollback in-memory to stay in sync
+		s.logger.Error("Failed to persist new policy to config", "error", err)
+		s.writeError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to save policy to config: %v", err))
+		return
+	}
+
 	s.logger.Info("Policy added via API",
 		"name", req.Name,
 		"action", req.Action,
@@ -314,6 +332,24 @@ func (s *Server) handleUpdatePolicy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if err := s.persistPoliciesConfig(func(cfg *config.Config) error {
+		if id >= len(cfg.Policy.Rules) {
+			return fmt.Errorf("policy index out of range in config")
+		}
+		cfg.Policy.Rules[id] = config.PolicyRuleEntry{
+			Name:       newRule.Name,
+			Logic:      newRule.Logic,
+			Action:     newRule.Action,
+			ActionData: newRule.ActionData,
+			Enabled:    newRule.Enabled,
+		}
+		return nil
+	}); err != nil {
+		s.logger.Error("Failed to persist updated policy to config", "error", err, "id", id, "name", newRule.Name)
+		s.writeError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to save policy to config: %v", err))
+		return
+	}
+
 	s.logger.Info("Policy updated via API",
 		"id", id,
 		"name", req.Name,
@@ -352,7 +388,20 @@ func (s *Server) handleDeletePolicy(w http.ResponseWriter, r *http.Request) {
 
 	rule := rules[id]
 
-	// Remove the rule
+	// Persist removal first so config file matches desired state
+	if err := s.persistPoliciesConfig(func(cfg *config.Config) error {
+		if id >= len(cfg.Policy.Rules) {
+			return fmt.Errorf("policy index out of range in config")
+		}
+		cfg.Policy.Rules = append(cfg.Policy.Rules[:id], cfg.Policy.Rules[id+1:]...)
+		return nil
+	}); err != nil {
+		s.logger.Error("Failed to persist policy deletion to config", "error", err, "id", id, "name", rule.Name)
+		s.writeError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to save policy removal: %v", err))
+		return
+	}
+
+	// Remove from in-memory engine
 	if !s.policyEngine.RemoveRule(rule.Name) {
 		s.writeError(w, http.StatusInternalServerError, "Failed to remove policy")
 		return
@@ -367,6 +416,38 @@ func (s *Server) handleDeletePolicy(w http.ResponseWriter, r *http.Request) {
 		"id":      id,
 		"name":    rule.Name,
 	})
+}
+
+// persistPoliciesConfig safely applies a mutation to the Config and writes it to disk if possible.
+func (s *Server) persistPoliciesConfig(mutator func(cfg *config.Config) error) error {
+	if s.configPath == "" {
+		// In tests or ephemeral runs without a config file, keep policies in-memory only.
+		return nil
+	}
+	cfg := s.currentConfig()
+	if cfg == nil {
+		return fmt.Errorf("configuration not available")
+	}
+
+	cloned, err := cfg.Clone()
+	if err != nil {
+		return fmt.Errorf("failed to clone config: %w", err)
+	}
+
+	if err := mutator(cloned); err != nil {
+		return err
+	}
+
+	if err := config.Save(s.configPath, cloned); err != nil {
+		return fmt.Errorf("failed to save config: %w", err)
+	}
+
+	// Update in-memory snapshot when watcher is not running
+	if s.configWatcher == nil {
+		s.configSnapshot = cloned
+	}
+
+	return nil
 }
 
 // handleExportPolicies returns the current policies as a downloadable JSON file.
