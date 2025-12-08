@@ -112,6 +112,28 @@ server:
 | `tls.autocert.cache_dir` | string | `./.cache/autocert` | Cache location for issued certs |
 | `tls.autocert.http01_address` | string | `:80` | Address to serve ACME HTTP-01 challenges |
 | `tls.autocert.email` | string | "" | Contact email for ACME | 
+
+### Android Private DNS (DoT) Quickstart
+
+1. **DNS hostname**: Use a dedicated FQDN (e.g., `dot.erfi.dev`) and disable Cloudflare proxy (grey-cloud) so TCP:853 can reach your host directly. Cloudflare orange-proxy only carries HTTP(S) and will not pass DoT.
+2. **Ports**: Open TCP 853 to the Gloryhole host. For ACME HTTP-01, also expose TCP 80 (temporarily is fine) on the same hostname. If you cannot open 80, use manual certs or DNS-01 via an external tool, then point `tls.cert_file`/`tls.key_file` to the issued PEMs.
+3. **Config snippet**:
+   ```yaml
+   server:
+     dot_enabled: true
+     dot_address: ":853"
+     tls:
+       autocert:
+         enabled: true
+         hosts: ["dot.erfi.dev"]
+         cache_dir: "./.cache/autocert"
+         http01_address: ":80"
+   ```
+4. **Restart Gloryhole** to fetch certs and start DoT.
+5. **Android setup**: Settings → Network & internet → Private DNS → Private DNS provider hostname → `dot.erfi.dev` → Save. Android will verify the TLS cert; self-signed certs will fail.
+6. **Verification**: From another host: `kdig @dot.erfi.dev +tls-ca +tls-host=dot.erfi.dev example.com` should return answers. You should see DoT start logs and queries in Gloryhole.
+
+> Tip: Keep DoH behind your existing Cloudflare proxy (e.g., `https://gloryhole.erfi.dev/dns-query`) while serving DoT on a separate grey-cloud hostname. This avoids exposing your UI directly and keeps HTTP/S traffic cached/accelerated by Cloudflare, while DoT flows directly.
 | `enable_blocklist` | bool | `true` | Runtime kill switch for blocklists (used by Web UI/API). |
 | `enable_policies` | bool | `true` | Runtime kill switch for the policy engine. |
 | `decision_trace` | bool | `false` | Capture multi-stage breadcrumbs for blocked queries (higher storage/log volume) |
