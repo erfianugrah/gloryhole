@@ -61,7 +61,7 @@ func NewServer(cfg *config.Config, handler *Handler, logger *logging.Logger, met
 	}
 
 	// Prepare TLS resources for DoT (if enabled)
-	res, err := buildTLSResources(&cfg.Server, logger)
+	res, err := buildTLSResources(&cfg.Server, cfg.UpstreamDNSServers, logger)
 	if err != nil {
 		logger.Error("Failed to prepare TLS for DoT", "error", err)
 	}
@@ -178,7 +178,6 @@ func (s *Server) Start(ctx context.Context) error {
 			}
 		}()
 	}
-
 
 	s.logger.Info("DNS server started",
 		"address", s.cfg.Server.ListenAddress,

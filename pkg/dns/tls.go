@@ -19,6 +19,7 @@ import (
 
 	"glory-hole/pkg/config"
 	"glory-hole/pkg/logging"
+	"glory-hole/pkg/resolver"
 
 	"github.com/go-acme/lego/v4/certcrypto"
 	"github.com/go-acme/lego/v4/certificate"
@@ -35,7 +36,7 @@ type tlsResources struct {
 }
 
 // buildTLSResources prepares TLS for DoT using one of: manual cert, HTTP-01 autocert, or native DNS-01 ACME (Cloudflare).
-func buildTLSResources(cfg *config.ServerConfig, logger *logging.Logger) (*tlsResources, error) {
+func buildTLSResources(cfg *config.ServerConfig, upstreams []string, logger *logging.Logger) (*tlsResources, error) {
 	if cfg == nil || !cfg.DotEnabled {
 		return &tlsResources{}, nil
 	}
@@ -51,7 +52,7 @@ func buildTLSResources(cfg *config.ServerConfig, logger *logging.Logger) (*tlsRe
 
 	// Native DNS-01 via Cloudflare
 	if cfg.TLS.ACME.Enabled {
-		mgr, tlsCfg, err := newACMEManager(cfg, logger)
+		mgr, tlsCfg, err := newACMEManager(cfg, upstreams, logger)
 		if err != nil {
 			return nil, err
 		}
@@ -135,6 +136,7 @@ func (m *autocertManagerWrapper) HTTPHandler() http.Handler {
 
 type acmeManager struct {
 	cfg         *config.ServerConfig
+	upstreams   []string
 	logger      *logging.Logger
 	certStore   atomic.Value // *tls.Certificate
 	stopCh      chan struct{}
@@ -147,7 +149,7 @@ type acmeManager struct {
 	clientMu    sync.Mutex
 }
 
-func newACMEManager(cfg *config.ServerConfig, logger *logging.Logger) (*acmeManager, *tls.Config, error) {
+func newACMEManager(cfg *config.ServerConfig, upstreams []string, logger *logging.Logger) (*acmeManager, *tls.Config, error) {
 	token := os.Getenv("CF_DNS_API_TOKEN")
 	if cfg.TLS.ACME.Cloudflare.APIToken != "" {
 		token = cfg.TLS.ACME.Cloudflare.APIToken
@@ -158,6 +160,7 @@ func newACMEManager(cfg *config.ServerConfig, logger *logging.Logger) (*acmeMana
 
 	mgr := &acmeManager{
 		cfg:         cfg,
+		upstreams:   upstreams,
 		logger:      logger,
 		stopCh:      make(chan struct{}),
 		renewBefore: cfg.TLS.ACME.RenewBefore,
@@ -233,6 +236,13 @@ func (m *acmeManager) obtainCert() (*tls.Certificate, error) {
 	cfg := lego.NewConfig(user)
 	if m.email != "" {
 		cfg.Certificate.KeyType = certcrypto.RSA2048
+	}
+
+	// Honor configured upstream DNS servers for ACME/Cloudflare HTTP traffic
+	// instead of relying on the host resolver (which might be blocked).
+	if len(m.upstreams) > 0 {
+		res := resolver.New(m.upstreams, m.logger)
+		cfg.HTTPClient = res.NewHTTPClient(60 * time.Second)
 	}
 
 	client, err := lego.NewClient(cfg)
