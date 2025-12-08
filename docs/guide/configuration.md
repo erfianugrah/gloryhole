@@ -81,6 +81,18 @@ server:
   tcp_enabled: true               # Enable DNS over TCP
   udp_enabled: true               # Enable DNS over UDP
   web_ui_address: ":8080"         # Web UI and API bind address
+  dot_enabled: false              # Enable DNS-over-TLS (DoT)
+  dot_address: ":853"            # DoT bind address
+
+  tls:
+    cert_file: ""                # PEM cert for DoT (if not using autocert)
+    key_file: ""                 # PEM key for DoT
+    autocert:
+      enabled: false             # Obtain certs automatically via ACME HTTP-01
+      hosts: []                  # Required: list of hostnames for the cert
+      cache_dir: "./.cache/autocert"
+      email: ""                 # Contact email for ACME
+      http01_address: ":80"     # Address to run the ACME HTTP-01 listener
 ```
 
 ### Options
@@ -91,6 +103,15 @@ server:
 | `tcp_enabled` | bool | `true` | Enable TCP DNS queries (RFC requirement) |
 | `udp_enabled` | bool | `true` | Enable UDP DNS queries (most common) |
 | `web_ui_address` | string | `:8080` | Web UI and REST API address |
+| `dot_enabled` | bool | `false` | Enable DNS-over-TLS listener (Android Private DNS needs this) |
+| `dot_address` | string | `:853` | DoT bind address |
+| `tls.cert_file` | string | "" | PEM certificate for DoT (required if autocert disabled) |
+| `tls.key_file` | string | "" | PEM private key for DoT |
+| `tls.autocert.enabled` | bool | `false` | Enable automatic ACME certificate provisioning |
+| `tls.autocert.hosts` | []string | `[]` | Hostnames for the certificate (required when enabled) |
+| `tls.autocert.cache_dir` | string | `./.cache/autocert` | Cache location for issued certs |
+| `tls.autocert.http01_address` | string | `:80` | Address to serve ACME HTTP-01 challenges |
+| `tls.autocert.email` | string | "" | Contact email for ACME | 
 | `enable_blocklist` | bool | `true` | Runtime kill switch for blocklists (used by Web UI/API). |
 | `enable_policies` | bool | `true` | Runtime kill switch for the policy engine. |
 | `decision_trace` | bool | `false` | Capture multi-stage breadcrumbs for blocked queries (higher storage/log volume) |

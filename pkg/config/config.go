@@ -45,6 +45,25 @@ type ServerConfig struct {
 	EnablePolicies     bool     `yaml:"enable_policies"`      // Kill-switch for policy engine
 	DecisionTrace      bool     `yaml:"decision_trace"`       // Capture block decision traces
 	CORSAllowedOrigins []string `yaml:"cors_allowed_origins"` // Allowed CORS origins (empty = none, "*" = all)
+	DotEnabled         bool     `yaml:"dot_enabled"`
+	DotAddress         string   `yaml:"dot_address"`
+	TLS                TLSConfig `yaml:"tls"`
+}
+
+// TLSConfig holds TLS settings for DoT (and optional future listeners).
+type TLSConfig struct {
+	CertFile string         `yaml:"cert_file"`
+	KeyFile  string         `yaml:"key_file"`
+	Autocert AutocertConfig `yaml:"autocert"`
+}
+
+// AutocertConfig controls automatic certificate provisioning via ACME.
+type AutocertConfig struct {
+	Enabled        bool     `yaml:"enabled"`
+	Hosts          []string `yaml:"hosts"`
+	CacheDir       string   `yaml:"cache_dir"`
+	Email          string   `yaml:"email"`
+	HTTP01Address  string   `yaml:"http01_address"`
 }
 
 // AuthConfig controls static authentication for the API/UI layer.
@@ -273,6 +292,12 @@ func (c *Config) applyDefaults() {
 	if c.Server.WebUIAddress == "" {
 		c.Server.WebUIAddress = ":8080"
 	}
+	if c.Server.DotAddress == "" {
+		c.Server.DotAddress = ":853"
+	}
+	if c.Server.TLS.Autocert.HTTP01Address == "" {
+		c.Server.TLS.Autocert.HTTP01Address = ":80"
+	}
 
 	// Kill-switch defaults: Enable both if neither is explicitly configured
 	// This provides backward compatibility (both enabled by default)
@@ -432,6 +457,32 @@ func (c *Config) Validate() error {
 	}
 	if !c.Server.TCPEnabled && !c.Server.UDPEnabled {
 		return fmt.Errorf("at least one of TCP or UDP must be enabled")
+	}
+
+	if c.Server.DotEnabled {
+		if strings.TrimSpace(c.Server.DotAddress) == "" {
+			return fmt.Errorf("server.dot_address cannot be empty when DoT is enabled")
+		}
+
+		certSet := strings.TrimSpace(c.Server.TLS.CertFile) != "" || strings.TrimSpace(c.Server.TLS.KeyFile) != ""
+		if certSet {
+			if strings.TrimSpace(c.Server.TLS.CertFile) == "" || strings.TrimSpace(c.Server.TLS.KeyFile) == "" {
+				return fmt.Errorf("tls.cert_file and tls.key_file must both be set when providing manual certificates")
+			}
+		}
+
+		if c.Server.TLS.Autocert.Enabled {
+			if len(c.Server.TLS.Autocert.Hosts) == 0 {
+				return fmt.Errorf("tls.autocert.hosts must be set when autocert is enabled")
+			}
+			if strings.TrimSpace(c.Server.TLS.Autocert.HTTP01Address) == "" {
+				return fmt.Errorf("tls.autocert.http01_address must be set when autocert is enabled")
+			}
+		}
+
+		if !certSet && !c.Server.TLS.Autocert.Enabled {
+			return fmt.Errorf("DoT requires either TLS cert/key or autocert to be configured")
+		}
 	}
 
 	// Validate upstream servers

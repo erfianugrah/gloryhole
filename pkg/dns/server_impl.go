@@ -2,8 +2,10 @@ package dns
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"net"
+	"net/http"
 	"sync"
 	"time"
 
@@ -20,14 +22,17 @@ import (
 
 // Server is the DNS server
 type Server struct {
-	cfg       *config.Config
-	handler   *Handler
-	logger    *logging.Logger
-	metrics   *telemetry.Metrics
-	udpServer *dns.Server
-	tcpServer *dns.Server
-	running   bool
-	mu        sync.RWMutex
+	cfg            *config.Config
+	handler        *Handler
+	logger         *logging.Logger
+	metrics        *telemetry.Metrics
+	udpServer      *dns.Server
+	tcpServer      *dns.Server
+	dotServer      *dns.Server
+	acmeHTTPServer *http.Server
+	tlsConfig      *tls.Config
+	running        bool
+	mu             sync.RWMutex
 }
 
 // NewServer creates a new DNS server
@@ -54,11 +59,19 @@ func NewServer(cfg *config.Config, handler *Handler, logger *logging.Logger, met
 		handler.SetForwarder(fwd)
 	}
 
+	// Prepare TLS config for DoT (if enabled)
+	tlsCfg, acmeHTTP, err := buildTLSConfig(&cfg.Server, logger)
+	if err != nil {
+		logger.Error("Failed to prepare TLS for DoT", "error", err)
+	}
+
 	return &Server{
-		cfg:     cfg,
-		handler: handler,
-		logger:  logger,
-		metrics: metrics,
+		cfg:            cfg,
+		handler:        handler,
+		logger:         logger,
+		metrics:        metrics,
+		tlsConfig:      tlsCfg,
+		acmeHTTPServer: acmeHTTP,
 	}
 }
 
@@ -98,6 +111,16 @@ func (s *Server) Start(ctx context.Context) error {
 		}
 	}
 
+	// Create DoT server if enabled and TLS is available
+	if s.cfg.Server.DotEnabled && s.tlsConfig != nil {
+		s.dotServer = &dns.Server{
+			Addr:      s.cfg.Server.DotAddress,
+			Net:       "tcp-tls",
+			Handler:   dns.HandlerFunc(wrappedHandler.serveDNS),
+			TLSConfig: s.tlsConfig,
+		}
+	}
+
 	// Unlock before starting goroutines
 	s.mu.Unlock()
 
@@ -123,6 +146,29 @@ func (s *Server) Start(ctx context.Context) error {
 			s.mu.RUnlock()
 			if err := tcpSrv.ListenAndServe(); err != nil {
 				errChan <- fmt.Errorf("TCP server failed: %w", err)
+			}
+		}()
+	}
+
+	// Start DoT server
+	if s.dotServer != nil {
+		go func() {
+			s.logger.Info("Starting DoT server", "address", s.cfg.Server.DotAddress)
+			s.mu.RLock()
+			dotSrv := s.dotServer
+			s.mu.RUnlock()
+			if err := dotSrv.ListenAndServe(); err != nil {
+				errChan <- fmt.Errorf("DoT server failed: %w", err)
+			}
+		}()
+	}
+
+	// Start ACME HTTP-01 challenge server if configured
+	if s.acmeHTTPServer != nil {
+		go func() {
+			s.logger.Info("Starting ACME HTTP-01 challenge server", "address", s.acmeHTTPServer.Addr)
+			if err := s.acmeHTTPServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+				errChan <- fmt.Errorf("ACME HTTP server failed: %w", err)
 			}
 		}()
 	}
@@ -168,6 +214,20 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	if s.tcpServer != nil {
 		if err := s.tcpServer.ShutdownContext(ctx); err != nil {
 			errs = append(errs, fmt.Errorf("TCP shutdown: %w", err))
+		}
+	}
+
+	// Shutdown DoT server
+	if s.dotServer != nil {
+		if err := s.dotServer.ShutdownContext(ctx); err != nil {
+			errs = append(errs, fmt.Errorf("DoT shutdown: %w", err))
+		}
+	}
+
+	// Shutdown ACME HTTP server
+	if s.acmeHTTPServer != nil {
+		if err := s.acmeHTTPServer.Shutdown(ctx); err != nil {
+			errs = append(errs, fmt.Errorf("ACME HTTP shutdown: %w", err))
 		}
 	}
 

@@ -6,12 +6,24 @@ server:
   tcp_enabled: true
   udp_enabled: true
   web_ui_address: ":8080"
+  dot_enabled: false             # Enable DNS-over-TLS (DoT) listener
+  dot_address: ":853"           # DoT listen address
   enable_blocklist: true  # Runtime kill-switch for blocklists (API/UI toggle)
   enable_policies: true   # Runtime kill-switch for policy engine (API/UI toggle)
   decision_trace: false   # Capture detailed block breadcrumbs (higher storage cost)
   cors_allowed_origins: [] # Allowed CORS origins (empty = no cross-origin, ["*"] = all origins)
     # - "https://admin.example.com"
     # - "http://localhost:3000"
+
+  tls:
+    cert_file: ""               # PEM certificate for DoT (required if autocert disabled)
+    key_file: ""                # PEM key for DoT
+    autocert:
+      enabled: false             # Obtain certs automatically via ACME (HTTP-01)
+      hosts: []                  # Hostnames for the certificate (required)
+      cache_dir: "./.cache/autocert" # Where to store cert cache
+      email: ""                 # Contact email for ACME
+      http01_address: ":80"     # Address for ACME HTTP-01 challenge server
 
 # Authentication (API/UI protection)
 auth:
