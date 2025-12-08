@@ -244,7 +244,7 @@ func (m *acmeManager) obtainCert() (*tls.Certificate, error) {
 	var httpClient *http.Client
 	var dnsChallengeOpts []dns01.ChallengeOption
 	if len(m.upstreams) > 0 {
-		res := resolver.New(m.upstreams, m.logger)
+		res := resolver.NewStrict(m.upstreams, m.logger)
 		httpClient = res.NewHTTPClient(60 * time.Second)
 		cfg.HTTPClient = httpClient
 		dnsChallengeOpts = append(dnsChallengeOpts, dns01.AddRecursiveNameservers(m.upstreams))

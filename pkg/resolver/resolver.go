@@ -19,6 +19,7 @@ type Resolver struct {
 	logger    *logging.Logger
 	dialer    *net.Dialer
 	upstreams []string
+	strict    bool // when true, never fall back to system resolver
 }
 
 // New creates a new DNS resolver that uses the specified upstream DNS servers.
@@ -28,15 +29,26 @@ type Resolver struct {
 //
 //	resolver := resolver.New([]string{"1.1.1.1:53", "8.8.8.8:53"}, logger)
 func New(upstreams []string, logger *logging.Logger) *Resolver {
+	return newWithOptions(upstreams, logger, false)
+}
+
+// NewStrict creates a resolver that will NOT fall back to the system resolver when upstreams fail.
+// This is useful for environments where the host resolver is blocked or untrusted (e.g., ACME/Cloudflare).
+func NewStrict(upstreams []string, logger *logging.Logger) *Resolver {
+	return newWithOptions(upstreams, logger, true)
+}
+
+func newWithOptions(upstreams []string, logger *logging.Logger, strict bool) *Resolver {
 	if len(upstreams) == 0 {
 		logger.Warn("No upstream DNS servers configured, using system default resolver")
 	} else {
-		logger.Info("DNS resolver initialized", "upstreams", upstreams)
+		logger.Info("DNS resolver initialized", "upstreams", upstreams, "strict", strict)
 	}
 
 	return &Resolver{
 		upstreams: upstreams,
 		logger:    logger,
+		strict:    strict,
 		dialer: &net.Dialer{
 			Timeout:   30 * time.Second,
 			KeepAlive: 30 * time.Second,
@@ -82,7 +94,11 @@ func (r *Resolver) LookupIP(ctx context.Context, network, host string) ([]net.IP
 		return ips, nil
 	}
 
-	// All upstreams failed; fall back to system resolver as a last resort.
+	// All upstreams failed
+	if r.strict && len(r.upstreams) > 0 {
+		return nil, fmt.Errorf("failed to resolve %s via configured upstreams (strict mode): %w", host, lastErr)
+	}
+
 	r.logger.Warn("All upstream DNS servers failed, falling back to system resolver",
 		"host", host,
 		"attempts", len(r.upstreams),
