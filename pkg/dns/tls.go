@@ -463,7 +463,11 @@ func (p *cfZoneProvider) Present(domain, token, keyAuth string) error {
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if cerr := resp.Body.Close(); cerr != nil {
+			p.logger.Warn("cloudflare: close response body (present)", "error", cerr)
+		}
+	}()
 
 	var parsed cfRecordResponse
 	if err := json.NewDecoder(resp.Body).Decode(&parsed); err != nil {
@@ -502,7 +506,11 @@ func (p *cfZoneProvider) CleanUp(domain, token, keyAuth string) error {
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if cerr := resp.Body.Close(); cerr != nil {
+			p.logger.Warn("cloudflare: close response body (cleanup)", "error", cerr)
+		}
+	}()
 	// Ignore body; best-effort delete
 	return nil
 }
