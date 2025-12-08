@@ -3,9 +3,30 @@ server:
   listen_address: "127.0.0.1:5354"
   udp_enabled: true
   tcp_enabled: true
+  dot_enabled: false
+  dot_address: ":853"
   enable_blocklist: true
   enable_policies: true
   decision_trace: true  # Enable for test visibility
+
+  tls:
+    cert_file: ""
+    key_file: ""
+    autocert:
+      enabled: false
+      hosts: []
+      cache_dir: "./.cache/autocert"
+      email: ""
+      http01_address: ":80"
+    acme:
+      enabled: false
+      dns_provider: "cloudflare"
+      hosts: []
+      cache_dir: "./.cache/acme"
+      email: ""
+      renew_before: "720h"
+      cloudflare:
+        api_token: ""
 
 upstream_dns_servers:
   - "10.0.10.2:53"
