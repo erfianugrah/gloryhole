@@ -39,7 +39,7 @@ var (
 	apiAddress     = flag.String("api-address", "", "Override API address for health check (default: from config)")
 
 	// Build-time variables set via ldflags
-	// Example: go build -ldflags "-X main.version=0.7.2 -X main.buildTime=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+	// Example: go build -ldflags "-X main.version=$(git describe --tags) -X main.buildTime=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 	version   = "dev"     // Set via -ldflags "-X main.version=x.y.z"
 	buildTime = "unknown" // Set via -ldflags "-X main.buildTime=$(date)"
 	gitCommit = "unknown" // Set via -ldflags "-X main.gitCommit=$(git rev-parse --short HEAD)"
@@ -461,9 +461,9 @@ func main() {
 		)
 	}
 
-	// Initialize policy engine if configured
+	// Initialize policy engine if configured (even if no rules yet so UI/API can add later)
 	var policyEngine *policy.Engine
-	if cfg.Policy.Enabled && len(cfg.Policy.Rules) > 0 {
+	if cfg.Policy.Enabled {
 		logger.Info("Initializing policy engine", "rules", len(cfg.Policy.Rules))
 		policyEngine = policy.NewEngine()
 
@@ -495,6 +495,8 @@ func main() {
 		logger.Info("Policy engine initialized",
 			"total_rules", policyEngine.Count(),
 		)
+	} else if len(cfg.Policy.Rules) > 0 {
+		logger.Warn("Policy rules configured but policy engine disabled; rules will be ignored", "rules", len(cfg.Policy.Rules))
 	}
 
 	// Initialize conditional forwarding rule evaluator
@@ -580,26 +582,41 @@ func main() {
 			}
 		}
 
-		// Hot-reload policy engine if rules changed
-		if policyEngine != nil && !equalPolicyConfig(&cfg.Policy, &newCfg.Policy) {
-			logger.Info("Policy configuration changed, triggering reload")
-			policyEngine.Clear()
-			for _, entry := range newCfg.Policy.Rules {
-				rule := &policy.Rule{
-					Name:       entry.Name,
-					Logic:      entry.Logic,
-					Action:     entry.Action,
-					ActionData: entry.ActionData,
-					Enabled:    entry.Enabled,
+		// Hot-reload policy engine when config toggles or rules change
+		if !equalPolicyConfig(&cfg.Policy, &newCfg.Policy) {
+			if newCfg.Policy.Enabled {
+				if policyEngine == nil {
+					logger.Info("Policy engine enabled; creating new engine")
+					policyEngine = policy.NewEngine()
+				} else {
+					policyEngine.Clear()
 				}
-				if err := policyEngine.AddRule(rule); err != nil {
-					logger.Error("Failed to add policy rule during hot-reload",
-						"name", entry.Name,
-						"error", err,
-					)
+
+				for _, entry := range newCfg.Policy.Rules {
+					rule := &policy.Rule{
+						Name:       entry.Name,
+						Logic:      entry.Logic,
+						Action:     entry.Action,
+						ActionData: entry.ActionData,
+						Enabled:    entry.Enabled,
+					}
+					if err := policyEngine.AddRule(rule); err != nil {
+						logger.Error("Failed to add policy rule during hot-reload",
+							"name", entry.Name,
+							"error", err,
+						)
+					}
 				}
+
+				handler.SetPolicyEngine(policyEngine)
+				apiServer.SetPolicyEngine(policyEngine)
+				logger.Info("Policy engine reloaded", "total_rules", policyEngine.Count())
+			} else {
+				logger.Info("Policy engine disabled via config")
+				policyEngine = nil
+				handler.SetPolicyEngine(nil)
+				apiServer.SetPolicyEngine(nil)
 			}
-			logger.Info("Policy engine reloaded", "total_rules", policyEngine.Count())
 		}
 
 		if !equalCacheConfig(&cfg.Cache, &newCfg.Cache) {
@@ -737,6 +754,9 @@ func main() {
 				apiServer.SetHTTPRateLimiter(nil)
 				logger.Info("Rate limiter disabled")
 			}
+
+			// Refresh trusted proxy CIDRs for HTTP rate limiting / real client IP extraction
+			apiServer.SetTrustedProxies(newCfg.RateLimit.TrustedProxyCIDRs)
 		}
 
 		// Hot-reload local records if changed
@@ -993,7 +1013,57 @@ func equalRateLimitConfig(a, b *config.RateLimitConfig) bool {
 		a.Action == b.Action &&
 		a.LogViolations == b.LogViolations &&
 		a.CleanupInterval == b.CleanupInterval &&
-		a.MaxTrackedClients == b.MaxTrackedClients
+		a.MaxTrackedClients == b.MaxTrackedClients &&
+		equalStringSlice(a.TrustedProxyCIDRs, b.TrustedProxyCIDRs) &&
+		equalRateLimitOverrides(a.Overrides, b.Overrides)
+}
+
+func equalRateLimitOverrides(a, b []config.RateLimitOverride) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i].Name != b[i].Name {
+			return false
+		}
+		if !equalStringSlice(a[i].Clients, b[i].Clients) {
+			return false
+		}
+		if !equalStringSlice(a[i].CIDRs, b[i].CIDRs) {
+			return false
+		}
+		if !equalFloatPtr(a[i].RequestsPerSecond, b[i].RequestsPerSecond) {
+			return false
+		}
+		if !equalIntPtr(a[i].Burst, b[i].Burst) {
+			return false
+		}
+		if !equalRateLimitActionPtr(a[i].Action, b[i].Action) {
+			return false
+		}
+	}
+	return true
+}
+
+func equalFloatPtr(a, b *float64) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return *a == *b
+}
+
+func equalIntPtr(a, b *int) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return *a == *b
+}
+
+func equalRateLimitActionPtr(a, b *config.RateLimitAction) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return *a == *b
 }
 
 func equalCacheConfig(a, b *config.CacheConfig) bool {

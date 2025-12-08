@@ -2,9 +2,11 @@ package dns
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"testing"
 
+	bl "glory-hole/pkg/blocklist"
 	"glory-hole/pkg/cache"
 	"glory-hole/pkg/config"
 	"glory-hole/pkg/forwarder"
@@ -208,6 +210,103 @@ func BenchmarkHandler_FullStack(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		handler.ServeDNS(ctx, writer, msg)
 	}
+}
+
+// BenchmarkWhitelistBlocklistLookups measures lookup performance across large blocklists/whitelists.
+func BenchmarkWhitelistBlocklistLookups(b *testing.B) {
+	testCases := []struct {
+		name              string
+		blocklistSize     int
+		whitelistSize     int
+		targetWhitelisted bool
+		targetBlocked     bool
+	}{
+		{
+			name:          "blocklist_hit_100k",
+			blocklistSize: 100_000,
+			targetBlocked: true,
+		},
+		{
+			name:              "whitelist_bypass_100k_10k",
+			blocklistSize:     100_000,
+			whitelistSize:     10_000,
+			targetWhitelisted: true,
+			targetBlocked:     true,
+		},
+		{
+			name:              "whitelist_bypass_500k_50k",
+			blocklistSize:     500_000,
+			whitelistSize:     50_000,
+			targetWhitelisted: true,
+			targetBlocked:     true,
+		},
+	}
+
+	for _, tc := range testCases {
+		b.Run(tc.name, func(b *testing.B) {
+			benchmarkLookupScenario(b, tc)
+		})
+	}
+}
+
+type whitelistBenchCase struct {
+	name              string
+	blocklistSize     int
+	whitelistSize     int
+	targetWhitelisted bool
+	targetBlocked     bool
+}
+
+func benchmarkLookupScenario(b *testing.B, tc whitelistBenchCase) {
+	const targetDomain = "bench-target.test."
+	handler := NewHandler()
+	handler.SetBlocklistManager(newBenchmarkBlocklistManager(tc.blocklistSize, tc.targetBlocked, targetDomain))
+
+	if tc.whitelistSize > 0 || tc.targetWhitelisted {
+		whitelist := make(map[string]struct{}, tc.whitelistSize+1)
+		for i := 0; i < tc.whitelistSize; i++ {
+			domain := fmt.Sprintf("whitelist-bench-%d.test.", i)
+			whitelist[domain] = struct{}{}
+		}
+		if tc.targetWhitelisted {
+			whitelist[targetDomain] = struct{}{}
+		}
+		handler.Whitelist.Store(&whitelist)
+	}
+
+	localMgr := localrecords.NewManager()
+	_ = localMgr.AddRecord(localrecords.NewARecord(targetDomain, net.ParseIP("10.10.10.10")))
+	handler.SetLocalRecords(localMgr)
+
+	msg := new(dns.Msg)
+	msg.SetQuestion(targetDomain, dns.TypeA)
+	writer := &mockResponseWriter{remoteAddr: &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 5353}}
+	ctx := context.Background()
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		handler.ServeDNS(ctx, writer, msg)
+	}
+}
+
+func newBenchmarkBlocklistManager(size int, includeTarget bool, targetDomain string) *bl.Manager {
+	logger, _ := logging.New(&config.LoggingConfig{Level: "error", Format: "text", Output: "stdout"})
+	mgr := bl.NewManager(&config.Config{}, logger, nil, nil)
+
+	entriesPtr := mgr.Get()
+	entries := make(map[string]bl.BlockEntry, size+1)
+	*entriesPtr = entries
+
+	for i := 0; i < size; i++ {
+		domain := fmt.Sprintf("bench-blocked-%d.test.", i)
+		entries[domain] = bl.BlockEntry{SourceMask: 1}
+	}
+
+	if includeTarget && targetDomain != "" {
+		entries[targetDomain] = bl.BlockEntry{SourceMask: 1}
+	}
+
+	return mgr
 }
 
 // BenchmarkHandler_ConcurrentRequests benchmarks concurrent DNS requests

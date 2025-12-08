@@ -33,37 +33,41 @@ type LoadTestConfig struct {
 	BlocklistSize     int           // Number of domains in blocklist
 	CacheEnabled      bool          // Enable DNS cache
 	RampUpTime        time.Duration // Time to gradually increase load
+	WhitelistSize     int           // Number of domains in whitelist (subset of blocklist)
+	WhitelistWeight   int           // Relative weight for selecting whitelisted domains
 }
 
 // LoadTestResult holds results from a load test
 type LoadTestResult struct {
-	TotalQueries     int64
+	TotalQueries      int64
 	SuccessfulQueries int64
-	FailedQueries    int64
-	BlockedQueries   int64
-	CachedQueries    int64
-	Duration         time.Duration
-	QueriesPerSecond float64
+	FailedQueries     int64
+	BlockedQueries    int64
+	CachedQueries     int64
+	Duration          time.Duration
+	QueriesPerSecond  float64
+	WhitelistQueries  int64
+	WhitelistBypassed int64
 
 	// Latency statistics (in milliseconds)
-	MinLatency    float64
-	MaxLatency    float64
-	AvgLatency    float64
-	P50Latency    float64
-	P95Latency    float64
-	P99Latency    float64
-	P999Latency   float64
+	MinLatency  float64
+	MaxLatency  float64
+	AvgLatency  float64
+	P50Latency  float64
+	P95Latency  float64
+	P99Latency  float64
+	P999Latency float64
 
 	// Resource usage
-	StartMemory  uint64
-	EndMemory    uint64
-	MemoryDelta  uint64
-	Goroutines   int
+	StartMemory uint64
+	EndMemory   uint64
+	MemoryDelta uint64
+	Goroutines  int
 
 	// Cache statistics
-	CacheHits     uint64
-	CacheMisses   uint64
-	CacheHitRate  float64
+	CacheHits    uint64
+	CacheMisses  uint64
+	CacheHitRate float64
 }
 
 // mockResponseWriter implements dns.ResponseWriter for testing
@@ -184,6 +188,39 @@ func TestDNSLoadLargeBlocklist(t *testing.T) {
 	}
 }
 
+// TestDNSLoadWhitelistBypass ensures whitelist lookups stay fast even with large lists.
+func TestDNSLoadWhitelistBypass(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping whitelist load test in short mode")
+	}
+
+	cfg := LoadTestConfig{
+		ConcurrentClients: 300,
+		QueriesPerClient:  150,
+		BlocklistSize:     200000,
+		WhitelistSize:     10000,
+		WhitelistWeight:   4,
+		CacheEnabled:      false,
+		RampUpTime:        time.Second,
+	}
+
+	result := runLoadTest(t, cfg)
+	printLoadTestResults(t, "Whitelist Bypass Load Test", result)
+
+	if result.WhitelistQueries == 0 {
+		t.Fatalf("expected whitelist queries, got none")
+	}
+
+	bypassRate := float64(result.WhitelistBypassed) / float64(result.WhitelistQueries)
+	if bypassRate < 0.99 {
+		t.Fatalf("whitelist bypass rate too low: %.2f%%", bypassRate*100)
+	}
+
+	if result.P99Latency > 100 {
+		t.Logf("WARNING: P99 latency high for whitelist bypass: %.2fms", result.P99Latency)
+	}
+}
+
 // TestDNSCachePerformance tests cache hit rates and performance
 func TestDNSCachePerformance(t *testing.T) {
 	if testing.Short() {
@@ -282,6 +319,8 @@ func runLoadTest(t *testing.T, cfg LoadTestConfig) LoadTestResult {
 		successfulQueries int64
 		failedQueries     int64
 		blockedQueries    int64
+		whitelistQueries  int64
+		whitelistBypassed int64
 		latencies         []float64
 		latenciesMu       sync.Mutex
 	)
@@ -291,7 +330,7 @@ func runLoadTest(t *testing.T, cfg LoadTestConfig) LoadTestResult {
 	runtime.ReadMemStats(&memBefore)
 
 	// Test domains (mix of blocked and allowed)
-	testDomains := generateTestDomains(cfg.BlocklistSize)
+	testDomains := generateTestDomains(cfg)
 
 	startTime := time.Now()
 
@@ -317,6 +356,10 @@ func runLoadTest(t *testing.T, cfg LoadTestConfig) LoadTestResult {
 			for j := 0; j < cfg.QueriesPerClient; j++ {
 				// Pick a random domain
 				domain := testDomains[rand.Intn(len(testDomains))]
+				isWhitelistDomain := strings.HasPrefix(domain, "whitelist")
+				if isWhitelistDomain {
+					atomic.AddInt64(&whitelistQueries, 1)
+				}
 
 				// Create DNS query
 				msg := new(dnslib.Msg)
@@ -345,6 +388,8 @@ func runLoadTest(t *testing.T, cfg LoadTestConfig) LoadTestResult {
 					// Check if blocked (NXDOMAIN)
 					if writer.msg.Rcode == dnslib.RcodeNameError {
 						atomic.AddInt64(&blockedQueries, 1)
+					} else if isWhitelistDomain {
+						atomic.AddInt64(&whitelistBypassed, 1)
 					}
 				} else {
 					atomic.AddInt64(&failedQueries, 1)
@@ -385,6 +430,8 @@ func runLoadTest(t *testing.T, cfg LoadTestConfig) LoadTestResult {
 		SuccessfulQueries: successfulQueries,
 		FailedQueries:     failedQueries,
 		BlockedQueries:    blockedQueries,
+		WhitelistQueries:  whitelistQueries,
+		WhitelistBypassed: whitelistBypassed,
 		Duration:          duration,
 		QueriesPerSecond:  float64(totalQueries) / duration.Seconds(),
 
@@ -418,6 +465,8 @@ func runLoadTestDuration(t *testing.T, cfg LoadTestConfig) LoadTestResult {
 		successfulQueries int64
 		failedQueries     int64
 		blockedQueries    int64
+		whitelistQueries  int64
+		whitelistBypassed int64
 		latencies         []float64
 		latenciesMu       sync.Mutex
 	)
@@ -427,7 +476,7 @@ func runLoadTestDuration(t *testing.T, cfg LoadTestConfig) LoadTestResult {
 	runtime.ReadMemStats(&memBefore)
 
 	// Test domains
-	testDomains := generateTestDomains(cfg.BlocklistSize)
+	testDomains := generateTestDomains(cfg)
 
 	startTime := time.Now()
 	endTime := startTime.Add(cfg.Duration)
@@ -454,6 +503,10 @@ func runLoadTestDuration(t *testing.T, cfg LoadTestConfig) LoadTestResult {
 			for time.Now().Before(endTime) {
 				// Pick a random domain
 				domain := testDomains[rand.Intn(len(testDomains))]
+				isWhitelistDomain := strings.HasPrefix(domain, "whitelist")
+				if isWhitelistDomain {
+					atomic.AddInt64(&whitelistQueries, 1)
+				}
 
 				// Create DNS query
 				msg := new(dnslib.Msg)
@@ -481,6 +534,8 @@ func runLoadTestDuration(t *testing.T, cfg LoadTestConfig) LoadTestResult {
 
 					if writer.msg.Rcode == dnslib.RcodeNameError {
 						atomic.AddInt64(&blockedQueries, 1)
+					} else if isWhitelistDomain {
+						atomic.AddInt64(&whitelistBypassed, 1)
 					}
 				} else {
 					atomic.AddInt64(&failedQueries, 1)
@@ -525,6 +580,8 @@ func runLoadTestDuration(t *testing.T, cfg LoadTestConfig) LoadTestResult {
 		SuccessfulQueries: successfulQueries,
 		FailedQueries:     failedQueries,
 		BlockedQueries:    blockedQueries,
+		WhitelistQueries:  whitelistQueries,
+		WhitelistBypassed: whitelistBypassed,
 		Duration:          duration,
 		QueriesPerSecond:  float64(totalQueries) / duration.Seconds(),
 
@@ -571,14 +628,28 @@ func setupTestHandler(t *testing.T, cfg LoadTestConfig) *dns.Handler {
 		AutoUpdateBlocklists: false,
 	}
 	blocklistMgr := blocklist.NewManager(testCfg, logger, nil, nil)
-
-	// Manually populate the blocklist for testing
 	handler.SetBlocklistManager(blocklistMgr)
 
-	// Add domains to the handler's legacy blocklist for testing
+	entriesPtr := blocklistMgr.Get()
+	blockEntries := make(map[string]blocklist.BlockEntry, cfg.BlocklistSize+cfg.WhitelistSize+1)
+	*entriesPtr = blockEntries
+
+	// Add domains to the handler's legacy blocklist for testing (and atomic manager)
 	for i := 0; i < cfg.BlocklistSize; i++ {
 		domain := fmt.Sprintf("blocked%d.test.", i)
 		handler.Blocklist[domain] = struct{}{}
+		blockEntries[domain] = blocklist.BlockEntry{SourceMask: 1}
+	}
+
+	if cfg.WhitelistSize > 0 {
+		whitelist := make(map[string]struct{}, cfg.WhitelistSize)
+		for i := 0; i < cfg.WhitelistSize; i++ {
+			domain := fmt.Sprintf("whitelist%d.test.", i)
+			handler.Blocklist[domain] = struct{}{}
+			blockEntries[domain] = blocklist.BlockEntry{SourceMask: 1}
+			whitelist[domain] = struct{}{}
+		}
+		handler.Whitelist.Store(&whitelist)
 	}
 
 	// Setup cache if enabled
@@ -603,6 +674,14 @@ func setupTestHandler(t *testing.T, cfg LoadTestConfig) *dns.Handler {
 		ip := net.ParseIP(fmt.Sprintf("192.168.1.%d", i%256))
 		_ = localMgr.AddRecord(localrecords.NewARecord(domain, ip))
 	}
+	if cfg.WhitelistSize > 0 {
+		for i := 0; i < cfg.WhitelistSize; i++ {
+			domain := fmt.Sprintf("whitelist%d.test.", i)
+			ip := net.ParseIP(fmt.Sprintf("10.0.%d.%d", i/256, i%256))
+			record := localrecords.NewARecord(domain, ip)
+			_ = localMgr.AddRecord(record)
+		}
+	}
 	handler.SetLocalRecords(localMgr)
 
 	// Setup policy engine with test rules
@@ -612,9 +691,46 @@ func setupTestHandler(t *testing.T, cfg LoadTestConfig) *dns.Handler {
 	return handler
 }
 
+func TestSetupHandlerWhitelistOverridesBlocklist(t *testing.T) {
+	t.Parallel()
+	cfg := LoadTestConfig{BlocklistSize: 10, WhitelistSize: 1}
+	handler := setupTestHandler(t, cfg)
+	if wl := handler.Whitelist.Load(); wl != nil {
+		if _, ok := (*wl)["whitelist0.test."]; !ok {
+			t.Fatalf("whitelist entry missing from handler")
+		}
+	} else {
+		t.Fatalf("whitelist pointer nil")
+	}
+
+	msg := new(dnslib.Msg)
+	msg.SetQuestion("whitelist0.test.", dnslib.TypeA)
+	if got := msg.Question[0].Name; got != "whitelist0.test." {
+		t.Fatalf("unexpected fqdn: %s", got)
+	}
+	if wl := handler.Whitelist.Load(); wl != nil {
+		if _, ok := (*wl)[msg.Question[0].Name]; !ok {
+			t.Fatalf("whitelist missing fqdn key")
+		}
+	}
+	writer := &mockResponseWriter{}
+	handler.ServeDNS(context.Background(), writer, msg)
+
+	if writer.msg == nil {
+		t.Fatalf("expected response for whitelist domain")
+	}
+	if writer.msg.Rcode != dnslib.RcodeSuccess {
+		t.Fatalf("expected success for whitelist domain, got %d", writer.msg.Rcode)
+	}
+}
+
 // generateTestDomains creates a list of test domains
-func generateTestDomains(blocklistSize int) []string {
-	domains := make([]string, 0, blocklistSize+200)
+func generateTestDomains(cfg LoadTestConfig) []string {
+	capGuess := cfg.BlocklistSize + (cfg.WhitelistSize * max(1, cfg.WhitelistWeight)) + 200
+	if capGuess < 200 {
+		capGuess = 200
+	}
+	domains := make([]string, 0, capGuess)
 
 	// Add local domains (fast responses)
 	for i := 0; i < 100; i++ {
@@ -622,8 +738,22 @@ func generateTestDomains(blocklistSize int) []string {
 	}
 
 	// Add blocked domains
-	for i := 0; i < blocklistSize && i < 1000; i++ {
+	for i := 0; i < cfg.BlocklistSize && i < 1000; i++ {
 		domains = append(domains, fmt.Sprintf("blocked%d.test", i))
+	}
+
+	if cfg.WhitelistSize > 0 {
+		weight := cfg.WhitelistWeight
+		if weight <= 0 {
+			weight = 1
+		}
+		whitelistNames := make([]string, cfg.WhitelistSize)
+		for i := 0; i < cfg.WhitelistSize; i++ {
+			whitelistNames[i] = fmt.Sprintf("whitelist%d.test", i)
+		}
+		for w := 0; w < weight; w++ {
+			domains = append(domains, whitelistNames...)
+		}
 	}
 
 	// Add regular domains
@@ -634,6 +764,13 @@ func generateTestDomains(blocklistSize int) []string {
 	domains = append(domains, regularDomains...)
 
 	return domains
+}
+
+func max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
 }
 
 // percentile calculates the nth percentile of sorted data
@@ -673,6 +810,10 @@ func printLoadTestResults(t *testing.T, testName string, result LoadTestResult) 
 		float64(result.FailedQueries)/float64(result.TotalQueries)*100)
 	t.Logf("Blocked:            %d (%.2f%%)", result.BlockedQueries,
 		float64(result.BlockedQueries)/float64(result.TotalQueries)*100)
+	if result.WhitelistQueries > 0 {
+		bypassRate := float64(result.WhitelistBypassed) / float64(result.WhitelistQueries)
+		t.Logf("Whitelist Bypass:   %d/%d (%.2f%%)", result.WhitelistBypassed, result.WhitelistQueries, bypassRate*100)
+	}
 	t.Logf("Duration:           %v", result.Duration)
 	t.Logf("Queries/Second:     %.2f", result.QueriesPerSecond)
 	t.Logf("")

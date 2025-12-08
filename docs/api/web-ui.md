@@ -320,7 +320,7 @@ DomainEndsWith(Domain, ".game.com")
 
 ### Database Information
 
-- Backend type (SQLite/D1)
+- Backend type (SQLite; D1 deferred for future release)
 - Database path
 - Retention period
 - Total queries logged

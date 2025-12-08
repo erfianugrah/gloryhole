@@ -40,12 +40,17 @@ To reproduce these benchmarks:
 # Full benchmark suite
 make test
 
+# Whitelist/blocklist lookup benchmarks + load scenario
+make bench-whitelist
+
 # Load test benchmarks
 go test -bench=. -benchmem -benchtime=3s ./test/load/
 
 # Cache-specific benchmarks
 go test -bench=BenchmarkCache -benchmem -benchtime=3s ./pkg/cache/
 ```
+
+`make bench-whitelist` exercises the lock-free whitelist/blocklist path (microbenchmarks in `pkg/dns`) and the high-level whitelist load test (`TestDNSLoadWhitelistBypass`) so we can track bypass rate and latency as the blocklist/whitelist sizes scale into the hundreds of thousands.
 
 ## Viewing Coverage
 

@@ -631,3 +631,41 @@ func TestPolicyAPI_NoPolicyEngine(t *testing.T) {
 		})
 	}
 }
+
+func TestPolicyAPI_EnableEngineAfterStart(t *testing.T) {
+	// Start with no engine
+	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
+	server := New(&Config{
+		ListenAddress:    ":8080",
+		Storage:          nil,
+		BlocklistManager: nil,
+		PolicyEngine:     nil,
+		Logger:           logger,
+		Version:          "test",
+	})
+
+	// Add policy should fail while engine is nil
+	body := PolicyRequest{Name: "rule1", Logic: `Domain == "a.com"`, Action: policy.ActionBlock, Enabled: true}
+	buf, _ := json.Marshal(body)
+	req := httptest.NewRequest(http.MethodPost, "/api/policies", bytes.NewReader(buf))
+	w := httptest.NewRecorder()
+	server.handleAddPolicy(w, req)
+	if w.Result().StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected 400 when engine is nil, got %d", w.Result().StatusCode)
+	}
+
+	// Hot-plug engine and retry
+	engine := policy.NewEngine()
+	server.SetPolicyEngine(engine)
+
+	w2 := httptest.NewRecorder()
+	server.handleAddPolicy(w2, req)
+	if w2.Result().StatusCode != http.StatusCreated {
+		bodyBytes, _ := io.ReadAll(w2.Result().Body)
+		t.Fatalf("expected 201 after engine set, got %d: %s", w2.Result().StatusCode, string(bodyBytes))
+	}
+
+	if engine.Count() != 1 {
+		t.Fatalf("expected 1 rule in engine after add, got %d", engine.Count())
+	}
+}

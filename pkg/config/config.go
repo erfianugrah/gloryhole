@@ -1,3 +1,5 @@
+// Package config defines the runtime configuration structs, parsing helpers,
+// and hot-reload wiring shared across services.
 package config
 
 import (

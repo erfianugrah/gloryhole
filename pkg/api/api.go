@@ -1,3 +1,5 @@
+// Package api hosts the HTTP API, HTMX UI handlers, and supporting middleware
+// for the Gloryhole DNS control plane.
 package api
 
 import (
@@ -47,8 +49,8 @@ type Server struct {
 	authHeader       string
 	apiKey           string
 	basicUser        string
-	basicPass        string   // Plaintext password (backward compat)
-	passwordHash     string   // Bcrypt hash of password
+	basicPass        string // Plaintext password (backward compat)
+	passwordHash     string // Bcrypt hash of password
 }
 
 // Config holds API server configuration
@@ -269,7 +271,7 @@ func (s *Server) applyAuthConfig(auth config.AuthConfig) {
 
 	s.apiKey = apiKey
 	s.basicUser = username
-	s.basicPass = password       // For backward compatibility
+	s.basicPass = password        // For backward compatibility
 	s.passwordHash = passwordHash // Preferred
 	s.authHeader = strings.ToLower(header)
 }
@@ -324,6 +326,30 @@ func (s *Server) SetCache(c cache.Interface) {
 // SetHTTPRateLimiter configures the HTTP rate limiter middleware.
 func (s *Server) SetHTTPRateLimiter(rl *ratelimit.Manager) {
 	s.rateLimiter = rl
+}
+
+// SetTrustedProxies refreshes the list of CIDRs considered trusted for XFF/X-Real-IP extraction.
+func (s *Server) SetTrustedProxies(cidrs []string) {
+	s.trustedProxies = s.trustedProxies[:0]
+	for _, cidr := range cidrs {
+		_, network, err := net.ParseCIDR(cidr)
+		if err != nil {
+			s.logger.Warn("Invalid trusted proxy CIDR, skipping", "cidr", cidr, "error", err)
+			continue
+		}
+		s.trustedProxies = append(s.trustedProxies, network)
+	}
+
+	if len(s.trustedProxies) > 0 {
+		s.logger.Info("Trusted proxy CIDRs configured for rate limiting", "count", len(s.trustedProxies))
+	} else {
+		s.logger.Debug("Trusted proxy CIDRs cleared")
+	}
+}
+
+// SetPolicyEngine updates the policy engine reference used by API handlers.
+func (s *Server) SetPolicyEngine(pe *policy.Engine) {
+	s.policyEngine = pe
 }
 
 // SetLogger updates the server logger reference.

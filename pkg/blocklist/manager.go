@@ -1,3 +1,5 @@
+// Package blocklist provides download/update management for blocklist sources
+// plus lock-free matching utilities used by the DNS handler.
 package blocklist
 
 import (

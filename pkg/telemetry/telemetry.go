@@ -1,3 +1,5 @@
+// Package telemetry wires up Prometheus + OpenTelemetry exporters used across
+// the project.
 package telemetry
 
 import (

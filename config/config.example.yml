@@ -179,7 +179,7 @@ local_records:
 # Database (Query Logging & Statistics)
 database:
   enabled: true
-  backend: "sqlite"              # sqlite or d1 (cloudflare)
+  backend: "sqlite"              # sqlite only (Cloudflare D1 temporarily unsupported)
 
   # SQLite configuration
   sqlite:
@@ -188,12 +188,6 @@ database:
     wal_mode: true               # write-ahead logging for better concurrency
     cache_size: 4096             # KB
     mmap_size: 268435456         # bytes (256 MiB window)
-
-  # D1 configuration (Cloudflare edge database)
-  d1:
-    account_id: ""               # Cloudflare account ID
-    database_id: ""              # D1 database ID
-    api_token: ""                # Cloudflare API token with D1 access
 
   # Buffer settings (async writes for performance)
   buffer_size: 500               # queries to buffer before flush

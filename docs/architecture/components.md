@@ -1032,7 +1032,7 @@ upstream_dns_servers:
 
 ### Purpose
 
-Provides multi-backend storage abstraction for query logging and statistics, supporting SQLite and Cloudflare D1.
+Provides storage abstraction for query logging and statistics. Current v0.9 releases ship with SQLite only; Cloudflare D1 is deferred (docs kept for future reintroduction).
 
 ### Key Types
 

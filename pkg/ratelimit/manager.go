@@ -1,3 +1,5 @@
+// Package ratelimit provides token-bucket enforcement with trusted proxy
+// awareness for HTTP/DNS handlers.
 package ratelimit
 
 import (

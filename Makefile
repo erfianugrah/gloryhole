@@ -65,6 +65,13 @@ test:
 	@echo "Running tests..."
 	go test -v ./...
 
+## bench-whitelist: Run whitelist/blocklist lookup benchmarks and load test
+bench-whitelist:
+	@echo "Running whitelist/blocklist microbenchmarks..."
+	go test -run=^$$ -bench=BenchmarkWhitelistBlocklistLookups -benchmem ./pkg/dns
+	@echo "Running whitelist bypass load test..."
+	go test -run TestDNSLoadWhitelistBypass ./test/load
+
 ## test-race: Run tests with race detector
 test-race:
 	@echo "Running tests with race detector..."

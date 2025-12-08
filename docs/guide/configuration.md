@@ -372,7 +372,7 @@ Configure query logging and statistics storage.
 ```yaml
 database:
   enabled: true                   # Enable query logging
-  backend: "sqlite"               # Backend: "sqlite" or "d1"
+  backend: "sqlite"               # SQLite only (Cloudflare D1 temporarily unsupported)
 
   # SQLite configuration
   sqlite:
@@ -380,12 +380,6 @@ database:
     wal_mode: true                # Write-Ahead Logging (better concurrency)
     busy_timeout: 5000            # Busy timeout in milliseconds
     cache_size: 4096              # Cache size in KB
-
-  # Cloudflare D1 configuration (alternative to SQLite)
-  d1:
-    account_id: ""                # Cloudflare account ID
-    database_id: ""               # D1 database ID
-    api_token: ""                 # API token with D1 access
 
   # Buffer settings (async writes for performance)
   buffer_size: 1000               # Queries to buffer before flush
@@ -425,26 +419,7 @@ database:
 - Single file (not distributed)
 - Limited to single machine
 
-#### Cloudflare D1 (Experimental)
-
-```yaml
-database:
-  backend: "d1"
-  d1:
-    account_id: "your-account-id"
-    database_id: "your-database-id"
-    api_token: "your-api-token"
-```
-
-**Advantages:**
-- Serverless/edge deployment
-- Automatic replication
-- Global distribution
-
-**Disadvantages:**
-- Requires Cloudflare account
-- Network dependency
-- API rate limits
+> Cloudflare D1: The D1 backend is not available in v0.9 builds. The dedicated deployment guide is retained for future use, but current releases must run with `backend: "sqlite"`.
 
 ### Buffering and Performance
 
