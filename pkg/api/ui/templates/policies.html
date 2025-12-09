@@ -417,6 +417,10 @@ function updateValueInput() {
     const valueSelect = document.getElementById('builder-value-select');
     if (!operator || !valueInput || !valueSelect) return;
 
+    // Preserve whatever the user already typed/selected while they experiment with operators.
+    const previousText = valueInput.value;
+    const previousSelect = valueSelect.value;
+
     if (operator.inputType === 'select') {
         valueSelect.innerHTML = '';
         operator.options.forEach((opt) => {
@@ -427,6 +431,10 @@ function updateValueInput() {
         });
         valueInput.style.display = 'none';
         valueSelect.style.display = 'inline-flex';
+        // Restore selection if it still exists, otherwise leave the first option selected.
+        if (previousSelect && operator.options.includes(previousSelect)) {
+            valueSelect.value = previousSelect;
+        }
     } else {
         valueSelect.style.display = 'none';
         valueInput.style.display = 'inline-flex';
@@ -434,6 +442,9 @@ function updateValueInput() {
         valueInput.placeholder = operator.placeholder || 'Value';
         if (operator.min !== undefined) valueInput.min = operator.min;
         if (operator.max !== undefined) valueInput.max = operator.max;
+        if (previousText) {
+            valueInput.value = previousText;
+        }
     }
 }
 

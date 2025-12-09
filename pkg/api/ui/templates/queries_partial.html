@@ -12,7 +12,13 @@
     </thead>
     <tbody>
         {{range .Queries}}
-        <tr class="status-row status-{{.Status}}">
+        <tr class="status-row status-{{.Status}}"
+            data-timestamp="{{.Timestamp.Unix}}" data-client="{{.ClientIP}}"
+            data-domain="{{.Domain}}"
+            data-type="{{.QueryType}}"
+            data-status="{{.Status}}"
+            data-latency="{{printf "%.4f" .ResponseTimeMs}}"
+            data-upstream="{{printf "%.4f" .UpstreamTimeMs}}">
             <td>{{.Timestamp.Format "15:04:05"}}</td>
             <td>{{.ClientIP}}</td>
             <td>{{.Domain}}</td>

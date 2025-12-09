@@ -170,7 +170,9 @@
         function createHighlightedDomain(domain, entry) {
             if (!domain) return null;
 
-            const pattern = entry && entry.metadata ? (entry.metadata.pattern || entry.metadata.match || entry.metadata.matched_fragment) : null;
+            const pattern = entry && entry.metadata
+                ? (entry.metadata.pattern || entry.metadata.match || entry.metadata.matched_fragment || entry.rule || entry.detail)
+                : (entry.rule || entry.detail);
             const regex = buildRegexFromPattern(pattern);
             if (!regex) {
                 return document.createTextNode(domain);

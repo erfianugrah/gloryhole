@@ -117,6 +117,58 @@ window.addEventListener('DOMContentLoaded', function () {
     filterForm?.addEventListener('input', scheduleFilterRefresh);
     filterForm?.addEventListener('change', scheduleFilterRefresh);
 
+    // Client-side sorting for the rendered table using data-* attributes from the partial
+    function sortTable(key) {
+        const table = container?.querySelector('.queries-table');
+        if (!table) return;
+        const tbody = table.querySelector('tbody');
+        if (!tbody) return;
+        const rows = Array.from(tbody.querySelectorAll('tr')).filter((row) => row.dataset && row.dataset.domain !== undefined);
+        if (!rows.length) return;
+
+        const currentKey = table.dataset.sortKey;
+        const currentDir = table.dataset.sortDir || 'asc';
+        const nextDir = currentKey === key && currentDir === 'asc' ? 'desc' : 'asc';
+        table.dataset.sortKey = key;
+        table.dataset.sortDir = nextDir;
+
+        const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
+        rows.sort((a, b) => {
+            const va = a.dataset[key] || '';
+            const vb = b.dataset[key] || '';
+            if (key === 'timestamp' || key === 'latency' || key === 'upstream') {
+                const na = parseFloat(va) || 0;
+                const nb = parseFloat(vb) || 0;
+                return nextDir === 'asc' ? na - nb : nb - na;
+            }
+            return nextDir === 'asc' ? collator.compare(va, vb) : collator.compare(vb, va);
+        });
+
+        tbody.innerHTML = '';
+        rows.forEach((row) => tbody.appendChild(row));
+    }
+
+    function attachSortHandlers() {
+        const table = container?.querySelector('.queries-table');
+        if (!table) return;
+        const headers = table.querySelectorAll('th');
+        const map = ['timestamp','client','domain','type','status','latency'];
+        headers.forEach((th, idx) => {
+            const key = map[idx];
+            if (!key) return;
+            th.classList.add('sortable');
+            th.addEventListener('click', () => sortTable(key));
+        });
+    }
+
+    document.addEventListener('htmx:afterSwap', (event) => {
+        if (event.target === container) {
+            attachSortHandlers();
+        }
+    });
+
+    attachSortHandlers();
+
     resetBtn?.addEventListener('click', () => {
         filterForm?.reset();
         scheduleFilterRefresh();

@@ -383,10 +383,52 @@
             offset: Number(offsetInput.value) || 0,
             has_more: hasMore,
         });
+        attachClientSorting();
     });
+
+    function attachClientSorting() {
+        const table = document.querySelector('.clients-table');
+        if (!table) return;
+        const tbody = table.querySelector('tbody');
+        if (!tbody) return;
+        const headers = table.querySelectorAll('th');
+        const map = ['client','group','total','blocked','nxdomain','last'];
+        headers.forEach((th, idx) => {
+            const key = map[idx];
+            if (!key) return;
+            th.classList.add('sortable');
+            th.addEventListener('click', () => sortClients(tbody, key, table));
+        });
+    }
+
+    function sortClients(tbody, key, table) {
+        const rows = Array.from(tbody.querySelectorAll('tr')).filter((row) => row.dataset && row.dataset.client);
+        if (!rows.length) return;
+        const currentKey = table.dataset.sortKey;
+        const currentDir = table.dataset.sortDir || 'asc';
+        const nextDir = currentKey === key && currentDir === 'asc' ? 'desc' : 'asc';
+        table.dataset.sortKey = key;
+        table.dataset.sortDir = nextDir;
+
+        const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
+        rows.sort((a, b) => {
+            const va = a.dataset[key] || '';
+            const vb = b.dataset[key] || '';
+            if (key === 'total' || key === 'blocked' || key === 'nxdomain' || key === 'last') {
+                const na = parseFloat(va) || 0;
+                const nb = parseFloat(vb) || 0;
+                return nextDir === 'asc' ? na - nb : nb - na;
+            }
+            return nextDir === 'asc' ? collator.compare(va, vb) : collator.compare(vb, va);
+        });
+
+        tbody.innerHTML = '';
+        rows.forEach((row) => tbody.appendChild(row));
+    }
 
     updatePaginationControls();
     refreshGroups();
+    attachClientSorting();
 })();
 </script>
 {{end}}

@@ -13,7 +13,15 @@
     <tbody>
         {{if .Clients}}
             {{range .Clients}}
-            <tr data-client-row data-client="{{.ClientIP}}" data-group="{{.GroupName}}" data-name="{{.DisplayName}}" data-notes="{{.Notes}}">
+            <tr data-client-row
+                data-client="{{.ClientIP}}"
+                data-group="{{.GroupName}}"
+                data-name="{{.DisplayName}}"
+                data-notes="{{.Notes}}"
+                data-total="{{.TotalQueries}}"
+                data-blocked="{{.BlockedQueries}}"
+                data-nxdomain="{{.NXDomainCount}}"
+                data-last="{{.LastSeen.Unix}}">
                 <td>
                     <div class="client-name">{{.DisplayName}}</div>
                     <div class="client-ip">{{.ClientIP}}</div>
