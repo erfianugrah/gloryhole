@@ -38,11 +38,21 @@ func (s *Server) authMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
-		if s.hasBasicCredentials() && strings.HasPrefix(r.URL.Path, "/api/") {
+		if s.hasBasicCredentials() && strings.HasPrefix(r.URL.Path, "/api/") && hasBasicAttempt(r) {
+			// Only prompt when client explicitly attempted Basic auth; avoid browser pop-ups for UI/HTMX
 			w.Header().Set("WWW-Authenticate", `Basic realm="Glory-Hole", charset="UTF-8"`)
 		}
 		s.writeError(w, http.StatusUnauthorized, "Unauthorized")
 	})
+}
+
+// hasBasicAttempt returns true if the incoming request already attempted Basic auth.
+func hasBasicAttempt(r *http.Request) bool {
+	if r == nil {
+		return false
+	}
+	auth := r.Header.Get("Authorization")
+	return strings.HasPrefix(strings.ToLower(strings.TrimSpace(auth)), "basic ")
 }
 
 func (s *Server) isAuthRequired(r *http.Request) bool {
@@ -76,10 +86,6 @@ func (s *Server) hasBasicCredentials() bool {
 }
 
 func (s *Server) authorizeRequest(r *http.Request) bool {
-	if s.hasValidSession(r) {
-		return true
-	}
-
 	s.authMu.RLock()
 	apiKey := s.apiKey
 	header := s.authHeader
@@ -87,6 +93,10 @@ func (s *Server) authorizeRequest(r *http.Request) bool {
 	password := s.basicPass
 	passwordHash := s.passwordHash
 	s.authMu.RUnlock()
+
+	if s.hasValidSession(r) {
+		return true
+	}
 
 	// Try API key authentication
 	if apiKey != "" {

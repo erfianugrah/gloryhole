@@ -279,15 +279,31 @@
 
         function openTraceModal(entries, domain, client) {
             traceBody.innerHTML = '';
-            const header = document.createElement('div');
-            header.className = 'trace-meta';
-            const title = document.createElement('strong');
-            title.textContent = domain || 'unknown domain';
-            const clientEl = document.createElement('span');
-            clientEl.textContent = client || 'unknown client';
-            header.appendChild(title);
-            header.appendChild(clientEl);
-            traceBody.appendChild(header);
+
+            const summary = document.createElement('div');
+            summary.className = 'trace-summary';
+
+            // Use first entry metadata to power the highlight if available
+            const firstEntry = (entries && entries.length) ? entries.find(e => e.metadata && (e.metadata.pattern || e.metadata.match || e.metadata.matched_fragment)) || entries[0] : null;
+
+            const domainBlock = renderDomainHighlight(domain || 'unknown domain', firstEntry || {});
+            if (domainBlock) {
+                summary.appendChild(domainBlock);
+            }
+
+            const clientBlock = document.createElement('div');
+            clientBlock.className = 'trace-summary-client';
+            const clientLabel = document.createElement('div');
+            clientLabel.className = 'trace-meta-key';
+            clientLabel.textContent = 'Client';
+            const clientVal = document.createElement('div');
+            clientVal.className = 'trace-meta-value';
+            clientVal.textContent = client || 'unknown client';
+            clientBlock.appendChild(clientLabel);
+            clientBlock.appendChild(clientVal);
+            summary.appendChild(clientBlock);
+
+            traceBody.appendChild(summary);
 
             if (!entries || !entries.length) {
                 const empty = document.createElement('p');

@@ -79,8 +79,20 @@ func TestAuthMiddleware_Basic(t *testing.T) {
 	if res.Code != http.StatusUnauthorized {
 		t.Fatalf("expected 401, got %d", res.Code)
 	}
-	if res.Header().Get("WWW-Authenticate") == "" {
-		t.Fatalf("expected WWW-Authenticate header for basic auth")
+	if res.Header().Get("WWW-Authenticate") != "" {
+		t.Fatalf("expected no WWW-Authenticate header when no basic attempt present")
+	}
+
+	// Wrong basic credentials should emit challenge
+	badReq := httptest.NewRequest(http.MethodGet, "/api/queries", nil)
+	badReq.SetBasicAuth("admin", "wrong")
+	badRes := httptest.NewRecorder()
+	middleware.ServeHTTP(badRes, badReq)
+	if badRes.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 for bad basic auth, got %d", badRes.Code)
+	}
+	if badRes.Header().Get("WWW-Authenticate") == "" {
+		t.Fatalf("expected WWW-Authenticate header for failed basic auth attempt")
 	}
 
 	req2 := httptest.NewRequest(http.MethodGet, "/api/queries", nil)
