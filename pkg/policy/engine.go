@@ -59,6 +59,18 @@ func NewEngine() *Engine {
 	}
 }
 
+// HasAction reports whether any enabled rule uses the given action.
+func (e *Engine) HasAction(action string) bool {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	for _, r := range e.rules {
+		if strings.EqualFold(r.Action, action) {
+			return true
+		}
+	}
+	return false
+}
+
 // AddRule adds and compiles a rule
 func (e *Engine) AddRule(rule *Rule) error {
 	if rule == nil {

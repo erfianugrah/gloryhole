@@ -130,6 +130,13 @@ func (h *Handler) SetRateLimiter(rl *ratelimit.Manager) {
 	h.RateLimiter = rl
 }
 
+// If a policy explicitly uses RATE_LIMIT action, we defer rate limiting to that policy rule
+// so operators can scope limits by domain/client/type. Otherwise apply the global limiter
+// up front.
+func (h *Handler) shouldDeferRateLimitToPolicies() bool {
+	return h.PolicyEngine != nil && h.PolicyEngine.HasAction(policy.ActionRateLimit)
+}
+
 // writeMsg writes a DNS message to the response writer with error handling
 // If the write fails (e.g., client disconnected), the error is silently ignored
 // as there's no way to notify the client at that point
@@ -171,7 +178,7 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 	qtype := question.Qtype
 	qtypeLabel := dnsTypeLabel(qtype)
 
-	if h.enforceRateLimit(ctx, w, r, msg, clientIP, domain, qtypeLabel, trace, outcome) {
+	if !h.shouldDeferRateLimitToPolicies() && h.enforceRateLimit(ctx, w, r, msg, clientIP, domain, qtypeLabel, trace, outcome) {
 		return
 	}
 	if h.serveFromCache(ctx, w, r, msg, trace, outcome) {
