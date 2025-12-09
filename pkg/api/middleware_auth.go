@@ -38,8 +38,8 @@ func (s *Server) authMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
-		if s.hasBasicCredentials() && strings.HasPrefix(r.URL.Path, "/api/") && hasBasicAttempt(r) {
-			// Only prompt when client explicitly attempted Basic auth; avoid browser pop-ups for UI/HTMX
+		if s.hasBasicCredentials() && strings.HasPrefix(r.URL.Path, "/api/") && hasBasicAttempt(r) && shouldSendBasicChallenge(r) {
+			// Only prompt when the caller is a real API client; avoid browser pop-ups for UI/HTMX
 			w.Header().Set("WWW-Authenticate", `Basic realm="Glory-Hole", charset="UTF-8"`)
 		}
 		s.writeError(w, http.StatusUnauthorized, "Unauthorized")
@@ -53,6 +53,17 @@ func hasBasicAttempt(r *http.Request) bool {
 	}
 	auth := r.Header.Get("Authorization")
 	return strings.HasPrefix(strings.ToLower(strings.TrimSpace(auth)), "basic ")
+}
+
+// shouldSendBasicChallenge avoids triggering the browser's built-in auth dialog
+// for HTMX/HTML calls while still prompting true API clients.
+func shouldSendBasicChallenge(r *http.Request) bool {
+	if r == nil {
+		return false
+	}
+	acceptsHTML := strings.Contains(strings.ToLower(r.Header.Get("Accept")), "text/html")
+	hxRequest := strings.EqualFold(r.Header.Get("HX-Request"), "true")
+	return !acceptsHTML && !hxRequest
 }
 
 func (s *Server) isAuthRequired(r *http.Request) bool {

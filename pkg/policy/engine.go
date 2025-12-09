@@ -36,6 +36,7 @@ const (
 	ActionAllow    = "ALLOW"
 	ActionRedirect = "REDIRECT"
 	ActionForward  = "FORWARD"
+	ActionRateLimit = "RATE_LIMIT"
 )
 
 // Context represents the evaluation context for a DNS query
@@ -472,8 +473,12 @@ func validateAction(rule *Rule) error {
 		}
 		return nil
 
+	case ActionRateLimit:
+		// No action_data needed; uses global rate limiter configuration.
+		return nil
+
 	default:
-		return fmt.Errorf("unknown action: %s (valid: BLOCK, ALLOW, REDIRECT, FORWARD)", action)
+		return fmt.Errorf("unknown action: %s (valid: BLOCK, ALLOW, REDIRECT, FORWARD, RATE_LIMIT)", action)
 	}
 }
 

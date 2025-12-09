@@ -42,6 +42,8 @@ func (h *Handler) handlePolicies(ctx context.Context, w dns.ResponseWriter, r, m
 		return h.handlePolicyRedirect(ctx, w, r, msg, rule, domain, clientIP, qtype, qtypeLabel, trace, outcome)
 	case policy.ActionForward:
 		return h.handlePolicyForward(ctx, w, r, msg, rule, domain, clientIP, qtypeLabel, outcome)
+	case policy.ActionRateLimit:
+		return h.handlePolicyRateLimit(ctx, w, r, msg, rule, domain, clientIP, qtypeLabel, trace, outcome)
 	default:
 		return false
 	}
@@ -243,4 +245,29 @@ func (h *Handler) handlePolicyForward(ctx context.Context, w dns.ResponseWriter,
 	outcome.responseCode = resp.Rcode
 	h.writeMsg(w, resp)
 	return true
+}
+
+func (h *Handler) handlePolicyRateLimit(ctx context.Context, w dns.ResponseWriter, r, msg *dns.Msg, rule *policy.Rule, domain, clientIP, qtypeLabel string, trace *blockTraceRecorder, outcome *serveDNSOutcome) bool {
+	if h.RateLimiter == nil {
+		if h.Logger != nil {
+			h.Logger.Warn("Policy rate limit action ignored because no rate limiter configured",
+				"rule", rule.Name,
+				"domain", domain,
+				"client_ip", clientIP)
+		}
+		return false
+	}
+
+	// Reuse global limiter logic so stage/action/trace stay consistent.
+	if h.enforceRateLimit(ctx, w, r, msg, clientIP, domain, qtypeLabel, trace, outcome) {
+		// Limited; response already written.
+		trace.Record(traceStagePolicy, string(rule.Action), func(entry *storage.BlockTraceEntry) {
+			entry.Rule = rule.Name
+			entry.Source = "policy_engine"
+		})
+		return true
+	}
+
+	// Not limited; continue processing (fall through to blocklist/forwarding).
+	return false
 }
