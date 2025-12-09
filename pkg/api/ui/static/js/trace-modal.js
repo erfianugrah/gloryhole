@@ -144,7 +144,87 @@
             return container;
         }
 
-        function renderTraceRow(entry) {
+        function escapeHtml(value) {
+            const div = document.createElement('div');
+            div.textContent = value == null ? '' : String(value);
+            return div.innerHTML;
+        }
+
+        function buildRegexFromPattern(pattern) {
+            if (!pattern) return null;
+            try {
+                // Treat '*' as a wildcard for any characters, escape everything else
+                const escaped = pattern
+                    .replace(/[-/\\^$+?.()|[\]{}]/g, '\\$&')
+                    .replace(/\*/g, '.*');
+                return new RegExp(escaped, 'gi');
+            } catch (e) {
+                try {
+                    return new RegExp(pattern, 'gi');
+                } catch (_) {
+                    return null;
+                }
+            }
+        }
+
+        function createHighlightedDomain(domain, entry) {
+            if (!domain) return null;
+
+            const pattern = entry && entry.metadata ? (entry.metadata.pattern || entry.metadata.match || entry.metadata.matched_fragment) : null;
+            const regex = buildRegexFromPattern(pattern);
+            if (!regex) {
+                return document.createTextNode(domain);
+            }
+
+            const frag = document.createDocumentFragment();
+            let lastIndex = 0;
+            let match;
+            while ((match = regex.exec(domain)) !== null) {
+                if (match.index > lastIndex) {
+                    frag.appendChild(document.createTextNode(domain.slice(lastIndex, match.index)));
+                }
+                const mark = document.createElement('mark');
+                mark.className = 'trace-highlight';
+                mark.textContent = match[0] || '';
+                frag.appendChild(mark);
+                lastIndex = regex.lastIndex;
+                if (regex.lastIndex === match.index) {
+                    // Avoid infinite loops on zero-length matches
+                    regex.lastIndex++;
+                }
+            }
+
+            if (lastIndex < domain.length) {
+                frag.appendChild(document.createTextNode(domain.slice(lastIndex)));
+            }
+            return frag;
+        }
+
+        function renderDomainHighlight(domain, entry) {
+            if (!domain) return null;
+
+            const wrapper = document.createElement('div');
+            wrapper.className = 'trace-domain';
+
+            const label = document.createElement('div');
+            label.className = 'trace-meta-key';
+            label.textContent = 'Domain';
+
+            const value = document.createElement('div');
+            value.className = 'trace-meta-value';
+            const highlighted = createHighlightedDomain(domain, entry);
+            if (highlighted) {
+                value.appendChild(highlighted);
+            } else {
+                value.textContent = domain;
+            }
+
+            wrapper.appendChild(label);
+            wrapper.appendChild(value);
+            return wrapper;
+        }
+
+        function renderTraceRow(entry, domain) {
             const row = document.createElement('div');
             row.className = 'trace-row';
 
@@ -181,8 +261,17 @@
             }
 
             const metadata = renderTraceMetadata(entry.metadata);
+            const domainHighlight = renderDomainHighlight(domain, entry);
             if (metadata) {
+                if (domainHighlight) {
+                    metadata.prepend(domainHighlight);
+                }
                 row.appendChild(metadata);
+            } else if (domainHighlight) {
+                const meta = document.createElement('div');
+                meta.className = 'trace-metadata';
+                meta.appendChild(domainHighlight);
+                row.appendChild(meta);
             }
 
             return row;
@@ -207,7 +296,7 @@
                 traceBody.appendChild(empty);
             } else {
                 entries.forEach(function (entry) {
-                    traceBody.appendChild(renderTraceRow(entry));
+                    traceBody.appendChild(renderTraceRow(entry, domain));
                 });
             }
 

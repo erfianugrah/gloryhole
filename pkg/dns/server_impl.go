@@ -311,17 +311,19 @@ func (w *wrappedHandler) serveDNS(rw dns.ResponseWriter, r *dns.Msg) {
 		"domain", domain,
 		"type", queryTypeName,
 		"client", clientIP,
+		"transport", w.transportLabel(rw),
 	)
 
 	// Record metrics
 	if w.metrics != nil {
-		w.metrics.DNSQueriesTotal.Add(ctx, 1)
+		attrs := []attribute.KeyValue{attribute.String("transport", w.transportLabel(rw))}
+		w.metrics.DNSQueriesTotal.Add(ctx, 1, metric.WithAttributes(attrs...))
 		if queryTypeName != "" {
 			w.metrics.DNSQueriesByType.Add(ctx, 1, metric.WithAttributes(
-				attribute.String("type", queryTypeName),
-			))
+				append(attrs, attribute.String("type", queryTypeName))...),
+			)
 		} else {
-			w.metrics.DNSQueriesByType.Add(ctx, 1)
+			w.metrics.DNSQueriesByType.Add(ctx, 1, metric.WithAttributes(attrs...))
 		}
 	}
 
@@ -331,13 +333,29 @@ func (w *wrappedHandler) serveDNS(rw dns.ResponseWriter, r *dns.Msg) {
 	// Record query duration
 	duration := time.Since(startTime)
 	if w.metrics != nil {
-		w.metrics.DNSQueryDuration.Record(ctx, float64(duration.Milliseconds()))
+		w.metrics.DNSQueryDuration.Record(ctx, float64(duration.Milliseconds()),
+			metric.WithAttributes(attribute.String("transport", w.transportLabel(rw))))
 	}
 
 	w.logger.Info("DNS query processed",
 		"domain", domain,
 		"duration_ms", duration.Milliseconds(),
+		"transport", w.transportLabel(rw),
 	)
+}
+
+// transportLabel infers a human-readable transport for metrics/logs.
+func (w *wrappedHandler) transportLabel(rw dns.ResponseWriter) string {
+	switch rw.LocalAddr().Network() {
+	case "udp":
+		return "udp"
+	case "tcp":
+		return "tcp"
+	case "tcp-tls":
+		return "dot"
+	default:
+		return "unknown"
+	}
 }
 
 // getClientIP extracts the client IP address from the DNS ResponseWriter.

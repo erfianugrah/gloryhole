@@ -10,8 +10,11 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/miekg/dns"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
 )
 
 // DNS-over-HTTPS (DoH) implementation
@@ -95,6 +98,8 @@ type DNSJSONResponse struct {
 // Supports GET (with query parameters), POST (wire format), and HEAD (health check)
 // Compatible with Cloudflare's DNS-over-HTTPS API
 func (s *Server) handleDNSQuery(w http.ResponseWriter, r *http.Request) {
+	const transport = "doh"
+
 	// HEAD request: Simple health check
 	if r.Method == http.MethodHead {
 		w.WriteHeader(http.StatusOK)
@@ -154,9 +159,52 @@ func (s *Server) handleDNSQuery(w http.ResponseWriter, r *http.Request) {
 		msg.SetRcode(dnsMsg, dns.RcodeServerFailure)
 		dohWriter.msg = msg
 	} else {
-		// Process DNS query through our DNS handler
 		ctx := context.Background()
+
+		// Observability parity with UDP/TCP path
+		start := time.Now()
+		metrics := s.dnsHandler.Metrics
+		if metrics != nil {
+			metrics.ActiveClients.Add(ctx, 1)
+			defer metrics.ActiveClients.Add(ctx, -1)
+		}
+
+		var domain string
+		var qtype uint16
+		queryTypeName := "UNKNOWN"
+		if len(dnsMsg.Question) > 0 {
+			domain = dnsMsg.Question[0].Name
+			qtype = dnsMsg.Question[0].Qtype
+			if label := dns.TypeToString[qtype]; label != "" {
+				queryTypeName = label
+			} else {
+				queryTypeName = fmt.Sprintf("TYPE%d", qtype)
+			}
+		}
+
+		s.logger.Info("DoH query received",
+			"domain", domain,
+			"type", queryTypeName,
+			"client", clientIP,
+		)
+
+		if metrics != nil {
+			attrs := []attribute.KeyValue{attribute.String("transport", transport)}
+			metrics.DNSQueriesTotal.Add(ctx, 1, metric.WithAttributes(attrs...))
+			metrics.DNSQueriesByType.Add(ctx, 1, metric.WithAttributes(append(attrs, attribute.String("type", queryTypeName))...))
+		}
+
 		s.dnsHandler.ServeDNS(ctx, dohWriter, dnsMsg)
+
+		dur := time.Since(start)
+		if metrics != nil {
+			metrics.DNSQueryDuration.Record(ctx, float64(dur.Milliseconds()), metric.WithAttributes(attribute.String("transport", transport)))
+		}
+
+		s.logger.Info("DoH query processed",
+			"domain", domain,
+			"duration_ms", dur.Milliseconds(),
+		)
 	}
 
 	if dohWriter.msg == nil {

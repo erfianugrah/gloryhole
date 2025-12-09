@@ -224,7 +224,9 @@ function showEditPolicyModal(policy) {
     document.getElementById('policy-logic').value = policy.logic;
     document.getElementById('policy-action').value = policy.action;
     document.getElementById('policy-enabled').checked = policy.enabled;
-    setLogicMode('expression');
+    resetPolicyBuilder();
+    const hydrated = restoreBuilderFromLogic(policy.logic);
+    setLogicMode(hydrated ? 'builder' : 'expression');
     document.getElementById('policy-modal').style.display = 'flex';
 }
 
@@ -433,7 +435,6 @@ function updateValueInput() {
         if (operator.min !== undefined) valueInput.min = operator.min;
         if (operator.max !== undefined) valueInput.max = operator.max;
     }
-    valueInput.value = '';
 }
 
 function addPolicyCondition() {
@@ -529,12 +530,59 @@ function resetPolicyBuilder() {
     updateLogicFromBuilder();
 }
 
+// Hydrate the visual builder from an existing logic string when possible.
+// This prevents user input from being wiped when switching operators or modes mid-configuration.
+function restoreBuilderFromLogic(logic) {
+    if (!logic || typeof logic !== 'string') {
+        return false;
+    }
+
+    // Split on && / || while keeping simple builder-generated expressions intact.
+    const parts = logic.split(/\s+(\&\&|\|\|)\s+/);
+    if (parts.length === 1 && !logic.trim()) {
+        return false;
+    }
+
+    const expressions = [];
+    const joiners = [];
+    for (let i = 0; i < parts.length; i++) {
+        if (i % 2 === 0) {
+            const expr = parts[i].trim().replace(/^\(|\)$/g, '');
+            if (expr) expressions.push(expr);
+        } else {
+            joiners.push(parts[i]);
+        }
+    }
+
+    if (!expressions.length) {
+        return false;
+    }
+
+    builderState.conditions = expressions.map((expr) => ({
+        expression: expr,
+        label: expr,
+    }));
+
+    if (joiners.length) {
+        builderState.combinator = joiners.some((j) => j === '||') ? '||' : '&&';
+        const combinatorSelect = document.getElementById('builder-combinator');
+        if (combinatorSelect) combinatorSelect.value = builderState.combinator;
+    }
+
+    renderPolicyConditions();
+    updateLogicFromBuilder();
+    return true;
+}
+
 function setLogicMode(mode) {
     builderState.mode = mode;
     const panel = document.getElementById('builder-panel');
     const textarea = document.getElementById('policy-logic');
     if (!panel || !textarea) return;
     if (mode === 'builder') {
+        if (builderState.conditions.length === 0 && textarea.value) {
+            restoreBuilderFromLogic(textarea.value);
+        }
         panel.style.display = 'block';
         textarea.readOnly = true;
         textarea.classList.add('readonly');
