@@ -1,0 +1,137 @@
+# Glory-Hole Test Configuration
+# Using high-numbered ports to avoid conflicts
+
+# Server settings
+server:
+  listen_address: ":15353"  # High port instead of 53
+  tcp_enabled: true
+  udp_enabled: true
+  web_ui_address: ":18080"  # High port instead of 8080
+  enable_policies: true
+  enable_blocklist: true
+  cors_allowed_origins: []
+  decision_trace: true  # Enable decision trace for debugging
+
+# Authentication
+auth:
+  enabled: false
+  username: "admin"
+  password_hash: ""
+  api_key: ""
+
+# Upstream DNS servers (using Cloudflare and Google)
+upstream_dns_servers:
+  - "1.1.1.1:53"
+  - "8.8.8.8:53"
+
+# Update settings
+update_interval: "24h"
+auto_update_blocklists: false  # Disable auto-update for testing
+
+# Blocklists - minimal for quick testing
+blocklists:
+  # Small test blocklist
+  - "https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts"
+
+# Whitelist
+whitelist:
+  - "example.com"
+  - "*.example.com"
+  - "google.com"
+  - "*.google.com"
+
+# Local DNS Records - minimal for testing
+local_records:
+  enabled: true
+  records:
+    - domain: "test.local."
+      type: "A"
+      ips:
+        - "127.0.0.1"
+      ttl: 300
+
+# Cache settings
+cache:
+  enabled: true
+  max_entries: 1000
+  min_ttl: "30s"
+  max_ttl: "12h"
+  negative_ttl: "5m"
+  blocked_ttl: "1h"
+  shard_count: 0
+
+# Storage settings
+storage:
+  backend: "sqlite"
+  sqlite_path: "/tmp/gloryhole-test.db"
+  buffer_size: 100
+  retention_days: 7
+
+# Rate limiting
+rate_limit:
+  enabled: true
+  requests_per_second: 100
+  burst: 200
+  action: "drop"
+  cleanup_interval: "10m"
+  max_tracked_clients: 10000
+  log_violations: true
+  overrides: []
+  trusted_proxies: []
+
+# Logging
+logging:
+  level: "info"
+  format: "text"
+  output: "stdout"
+  add_source: false
+
+# Telemetry
+telemetry:
+  prometheus_enabled: false
+  prometheus_port: 19090  # High port
+
+# TLS/DoT settings
+tls:
+  cert_file: ""
+  key_file: ""
+  autocert:
+    enabled: false
+    hosts: []
+    cache_dir: "/tmp/gloryhole-test-certs"
+    http01_address: ":18081"
+  acme:
+    enabled: false
+    hosts: []
+    upstreams: []
+    cache_dir: "/tmp/gloryhole-test-acme"
+    dns_provider: "cloudflare"
+    email: ""
+    renew_before: "720h"
+
+# DoT listener
+dot_enabled: false
+dot_address: ":15853"
+
+# Policies - sample for testing
+policies:
+  - name: "Block Social Media"
+    enabled: false
+    priority: 100
+    conditions:
+      domain_patterns:
+        - "*.facebook.com"
+        - "*.instagram.com"
+        - "*.twitter.com"
+        - "*.x.com"
+    action: "block"
+
+  - name: "Allow Development"
+    enabled: true
+    priority: 50
+    conditions:
+      domain_patterns:
+        - "*.localhost"
+        - "*.local"
+        - "*.test"
+    action: "allow"

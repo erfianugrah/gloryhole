@@ -18,8 +18,8 @@
     <form hx-put="/api/config/upstreams" hx-target="#upstreams-section" hx-swap="outerHTML">
         <div class="form-group">
             <label for="servers">Resolvers</label>
-            <textarea id="servers" name="servers" rows="4" spellcheck="false">{{join $cfg.UpstreamDNSServers "\n"}}</textarea>
-            <span class="form-help">One host:port per line (e.g., <code>1.1.1.1:53</code>, <code>[2606:4700:4700::1111]:53</code>).</span>
+            <textarea id="servers" name="servers" rows="4" spellcheck="false" data-validate="dns-server" aria-describedby="servers-help">{{join $cfg.UpstreamDNSServers "\n"}}</textarea>
+            <span id="servers-help" class="form-help">One host:port per line (e.g., <code>1.1.1.1:53</code>, <code>[2606:4700:4700::1111]:53</code>).</span>
         </div>
         <div class="form-actions">
             <button type="reset" class="btn btn-secondary btn-sm">Reset</button>
@@ -57,12 +57,12 @@
         <div class="form-grid">
             <div class="form-group">
                 <label for="cache-min-ttl">Minimum TTL</label>
-                <input id="cache-min-ttl" type="text" name="min_ttl" value="{{$cfg.Cache.MinTTL}}" placeholder="e.g., 30s, 5m">
-                <span class="form-help">Go-style duration string.</span>
+                <input id="cache-min-ttl" type="text" name="min_ttl" value="{{$cfg.Cache.MinTTL}}" placeholder="e.g., 30s, 5m" data-validate="duration" aria-describedby="cache-min-ttl-help">
+                <span id="cache-min-ttl-help" class="form-help">Go-style duration string.</span>
             </div>
             <div class="form-group">
                 <label for="cache-max-ttl">Maximum TTL</label>
-                <input id="cache-max-ttl" type="text" name="max_ttl" value="{{$cfg.Cache.MaxTTL}}" placeholder="e.g., 12h">
+                <input id="cache-max-ttl" type="text" name="max_ttl" value="{{$cfg.Cache.MaxTTL}}" placeholder="e.g., 12h" data-validate="duration">
             </div>
         </div>
 
@@ -280,7 +280,7 @@
                 </div>
                 <div class="form-group">
                     <label for="ac-email">Email</label>
-                    <input id="ac-email" class="filter-input" type="email" name="autocert_email" value="{{$cfg.Server.TLS.Autocert.Email}}" placeholder="you@example.com">
+                    <input id="ac-email" class="filter-input" type="email" name="autocert_email" value="{{$cfg.Server.TLS.Autocert.Email}}" placeholder="you@example.com" data-validate="email">
                 </div>
             </div>
             <div class="form-group">
@@ -311,7 +311,7 @@
                 </div>
                 <div class="form-group">
                     <label for="acme-email">Email</label>
-                    <input id="acme-email" class="filter-input" type="email" name="acme_email" value="{{$cfg.Server.TLS.ACME.Email}}" placeholder="you@example.com">
+                    <input id="acme-email" class="filter-input" type="email" name="acme_email" value="{{$cfg.Server.TLS.ACME.Email}}" placeholder="you@example.com" data-validate="email">
                 </div>
             </div>
             <div class="form-group">
@@ -628,200 +628,5 @@
     </div>
 </div>
 
-<script>
-async function resetStorage() {
-    const input = document.getElementById('storage-nuke-confirm');
-    const button = document.getElementById('storage-nuke-btn');
-    if (!input || !button) {
-        return;
-    }
-
-    const value = (input.value || '').trim().toUpperCase();
-    if (value !== 'NUKE') {
-        alert('Please type "NUKE" to confirm.');
-        input.focus();
-        return;
-    }
-
-    if (!confirm('This will permanently delete all stored query data. Continue?')) {
-        return;
-    }
-
-    const defaultLabel = button.textContent;
-    button.disabled = true;
-    button.textContent = 'Deleting...';
-
-    try {
-        const response = await fetch('/api/storage/reset', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ confirm: 'NUKE' })
-        });
-
-        if (!response.ok) {
-            let errorMessage = 'Failed to reset storage';
-            try {
-                const error = await response.json();
-                errorMessage = error.message || errorMessage;
-            } catch (_) {
-                // ignore JSON parse errors
-            }
-            throw new Error(errorMessage);
-        }
-
-        input.value = '';
-        alert('All stored query data has been deleted.');
-    } catch (error) {
-        alert('Error: ' + error.message);
-    } finally {
-        button.disabled = false;
-        button.textContent = defaultLabel;
-    }
-}
-
-async function reloadBlocklists() {
-    const button = event.target;
-    button.disabled = true;
-    button.textContent = 'Reloading...';
-
-    try {
-        const response = await fetch('/api/blocklist/reload', {
-            method: 'POST'
-        });
-
-        if (response.ok) {
-            const result = await response.json();
-            alert(`Blocklists reloaded successfully!\n${result.domains} domains loaded.`);
-        } else {
-            const error = await response.json();
-            alert('Error: ' + (error.message || 'Failed to reload blocklists'));
-        }
-    } catch (error) {
-        alert('Error: ' + error.message);
-    } finally {
-        button.disabled = false;
-        button.textContent = 'Reload Now';
-    }
-}
-
-let blocklistCountdownInterval = null;
-let policiesCountdownInterval = null;
-
-async function disableFeature(feature, duration) {
-    const featureName = feature === 'blocklist' ? 'Blocklist' : 'Policies';
-    const durationText = duration === 0 ? 'indefinitely' : formatDuration(duration);
-
-    if (!confirm(`Disable ${featureName} ${durationText}?`)) {
-        return;
-    }
-
-    try {
-        const response = await fetch(`/api/features/${feature}/disable`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ duration: duration })
-        });
-
-        if (response.ok) {
-            await response.json();
-            updateFeatureStatus();
-        } else {
-            const error = await response.json();
-            alert('Error: ' + (error.message || `Failed to disable ${featureName}`));
-        }
-    } catch (error) {
-        alert('Error: ' + error.message);
-    }
-}
-
-async function enableFeature(feature) {
-    const featureName = feature === 'blocklist' ? 'Blocklist' : 'Policies';
-
-    try {
-        const response = await fetch(`/api/features/${feature}/enable`, {
-            method: 'POST'
-        });
-
-        if (response.ok) {
-            await response.json();
-            updateFeatureStatus();
-        } else {
-            const error = await response.json();
-            alert('Error: ' + (error.message || `Failed to enable ${featureName}`));
-        }
-    } catch (error) {
-        alert('Error: ' + error.message);
-    }
-}
-
-async function updateFeatureStatus() {
-    try {
-        const response = await fetch('/api/features');
-        if (!response.ok) {
-            throw new Error('Failed to fetch feature status');
-        }
-
-        const data = await response.json();
-        const blocklistStatus = document.getElementById('blocklist-status');
-        const policiesStatus = document.getElementById('policies-status');
-
-        blocklistStatus.textContent = data.blocklist_enabled ? 'Enabled' : 'Disabled';
-        blocklistStatus.className = `status-badge ${data.blocklist_enabled ? 'success' : 'danger'}`;
-
-        policiesStatus.textContent = data.policies_enabled ? 'Enabled' : 'Disabled';
-        policiesStatus.className = `status-badge ${data.policies_enabled ? 'success' : 'danger'}`;
-
-        updateCountdown('blocklist', data.blocklist_temp_disabled, data.blocklist_disabled_until);
-        updateCountdown('policies', data.policies_temp_disabled, data.policies_disabled_until);
-    } catch (error) {
-        console.error('Failed to update feature status:', error);
-    }
-}
-
-function formatDuration(seconds) {
-    if (seconds < 60) return `${seconds}s`;
-    if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
-    return `${Math.floor(seconds / 3600)}h`;
-}
-
-function updateCountdown(feature, isDisabled, until) {
-    const countdownElement = document.getElementById(`${feature}-countdown`);
-    const timeElement = document.getElementById(`${feature}-time`);
-    let intervalRef = feature === 'blocklist' ? blocklistCountdownInterval : policiesCountdownInterval;
-
-    if (intervalRef) {
-        clearInterval(intervalRef);
-    }
-
-    if (!isDisabled || !until) {
-        countdownElement.style.display = 'none';
-        return;
-    }
-
-    countdownElement.style.display = 'block';
-
-    function updateTimer() {
-        const remainingSeconds = Math.max(0, Math.floor((new Date(until) - new Date()) / 1000));
-        const minutes = Math.floor(remainingSeconds / 60);
-        const seconds = remainingSeconds % 60;
-        timeElement.textContent = `${minutes}m ${seconds}s`;
-
-        if (remainingSeconds <= 0) {
-            clearInterval(intervalRef);
-            updateFeatureStatus();
-        }
-    }
-
-    updateTimer();
-    intervalRef = setInterval(updateTimer, 1000);
-
-    if (feature === 'blocklist') {
-        blocklistCountdownInterval = intervalRef;
-    } else {
-        policiesCountdownInterval = intervalRef;
-    }
-}
-
-updateFeatureStatus();
-</script>
+<script type="module" src="/static/js/settings-init.js"></script>
 {{end}}
