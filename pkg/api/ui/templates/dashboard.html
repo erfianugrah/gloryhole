@@ -33,16 +33,16 @@
             <div class="chart-card">
                 <h4>Last Hour (per 5 min)</h4>
                 <div class="chart-container">
-                    <canvas id="queryChart"></canvas>
+                    <canvas id="queryChart" role="img" aria-label="Query traffic chart showing total, blocked, and cached queries over the last hour" aria-describedby="queryChart-legend"></canvas>
                 </div>
-                <div class="chart-legend" id="queryChart-legend"></div>
+                <div class="chart-legend" id="queryChart-legend" role="list" aria-label="Chart legend"></div>
             </div>
             <div class="chart-card">
                 <h4>Cache Hit Rate</h4>
                 <div class="chart-container">
-                    <canvas id="cacheHitChart"></canvas>
+                    <canvas id="cacheHitChart" role="img" aria-label="Cache hit rate percentage over time" aria-describedby="cacheHitChart-legend"></canvas>
                 </div>
-                <div class="chart-legend" id="cacheHitChart-legend"></div>
+                <div class="chart-legend" id="cacheHitChart-legend" role="list" aria-label="Chart legend"></div>
             </div>
         </div>
     </div>
@@ -65,23 +65,23 @@
                     </div>
                 </div>
                 <div class="chart-container">
-                    <canvas id="queryTypeChart"></canvas>
+                    <canvas id="queryTypeChart" role="img" aria-label="Query type distribution showing breakdown of DNS query types" aria-describedby="queryTypeChart-legend"></canvas>
                 </div>
-                <div class="chart-legend" id="queryTypeChart-legend"></div>
+                <div class="chart-legend" id="queryTypeChart-legend" role="list" aria-label="Chart legend"></div>
             </div>
             <div class="chart-card">
                 <h4>Top Allowed Domains</h4>
                 <div class="chart-container">
-                    <canvas id="topAllowedChart"></canvas>
+                    <canvas id="topAllowedChart" role="img" aria-label="Bar chart showing top allowed domains by query count" aria-describedby="topAllowedChart-legend"></canvas>
                 </div>
-                <div class="chart-legend" id="topAllowedChart-legend"></div>
+                <div class="chart-legend" id="topAllowedChart-legend" role="list" aria-label="Chart legend"></div>
             </div>
             <div class="chart-card">
                 <h4>Top Blocked Domains</h4>
                 <div class="chart-container">
-                    <canvas id="topBlockedChart"></canvas>
+                    <canvas id="topBlockedChart" role="img" aria-label="Bar chart showing top blocked domains by query count" aria-describedby="topBlockedChart-legend"></canvas>
                 </div>
-                <div class="chart-legend" id="topBlockedChart-legend"></div>
+                <div class="chart-legend" id="topBlockedChart-legend" role="list" aria-label="Chart legend"></div>
             </div>
         </div>
     </div>

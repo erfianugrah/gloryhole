@@ -18,8 +18,8 @@
     <form hx-put="/api/config/upstreams" hx-target="#upstreams-section" hx-swap="outerHTML">
         <div class="form-group">
             <label for="servers">Resolvers</label>
-            <textarea id="servers" name="servers" rows="4" spellcheck="false">{{join $cfg.UpstreamDNSServers "\n"}}</textarea>
-            <span class="form-help">One host:port per line (e.g., <code>1.1.1.1:53</code>, <code>[2606:4700:4700::1111]:53</code>).</span>
+            <textarea id="servers" name="servers" rows="4" spellcheck="false" data-validate="dns-server" aria-describedby="servers-help">{{join $cfg.UpstreamDNSServers "\n"}}</textarea>
+            <span id="servers-help" class="form-help">One host:port per line (e.g., <code>1.1.1.1:53</code>, <code>[2606:4700:4700::1111]:53</code>).</span>
         </div>
         <div class="form-actions">
             <button type="reset" class="btn btn-secondary btn-sm">Reset</button>
@@ -57,12 +57,12 @@
         <div class="form-grid">
             <div class="form-group">
                 <label for="cache-min-ttl">Minimum TTL</label>
-                <input id="cache-min-ttl" type="text" name="min_ttl" value="{{$cfg.Cache.MinTTL}}" placeholder="e.g., 30s, 5m">
-                <span class="form-help">Go-style duration string.</span>
+                <input id="cache-min-ttl" type="text" name="min_ttl" value="{{$cfg.Cache.MinTTL}}" placeholder="e.g., 30s, 5m" data-validate="duration" aria-describedby="cache-min-ttl-help">
+                <span id="cache-min-ttl-help" class="form-help">Go-style duration string.</span>
             </div>
             <div class="form-group">
                 <label for="cache-max-ttl">Maximum TTL</label>
-                <input id="cache-max-ttl" type="text" name="max_ttl" value="{{$cfg.Cache.MaxTTL}}" placeholder="e.g., 12h">
+                <input id="cache-max-ttl" type="text" name="max_ttl" value="{{$cfg.Cache.MaxTTL}}" placeholder="e.g., 12h" data-validate="duration">
             </div>
         </div>
 
@@ -280,7 +280,7 @@
                 </div>
                 <div class="form-group">
                     <label for="ac-email">Email</label>
-                    <input id="ac-email" class="filter-input" type="email" name="autocert_email" value="{{$cfg.Server.TLS.Autocert.Email}}" placeholder="you@example.com">
+                    <input id="ac-email" class="filter-input" type="email" name="autocert_email" value="{{$cfg.Server.TLS.Autocert.Email}}" placeholder="you@example.com" data-validate="email">
                 </div>
             </div>
             <div class="form-group">
@@ -311,7 +311,7 @@
                 </div>
                 <div class="form-group">
                     <label for="acme-email">Email</label>
-                    <input id="acme-email" class="filter-input" type="email" name="acme_email" value="{{$cfg.Server.TLS.ACME.Email}}" placeholder="you@example.com">
+                    <input id="acme-email" class="filter-input" type="email" name="acme_email" value="{{$cfg.Server.TLS.ACME.Email}}" placeholder="you@example.com" data-validate="email">
                 </div>
             </div>
             <div class="form-group">

@@ -17,7 +17,7 @@
     --surface: #151b3d;
     --surface-elevated: #1a2449;
     --text: #e0e6ff;
-    --text-muted: #7d8cc4;
+    --text-muted: #9ca8d4;
     --border: #1f2d5c;
 
     /* Glow Effects */
@@ -159,6 +159,33 @@ code, .stat-value, .domain-name, pre {
 @keyframes glowPulse {
     0%, 100% { box-shadow: 0 0 5px rgba(0, 255, 65, 0.3); }
     50% { box-shadow: 0 0 20px rgba(0, 255, 65, 0.6); }
+}
+
+/* Reduced Motion Support */
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+
+    /* Disable specific decorative animations */
+    .stat-card::before,
+    .policy-card::before {
+        animation: none !important;
+    }
+
+    .status-chip.status-blocked {
+        animation: none !important;
+    }
+
+    .skeleton {
+        animation: none !important;
+        background: rgba(31, 45, 92, 0.4);
+    }
 }
 
 .container {
@@ -1866,6 +1893,46 @@ form {
     font-size: 0.75rem;
     color: var(--text-muted);
     margin-top: 0.25rem;
+}
+
+.form-error {
+    display: block;
+    font-size: 0.75rem;
+    color: var(--danger);
+    margin-top: 0.25rem;
+    font-weight: 600;
+}
+
+.form-error[hidden] {
+    display: none;
+}
+
+.form-group input.is-invalid,
+.form-group textarea.is-invalid,
+.form-group select.is-invalid {
+    border-color: var(--danger);
+    background-color: rgba(255, 0, 110, 0.05);
+}
+
+.form-group input.is-invalid:focus,
+.form-group textarea.is-invalid:focus,
+.form-group select.is-invalid:focus {
+    border-color: var(--danger);
+    box-shadow: 0 0 0 2px rgba(255, 0, 110, 0.2);
+}
+
+.form-group input.is-valid,
+.form-group textarea.is-valid,
+.form-group select.is-valid {
+    border-color: var(--success);
+    background-color: rgba(0, 255, 65, 0.03);
+}
+
+.form-group input.is-valid:focus,
+.form-group textarea.is-valid:focus,
+.form-group select.is-valid:focus {
+    border-color: var(--success);
+    box-shadow: 0 0 0 2px rgba(0, 255, 65, 0.15);
 }
 
 .form-grid {
