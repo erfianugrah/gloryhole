@@ -596,6 +596,461 @@ These endpoints return HTML partials for the web interface.
 
 **Used by:** Dashboard top domains section
 
+## Whitelist Management Endpoints
+
+### GET /api/whitelist
+
+**Description:** Get all whitelisted domains and patterns.
+
+**Request:**
+```bash
+curl http://localhost:8080/api/whitelist
+```
+
+**Response:** (200 OK)
+```json
+{
+  "total": 4,
+  "exact": ["analytics.google.com", "github-cloud.s3.amazonaws.com"],
+  "wildcard": ["*.taskassist-pa.clients6.google.com"],
+  "regex": ["^cdn\\d+\\.example\\.com$"]
+}
+```
+
+**Response Fields:**
+| Field | Type | Description |
+|-------|------|-------------|
+| `total` | int | Total number of whitelist entries |
+| `exact` | []string | Exact domain matches |
+| `wildcard` | []string | Wildcard patterns (e.g., `*.example.com`) |
+| `regex` | []string | Regular expression patterns |
+
+### POST /api/whitelist
+
+**Description:** Add a domain or pattern to the whitelist. Whitelisted domains will never be blocked, even if they appear in blocklists.
+
+**Request:**
+```bash
+# Add exact domain
+curl -X POST http://localhost:8080/api/whitelist \
+  -H "Content-Type: application/json" \
+  -d '{"domain": "analytics.google.com"}'
+
+# Add wildcard pattern
+curl -X POST http://localhost:8080/api/whitelist \
+  -H "Content-Type: application/json" \
+  -d '{"domain": "*.cdn.example.com"}'
+
+# Add regex pattern
+curl -X POST http://localhost:8080/api/whitelist \
+  -H "Content-Type: application/json" \
+  -d '{"domain": "^api\\d+\\.example\\.com$"}'
+```
+
+**Request Body:**
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `domain` | string | Yes | Domain or pattern to whitelist |
+
+**Response:** (200 OK)
+```json
+{
+  "message": "Domain added to whitelist",
+  "total": 5,
+  "exact": 3,
+  "wildcard": 1,
+  "regex": 1
+}
+```
+
+**Errors:**
+- `400` - Invalid request (missing domain)
+- `409` - Domain already whitelisted
+- `500` - Failed to save configuration
+
+### DELETE /api/whitelist/{domain}
+
+**Description:** Remove a domain or pattern from the whitelist.
+
+**Request:**
+```bash
+# Remove exact domain
+curl -X DELETE "http://localhost:8080/api/whitelist/analytics.google.com"
+
+# Remove wildcard pattern (URL-encode the *)
+curl -X DELETE "http://localhost:8080/api/whitelist/*.cdn.example.com"
+```
+
+**Response:** (200 OK)
+```json
+{
+  "message": "Domain removed from whitelist",
+  "total": 4,
+  "exact": 2,
+  "wildcard": 1,
+  "regex": 1
+}
+```
+
+**Errors:**
+- `404` - Domain not found in whitelist
+- `500` - Failed to save configuration
+
+## Local Records Management Endpoints
+
+### GET /api/localrecords
+
+**Description:** Get all local DNS records.
+
+**Request:**
+```bash
+curl http://localhost:8080/api/localrecords
+```
+
+**Response:** (200 OK)
+```json
+{
+  "total": 3,
+  "records": [
+    {
+      "id": "router.local.:A:0",
+      "domain": "router.local.",
+      "type": "A",
+      "ips": ["192.168.1.1"],
+      "target": "",
+      "ttl": 300,
+      "wildcard": false
+    },
+    {
+      "id": "mail.local.:AAAA:0",
+      "domain": "mail.local.",
+      "type": "AAAA",
+      "ips": ["2001:db8::1"],
+      "target": "",
+      "ttl": 600,
+      "wildcard": false
+    },
+    {
+      "id": "www.local.:CNAME:0",
+      "domain": "www.local.",
+      "type": "CNAME",
+      "ips": [],
+      "target": "router.local.",
+      "ttl": 300,
+      "wildcard": false
+    }
+  ]
+}
+```
+
+**Response Fields:**
+| Field | Type | Description |
+|-------|------|-------------|
+| `total` | int | Total number of local records |
+| `records` | []object | Array of DNS records |
+| `records[].id` | string | Unique identifier (`domain:type:index`) |
+| `records[].domain` | string | Domain name (with trailing dot) |
+| `records[].type` | string | Record type (`A`, `AAAA`, or `CNAME`) |
+| `records[].ips` | []string | IP addresses (for A/AAAA records) |
+| `records[].target` | string | Target domain (for CNAME records) |
+| `records[].ttl` | int | Time-to-live in seconds |
+| `records[].wildcard` | bool | Whether this is a wildcard record |
+
+### POST /api/localrecords
+
+**Description:** Add a new local DNS record.
+
+**Request:**
+```bash
+# Add A record
+curl -X POST http://localhost:8080/api/localrecords \
+  -H "Content-Type: application/json" \
+  -d '{
+    "domain": "nas.local",
+    "type": "A",
+    "ips": ["192.168.1.100"],
+    "ttl": 300
+  }'
+
+# Add AAAA record
+curl -X POST http://localhost:8080/api/localrecords \
+  -H "Content-Type: application/json" \
+  -d '{
+    "domain": "server.local",
+    "type": "AAAA",
+    "ips": ["2001:db8::100"],
+    "ttl": 600
+  }'
+
+# Add CNAME record
+curl -X POST http://localhost:8080/api/localrecords \
+  -H "Content-Type: application/json" \
+  -d '{
+    "domain": "www.local",
+    "type": "CNAME",
+    "target": "nas.local",
+    "ttl": 300
+  }'
+
+# Add A record with multiple IPs (round-robin)
+curl -X POST http://localhost:8080/api/localrecords \
+  -H "Content-Type: application/json" \
+  -d '{
+    "domain": "web.local",
+    "type": "A",
+    "ips": ["192.168.1.10", "192.168.1.11", "192.168.1.12"],
+    "ttl": 300
+  }'
+```
+
+**Request Body:**
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `domain` | string | Yes | Domain name (trailing dot optional) |
+| `type` | string | Yes | Record type: `A`, `AAAA`, or `CNAME` |
+| `ips` | []string | For A/AAAA | IP addresses (can specify multiple for round-robin) |
+| `target` | string | For CNAME | Target domain name |
+| `ttl` | int | No | Time-to-live in seconds (default: 300) |
+
+**Response:** (200 OK)
+```json
+{
+  "message": "Local record added successfully",
+  "record": {
+    "id": "nas.local.:A:0",
+    "domain": "nas.local.",
+    "type": "A",
+    "ips": ["192.168.1.100"],
+    "ttl": 300,
+    "wildcard": false
+  }
+}
+```
+
+**Errors:**
+- `400` - Invalid request (missing required fields, invalid IP format, etc.)
+- `500` - Failed to save configuration
+
+**Validation Rules:**
+- Domain is required
+- Type must be `A`, `AAAA`, or `CNAME`
+- A/AAAA records require at least one valid IP address
+- CNAME records require a target domain
+- TTL must be positive
+
+### DELETE /api/localrecords/{id}
+
+**Description:** Remove a local DNS record.
+
+**Request:**
+```bash
+curl -X DELETE "http://localhost:8080/api/localrecords/nas.local.:A:0"
+```
+
+**Path Parameters:**
+| Name | Type | Description |
+|------|------|-------------|
+| `id` | string | Record identifier in format `domain:type:index` |
+
+**Response:** (200 OK)
+```json
+{
+  "message": "Local record removed successfully",
+  "total": 2
+}
+```
+
+**Errors:**
+- `400` - Invalid ID format
+- `404` - Record not found
+- `500` - Failed to save configuration
+
+## Conditional Forwarding Management Endpoints
+
+### GET /api/conditionalforwarding
+
+**Description:** Get all conditional forwarding rules. Rules are returned sorted by priority (highest first).
+
+**Request:**
+```bash
+curl http://localhost:8080/api/conditionalforwarding
+```
+
+**Response:** (200 OK)
+```json
+{
+  "enabled": true,
+  "total": 2,
+  "rules": [
+    {
+      "id": "Corporate VPN:90:0",
+      "name": "Corporate VPN",
+      "domains": ["*.corp.example.com", "*.internal"],
+      "client_cidrs": [],
+      "query_types": [],
+      "upstreams": ["10.0.0.1:53", "10.0.0.2:53"],
+      "priority": 90,
+      "timeout": "3s",
+      "max_retries": 2,
+      "failover": true,
+      "enabled": true
+    },
+    {
+      "id": "Home Network:50:1",
+      "name": "Home Network",
+      "domains": [],
+      "client_cidrs": ["192.168.1.0/24"],
+      "query_types": ["PTR"],
+      "upstreams": ["192.168.1.1:53"],
+      "priority": 50,
+      "timeout": "",
+      "max_retries": 0,
+      "failover": false,
+      "enabled": true
+    }
+  ]
+}
+```
+
+**Response Fields:**
+| Field | Type | Description |
+|-------|------|-------------|
+| `enabled` | bool | Whether conditional forwarding is enabled globally |
+| `total` | int | Total number of rules |
+| `rules` | []object | Array of forwarding rules (sorted by priority) |
+| `rules[].id` | string | Unique identifier (`name:priority:index`) |
+| `rules[].name` | string | Rule name |
+| `rules[].domains` | []string | Domain patterns to match (e.g., `*.local`, `example.com`) |
+| `rules[].client_cidrs` | []string | Client IP ranges to match (CIDR notation) |
+| `rules[].query_types` | []string | DNS query types to match (e.g., `A`, `PTR`) |
+| `rules[].upstreams` | []string | Upstream DNS servers for this rule |
+| `rules[].priority` | int | Rule priority (1-100, higher = evaluated first) |
+| `rules[].timeout` | string | Query timeout (e.g., `2s`, `500ms`) |
+| `rules[].max_retries` | int | Maximum retry attempts |
+| `rules[].failover` | bool | Whether to try next upstream on failure |
+| `rules[].enabled` | bool | Whether rule is active |
+
+### POST /api/conditionalforwarding
+
+**Description:** Add a new conditional forwarding rule.
+
+**Request:**
+```bash
+# Forward local network queries to local DNS
+curl -X POST http://localhost:8080/api/conditionalforwarding \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Local Network",
+    "domains": ["*.local", "*.lan"],
+    "upstreams": ["192.168.1.1:53"],
+    "priority": 80
+  }'
+
+# Forward PTR queries from specific clients
+curl -X POST http://localhost:8080/api/conditionalforwarding \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Reverse DNS",
+    "client_cidrs": ["10.0.0.0/8"],
+    "query_types": ["PTR"],
+    "upstreams": ["10.0.0.1:53"],
+    "priority": 70,
+    "timeout": "3s",
+    "max_retries": 2,
+    "failover": true
+  }'
+
+# Complex rule with multiple matchers
+curl -X POST http://localhost:8080/api/conditionalforwarding \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "VPN Network",
+    "domains": ["*.vpn.corp"],
+    "client_cidrs": ["172.16.0.0/12"],
+    "query_types": ["A", "AAAA"],
+    "upstreams": ["172.16.0.1:53", "172.16.0.2:53"],
+    "priority": 90,
+    "timeout": "5s",
+    "max_retries": 3,
+    "failover": true
+  }'
+```
+
+**Request Body:**
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `name` | string | Yes | Rule name (must be unique) |
+| `domains` | []string | * | Domain patterns (wildcards supported) |
+| `client_cidrs` | []string | * | Client IP ranges in CIDR notation |
+| `query_types` | []string | * | DNS query types (A, AAAA, PTR, etc.) |
+| `upstreams` | []string | Yes | Upstream DNS servers (IP:port format) |
+| `priority` | int | No | Priority 1-100 (default: 50, higher = first) |
+| `timeout` | string | No | Query timeout (e.g., `2s`, `500ms`) |
+| `max_retries` | int | No | Retry attempts (default: 0) |
+| `failover` | bool | No | Try next upstream on failure (default: false) |
+
+**Note:** At least one matching condition is required (`domains`, `client_cidrs`, or `query_types`).
+
+**Response:** (200 OK)
+```json
+{
+  "message": "Conditional forwarding rule added successfully",
+  "rule": {
+    "id": "Local Network:80:0",
+    "name": "Local Network",
+    "domains": ["*.local", "*.lan"],
+    "client_cidrs": [],
+    "query_types": [],
+    "upstreams": ["192.168.1.1:53"],
+    "priority": 80,
+    "timeout": "",
+    "max_retries": 0,
+    "failover": false,
+    "enabled": true
+  }
+}
+```
+
+**Errors:**
+- `400` - Invalid request (missing required fields, invalid priority/timeout, etc.)
+- `409` - Rule with same name already exists
+- `500` - Failed to save configuration
+
+**Validation Rules:**
+- Name is required and must be unique
+- At least one matching condition required (domains, client_cidrs, or query_types)
+- At least one upstream DNS server required
+- Priority must be between 1 and 100
+- Timeout must be valid duration format (if specified)
+- Client CIDRs must be valid CIDR notation
+
+### DELETE /api/conditionalforwarding/{id}
+
+**Description:** Remove a conditional forwarding rule.
+
+**Request:**
+```bash
+curl -X DELETE "http://localhost:8080/api/conditionalforwarding/Local%20Network:80:0"
+```
+
+**Path Parameters:**
+| Name | Type | Description |
+|------|------|-------------|
+| `id` | string | Rule identifier in format `name:priority:index` |
+
+**Response:** (200 OK)
+```json
+{
+  "message": "Conditional forwarding rule removed successfully",
+  "total": 1
+}
+```
+
+**Errors:**
+- `400` - Invalid ID format
+- `404` - Rule not found
+- `500` - Failed to save configuration
+
 ## CORS Headers
 
 All API endpoints include CORS headers:
