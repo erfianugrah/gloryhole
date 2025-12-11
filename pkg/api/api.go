@@ -167,6 +167,12 @@ func New(cfg *Config) *Server {
 	mux.HandleFunc("GET /api/policies/export", s.handleExportPolicies)
 	mux.HandleFunc("POST /api/policies/test", s.handleTestPolicy)
 
+	// Whitelist management
+	mux.HandleFunc("GET /api/whitelist", s.handleGetWhitelist)
+	mux.HandleFunc("POST /api/whitelist", s.handleAddWhitelist)
+	mux.HandleFunc("DELETE /api/whitelist/{domain}", s.handleRemoveWhitelist)
+	mux.HandleFunc("POST /api/whitelist/bulk", s.handleBulkImportWhitelist)
+
 	// Feature kill-switches
 	mux.HandleFunc("GET /api/features", s.handleGetFeatures)
 	mux.HandleFunc("PUT /api/features", s.handleUpdateFeatures)
@@ -192,6 +198,7 @@ func New(cfg *Config) *Server {
 	mux.HandleFunc("GET /api/ui/clients", s.handleClientsPartial)
 	mux.HandleFunc("GET /queries", s.handleQueriesPage)
 	mux.HandleFunc("GET /policies", s.handlePoliciesPage)
+	mux.HandleFunc("GET /whitelist", s.handleWhitelistPage)
 	mux.HandleFunc("GET /settings", s.handleSettingsPage)
 	mux.HandleFunc("GET /clients", s.handleClientsPage)
 	mux.HandleFunc("GET /blocklists", s.handleBlocklistsPage)
