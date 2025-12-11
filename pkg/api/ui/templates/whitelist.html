@@ -1,0 +1,98 @@
+{{template "base.html" .}}
+
+{{define "title"}}Whitelist - Gloryhole{{end}}
+
+{{define "content"}}
+<div class="whitelist-page">
+    <div class="page-header">
+        <h2>Whitelist</h2>
+        <div class="whitelist-actions">
+            <button class="btn btn-secondary" type="button" onclick="showImportModal()">
+                📋 Import
+            </button>
+            <button class="btn btn-primary" type="button" onclick="showAddModal()">
+                ➕ Add Domain
+            </button>
+        </div>
+    </div>
+
+    <div class="whitelist-info">
+        <p>Domains in the whitelist bypass all blocking rules. Use wildcards (*) or regex patterns for advanced matching.</p>
+        <div class="examples">
+            <strong>Examples:</strong>
+            <code>example.com</code> (exact match),
+            <code>*.cdn.example.com</code> (wildcard),
+            <code>^.*\.googleapis\.com$</code> (regex)
+        </div>
+    </div>
+
+    <!-- Whitelist Entries -->
+    <div id="whitelist-container"
+         hx-get="/api/whitelist"
+         hx-trigger="load, whitelist-updated from:body"
+         hx-swap="innerHTML">
+        <div class="loading">Loading whitelist...</div>
+    </div>
+</div>
+
+<!-- Add Domain Modal -->
+<div id="add-modal" class="modal" style="display: none;">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>Add Domain to Whitelist</h3>
+            <button class="modal-close" onclick="closeAddModal()">&times;</button>
+        </div>
+        <form id="add-form" onsubmit="submitAdd(event)">
+            <div class="form-group">
+                <label for="domain-input">Domain or Pattern *</label>
+                <input type="text" id="domain-input" name="domain" required
+                       placeholder="e.g., example.com or *.cdn.example.com"
+                       autocomplete="off">
+                <span class="form-help">Enter a single domain. For multiple domains, use Import.</span>
+            </div>
+
+            <div class="pattern-hints">
+                <strong>Pattern Types:</strong>
+                <ul>
+                    <li><strong>Exact:</strong> <code>example.com</code></li>
+                    <li><strong>Wildcard:</strong> <code>*.example.com</code> (subdomain match)</li>
+                    <li><strong>Regex:</strong> <code>^.*\.googleapis\.com$</code> (advanced)</li>
+                </ul>
+            </div>
+
+            <div class="form-actions">
+                <button type="button" class="btn btn-secondary" onclick="closeAddModal()">Cancel</button>
+                <button type="submit" class="btn btn-primary">Add Domain</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Import Modal -->
+<div id="import-modal" class="modal" style="display: none;">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>Import Domains</h3>
+            <button class="modal-close" onclick="closeImportModal()">&times;</button>
+        </div>
+        <form id="import-form" onsubmit="submitImport(event)">
+            <div class="form-group">
+                <label for="domains-input">Domains (one per line)</label>
+                <textarea id="domains-input" name="domains" rows="10" required
+                          placeholder="example.com
+*.cdn.example.com
+google.com
+^.*\.googleapis\.com$"></textarea>
+                <span class="form-help">Lines starting with # will be ignored.</span>
+            </div>
+
+            <div class="form-actions">
+                <button type="button" class="btn btn-secondary" onclick="closeImportModal()">Cancel</button>
+                <button type="submit" class="btn btn-primary">Import Domains</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script type="module" src="/static/js/whitelist-init.js"></script>
+{{end}}
