@@ -1,0 +1,67 @@
+{{if .Records}}
+<div class="localrecords-list">
+    {{range .Records}}
+    <div class="localrecord-entry">
+        <div class="entry-info">
+            <div class="entry-header">
+                <span class="domain-text">{{.Domain}}</span>
+                <span class="type-badge type-{{.Type | lower}}">{{.Type}}</span>
+                {{if .Wildcard}}
+                <span class="wildcard-badge">Wildcard</span>
+                {{end}}
+            </div>
+            <div class="entry-details">
+                {{if .IPs}}
+                <div class="detail-row">
+                    <span class="detail-label">IPs:</span>
+                    <span class="detail-value">{{range $i, $ip := .IPs}}{{if $i}}, {{end}}{{$ip}}{{end}}</span>
+                </div>
+                {{end}}
+                {{if .Target}}
+                <div class="detail-row">
+                    <span class="detail-label">Target:</span>
+                    <span class="detail-value">{{.Target}}</span>
+                </div>
+                {{end}}
+                {{if .TxtRecords}}
+                <div class="detail-row">
+                    <span class="detail-label">TXT:</span>
+                    <span class="detail-value">{{range $i, $txt := .TxtRecords}}{{if $i}}, {{end}}"{{$txt}}"{{end}}</span>
+                </div>
+                {{end}}
+                {{if .Priority}}
+                <div class="detail-row">
+                    <span class="detail-label">Priority:</span>
+                    <span class="detail-value">{{.Priority}}</span>
+                </div>
+                {{end}}
+                {{if and .Weight .Port}}
+                <div class="detail-row">
+                    <span class="detail-label">Weight:</span>
+                    <span class="detail-value">{{.Weight}}</span>
+                    <span class="detail-label">Port:</span>
+                    <span class="detail-value">{{.Port}}</span>
+                </div>
+                {{end}}
+                <div class="detail-row">
+                    <span class="detail-label">TTL:</span>
+                    <span class="detail-value">{{.TTL}}s</span>
+                </div>
+            </div>
+        </div>
+        <div class="entry-actions">
+            <button class="btn btn-danger btn-sm"
+                    onclick="removeRecord('{{.ID}}')"
+                    title="Remove local record">
+                Remove
+            </button>
+        </div>
+    </div>
+    {{end}}
+</div>
+{{else}}
+<div class="empty-state">
+    <p>No local DNS records configured</p>
+    <p class="text-muted">Add records to provide custom DNS responses</p>
+</div>
+{{end}}

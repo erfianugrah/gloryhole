@@ -2545,6 +2545,392 @@ form {
     color: var(--info);
 }
 
+/* Local Records Page */
+.localrecords-page {
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+}
+
+.localrecords-info {
+    background: var(--surface-card-gradient);
+    border-radius: 0.75rem;
+    padding: 1.5rem;
+    border: 1px solid var(--surface-card-border);
+    box-shadow: var(--shadow);
+}
+
+.localrecords-info p {
+    margin-bottom: 1rem;
+    color: var(--text-secondary);
+    line-height: 1.6;
+}
+
+.localrecords-info .examples {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    background-color: rgba(0, 0, 0, 0.3);
+    border-left: 3px solid var(--primary);
+    padding: 1rem;
+    border-radius: 0.5rem;
+    margin-top: 0.75rem;
+}
+
+.localrecords-info .examples strong {
+    color: var(--primary);
+    margin-right: 0.5rem;
+}
+
+.localrecords-actions {
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.localrecords-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.localrecord-entry {
+    background: var(--surface-card-gradient);
+    border-radius: 0.75rem;
+    padding: 1.25rem;
+    border: 1px solid var(--surface-card-border);
+    box-shadow: var(--shadow);
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1rem;
+    transition: all 0.2s ease;
+}
+
+.localrecord-entry:hover {
+    border-color: rgba(0, 255, 65, 0.5);
+    box-shadow: 0 8px 20px rgba(0, 255, 65, 0.12);
+    transform: translateY(-2px);
+}
+
+.entry-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    margin-bottom: 0.75rem;
+}
+
+.entry-details {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+}
+
+.detail-row {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.detail-label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    min-width: 4rem;
+}
+
+.detail-value {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.875rem;
+    color: var(--text);
+    word-break: break-word;
+}
+
+.type-badge {
+    display: inline-block;
+    padding: 0.25rem 0.6rem;
+    border-radius: 0.25rem;
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-family: 'JetBrains Mono', monospace;
+}
+
+.type-badge.type-a {
+    background-color: rgba(0, 255, 65, 0.15);
+    color: var(--primary);
+    border: 1px solid rgba(0, 255, 65, 0.3);
+}
+
+.type-badge.type-aaaa {
+    background-color: rgba(0, 200, 255, 0.15);
+    color: #00c8ff;
+    border: 1px solid rgba(0, 200, 255, 0.3);
+}
+
+.type-badge.type-cname {
+    background-color: rgba(255, 184, 11, 0.15);
+    color: var(--warning);
+    border: 1px solid rgba(255, 184, 11, 0.3);
+}
+
+.type-badge.type-mx {
+    background-color: rgba(125, 140, 196, 0.15);
+    color: var(--secondary);
+    border: 1px solid rgba(125, 140, 196, 0.3);
+}
+
+.type-badge.type-txt {
+    background-color: rgba(255, 0, 110, 0.15);
+    color: var(--danger);
+    border: 1px solid rgba(255, 0, 110, 0.3);
+}
+
+.type-badge.type-srv {
+    background-color: rgba(138, 43, 226, 0.15);
+    color: #a855f7;
+    border: 1px solid rgba(138, 43, 226, 0.3);
+}
+
+.type-badge.type-ptr {
+    background-color: rgba(236, 72, 153, 0.15);
+    color: #ec4899;
+    border: 1px solid rgba(236, 72, 153, 0.3);
+}
+
+.wildcard-badge {
+    display: inline-block;
+    padding: 0.25rem 0.6rem;
+    border-radius: 0.25rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    background-color: rgba(0, 255, 255, 0.15);
+    color: var(--info);
+    border: 1px solid rgba(0, 255, 255, 0.3);
+}
+
+/* Local Records Modal */
+.modal-large {
+    max-width: 800px;
+}
+
+.form-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+}
+
+.conditional-fields {
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border);
+}
+
+/* Conditional Forwarding Page */
+.conditionalforwarding-page {
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+}
+
+.conditionalforwarding-info {
+    background: var(--surface-card-gradient);
+    border-radius: 0.75rem;
+    padding: 1.5rem;
+    border: 1px solid var(--surface-card-border);
+    box-shadow: var(--shadow);
+}
+
+.conditionalforwarding-info p {
+    margin-bottom: 1rem;
+    color: var(--text-secondary);
+    line-height: 1.6;
+}
+
+.conditionalforwarding-info .examples {
+    background-color: rgba(0, 0, 0, 0.3);
+    border-left: 3px solid var(--primary);
+    padding: 1rem;
+    border-radius: 0.5rem;
+    margin-top: 0.75rem;
+}
+
+.conditionalforwarding-info .examples strong {
+    color: var(--primary);
+    display: block;
+    margin-bottom: 0.5rem;
+}
+
+.conditionalforwarding-info .examples ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.conditionalforwarding-info .examples li {
+    padding: 0.35rem 0;
+    color: var(--text-secondary);
+}
+
+.conditionalforwarding-info .examples code {
+    background-color: rgba(0, 255, 65, 0.12);
+    padding: 0.25rem 0.5rem;
+    border-radius: 0.25rem;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.875rem;
+    color: var(--primary);
+}
+
+.conditionalforwarding-actions {
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.conditionalforwarding-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.forwarding-rule {
+    background: var(--surface-card-gradient);
+    border-radius: 0.75rem;
+    padding: 1.5rem;
+    border: 1px solid var(--surface-card-border);
+    box-shadow: var(--shadow);
+    transition: all 0.2s ease;
+}
+
+.forwarding-rule:hover {
+    border-color: rgba(0, 255, 65, 0.5);
+    box-shadow: 0 8px 20px rgba(0, 255, 65, 0.12);
+    transform: translateY(-2px);
+}
+
+.forwarding-rule.rule-disabled {
+    opacity: 0.6;
+    border-color: rgba(125, 140, 196, 0.3);
+}
+
+.rule-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid var(--border);
+}
+
+.rule-title {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.rule-name {
+    font-size: 1.125rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.priority-badge {
+    display: inline-block;
+    padding: 0.25rem 0.6rem;
+    border-radius: 0.25rem;
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    background-color: rgba(125, 140, 196, 0.15);
+    color: var(--secondary);
+    border: 1px solid rgba(125, 140, 196, 0.3);
+}
+
+.disabled-badge {
+    display: inline-block;
+    padding: 0.25rem 0.6rem;
+    border-radius: 0.25rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    background-color: rgba(255, 0, 110, 0.15);
+    color: var(--danger);
+    border: 1px solid rgba(255, 0, 110, 0.3);
+}
+
+.rule-actions {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.rule-details {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.detail-section {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.detail-section h5 {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin: 0 0 0.5rem 0;
+}
+
+.feature-disabled {
+    text-align: center;
+    padding: 2rem 1.5rem;
+    background: var(--surface-card-gradient);
+    border-radius: 0.75rem;
+    border: 1px solid rgba(255, 184, 11, 0.3);
+    box-shadow: var(--shadow);
+    margin-bottom: 1rem;
+}
+
+.feature-disabled p:first-child {
+    font-size: 1.125rem;
+    font-weight: 600;
+    color: var(--warning);
+    margin-bottom: 0.5rem;
+}
+
+.form-section {
+    margin-top: 1.5rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--border);
+}
+
+.form-section h4 {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 0 0 1rem 0;
+}
+
+.form-section h4 .text-muted {
+    font-weight: 400;
+    font-size: 0.875rem;
+}
+
 /* Responsive */
 @media (max-width: 768px) {
     .navbar .container {

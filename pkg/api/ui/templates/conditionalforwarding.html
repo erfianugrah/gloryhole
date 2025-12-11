@@ -1,0 +1,134 @@
+{{template "base.html" .}}
+
+{{define "title"}}Conditional Forwarding - Gloryhole{{end}}
+
+{{define "content"}}
+<div class="conditionalforwarding-page">
+    <div class="page-header">
+        <h2>Conditional Forwarding</h2>
+        <div class="conditionalforwarding-actions">
+            <button class="btn btn-primary" type="button" onclick="showAddModal()">
+                ➕ Add Rule
+            </button>
+        </div>
+    </div>
+
+    <div class="conditionalforwarding-info">
+        <p>Conditional forwarding rules allow you to route DNS queries to specific upstream servers based on domain patterns, client networks, or query types. Rules are evaluated by priority (higher numbers first).</p>
+        <div class="examples">
+            <strong>Use Cases:</strong>
+            <ul>
+                <li><strong>Internal domains:</strong> Forward <code>*.local</code> to corporate DNS</li>
+                <li><strong>Split-horizon DNS:</strong> Route VPN clients to internal resolvers</li>
+                <li><strong>Reverse DNS:</strong> Forward PTR queries to authoritative servers</li>
+            </ul>
+        </div>
+    </div>
+
+    <!-- Forwarding Rules List -->
+    <div id="conditionalforwarding-container"
+         hx-get="/api/conditionalforwarding"
+         hx-trigger="load, conditionalforwarding-updated from:body"
+         hx-swap="innerHTML">
+        <div class="loading">Loading forwarding rules...</div>
+    </div>
+</div>
+
+<!-- Add Rule Modal -->
+<div id="add-modal" class="modal" style="display: none;">
+    <div class="modal-content modal-large">
+        <div class="modal-header">
+            <h3>Add Conditional Forwarding Rule</h3>
+            <button class="modal-close" onclick="closeAddModal()">&times;</button>
+        </div>
+        <form id="add-form" onsubmit="submitAdd(event)">
+            <!-- Basic Info -->
+            <div class="form-group">
+                <label for="name-input">Rule Name *</label>
+                <input type="text" id="name-input" name="name" required
+                       placeholder="e.g., Internal Domains"
+                       autocomplete="off">
+                <span class="form-help">Descriptive name for this rule</span>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="priority-input">Priority *</label>
+                    <input type="number" id="priority-input" name="priority"
+                           min="1" max="100" value="50" required>
+                    <span class="form-help">1-100 (higher = evaluated first)</span>
+                </div>
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" id="failover-input" name="failover">
+                        Enable Failover
+                    </label>
+                    <span class="form-help">Try next upstream if one fails</span>
+                </div>
+            </div>
+
+            <!-- Matching Conditions -->
+            <div class="form-section">
+                <h4>Matching Conditions <span class="text-muted">(at least one required)</span></h4>
+
+                <div class="form-group">
+                    <label for="domains-input">Domain Patterns</label>
+                    <textarea id="domains-input" name="domains" rows="3"
+                              placeholder="*.local&#10;*.corp.example.com&#10;internal.local"></textarea>
+                    <span class="form-help">One domain pattern per line. Supports wildcards (*)</span>
+                </div>
+
+                <div class="form-group">
+                    <label for="client-cidrs-input">Client Networks (CIDRs)</label>
+                    <textarea id="client-cidrs-input" name="client_cidrs" rows="2"
+                              placeholder="192.168.1.0/24&#10;10.0.0.0/8"></textarea>
+                    <span class="form-help">One CIDR per line. Match queries from specific networks</span>
+                </div>
+
+                <div class="form-group">
+                    <label for="query-types-input">Query Types</label>
+                    <input type="text" id="query-types-input" name="query_types"
+                           placeholder="PTR, MX, SRV"
+                           autocomplete="off">
+                    <span class="form-help">Comma-separated query types (A, AAAA, PTR, MX, etc.)</span>
+                </div>
+            </div>
+
+            <!-- Upstream Configuration -->
+            <div class="form-section">
+                <h4>Upstream Servers *</h4>
+
+                <div class="form-group">
+                    <label for="upstreams-input">DNS Servers</label>
+                    <textarea id="upstreams-input" name="upstreams" rows="3" required
+                              placeholder="192.168.1.1:53&#10;10.0.0.1:53"></textarea>
+                    <span class="form-help">One server per line (IP:port format)</span>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="timeout-input">Timeout</label>
+                        <input type="text" id="timeout-input" name="timeout"
+                               placeholder="2s"
+                               autocomplete="off">
+                        <span class="form-help">Query timeout (e.g., 2s, 500ms)</span>
+                    </div>
+                    <div class="form-group">
+                        <label for="max-retries-input">Max Retries</label>
+                        <input type="number" id="max-retries-input" name="max_retries"
+                               min="0" max="5" value="2">
+                        <span class="form-help">Retry attempts per upstream</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="form-actions">
+                <button type="button" class="btn btn-secondary" onclick="closeAddModal()">Cancel</button>
+                <button type="submit" class="btn btn-primary">Add Rule</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script type="module" src="/static/js/conditionalforwarding-init.js"></script>
+{{end}}

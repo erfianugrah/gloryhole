@@ -24,20 +24,24 @@ var staticFS embed.FS
 
 // UI templates grouped per page/partial to prevent block collisions.
 var (
-	dashboardTemplate        *template.Template
-	queriesTemplate          *template.Template
-	policiesTemplate         *template.Template
-	whitelistTemplate        *template.Template
-	settingsTemplate         *template.Template
-	clientsTemplate          *template.Template
-	blocklistsTemplate       *template.Template
-	loginTemplate            *template.Template
-	statsPartialTemplate     *template.Template
-	queriesPartialTemplate   *template.Template
-	topDomainsTemplate       *template.Template
-	policiesPartialTemplate  *template.Template
-	whitelistPartialTemplate *template.Template
-	clientsPartialTemplate   *template.Template
+	dashboardTemplate                   *template.Template
+	queriesTemplate                     *template.Template
+	policiesTemplate                    *template.Template
+	whitelistTemplate                   *template.Template
+	localrecordsTemplate                *template.Template
+	conditionalforwardingTemplate       *template.Template
+	settingsTemplate                    *template.Template
+	clientsTemplate                     *template.Template
+	blocklistsTemplate                  *template.Template
+	loginTemplate                       *template.Template
+	statsPartialTemplate                *template.Template
+	queriesPartialTemplate              *template.Template
+	topDomainsTemplate                  *template.Template
+	policiesPartialTemplate             *template.Template
+	whitelistPartialTemplate            *template.Template
+	localRecordsPartialTemplate         *template.Template
+	conditionalForwardingPartialTemplate *template.Template
+	clientsPartialTemplate              *template.Template
 )
 
 const dnsRcodeNameError = 3
@@ -107,6 +111,12 @@ func initTemplates() error {
 	if whitelistTemplate, err = parsePage("whitelist.html"); err != nil {
 		return err
 	}
+	if localrecordsTemplate, err = parsePage("localrecords.html"); err != nil {
+		return err
+	}
+	if conditionalforwardingTemplate, err = parsePage("conditionalforwarding.html"); err != nil {
+		return err
+	}
 	if settingsTemplate, err = parsePage("settings.html"); err != nil {
 		return err
 	}
@@ -140,6 +150,12 @@ func initTemplates() error {
 		return err
 	}
 	if whitelistPartialTemplate, err = parseStandalone("whitelist_partial.html"); err != nil {
+		return err
+	}
+	if localRecordsPartialTemplate, err = parseStandalone("localrecords_partial.html"); err != nil {
+		return err
+	}
+	if conditionalForwardingPartialTemplate, err = parseStandalone("conditionalforwarding_partial.html"); err != nil {
 		return err
 	}
 	if clientsPartialTemplate, err = parseStandalone("clients_partial.html"); err != nil {
@@ -391,6 +407,46 @@ func (s *Server) handleWhitelistPage(w http.ResponseWriter, r *http.Request) {
 
 	if err := whitelistTemplate.ExecuteTemplate(w, "whitelist.html", data); err != nil {
 		s.logger.Error("Failed to render whitelist template", "error", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+}
+
+// handleLocalRecordsPage serves the local DNS records management page
+func (s *Server) handleLocalRecordsPage(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	data := struct {
+		Version string
+	}{
+		Version: s.uiVersion(),
+	}
+
+	if err := localrecordsTemplate.ExecuteTemplate(w, "localrecords.html", data); err != nil {
+		s.logger.Error("Failed to render localrecords template", "error", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+}
+
+// handleConditionalForwardingPage serves the conditional forwarding management page
+func (s *Server) handleConditionalForwardingPage(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	data := struct {
+		Version string
+	}{
+		Version: s.uiVersion(),
+	}
+
+	if err := conditionalforwardingTemplate.ExecuteTemplate(w, "conditionalforwarding.html", data); err != nil {
+		s.logger.Error("Failed to render conditionalforwarding template", "error", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}

@@ -173,6 +173,16 @@ func New(cfg *Config) *Server {
 	mux.HandleFunc("DELETE /api/whitelist/{domain}", s.handleRemoveWhitelist)
 	mux.HandleFunc("POST /api/whitelist/bulk", s.handleBulkImportWhitelist)
 
+	// Local Records management
+	mux.HandleFunc("GET /api/localrecords", s.handleGetLocalRecords)
+	mux.HandleFunc("POST /api/localrecords", s.handleAddLocalRecord)
+	mux.HandleFunc("DELETE /api/localrecords/{id}", s.handleRemoveLocalRecord)
+
+	// Conditional Forwarding management
+	mux.HandleFunc("GET /api/conditionalforwarding", s.handleGetConditionalForwarding)
+	mux.HandleFunc("POST /api/conditionalforwarding", s.handleAddConditionalForwarding)
+	mux.HandleFunc("DELETE /api/conditionalforwarding/{id}", s.handleRemoveConditionalForwarding)
+
 	// Feature kill-switches
 	mux.HandleFunc("GET /api/features", s.handleGetFeatures)
 	mux.HandleFunc("PUT /api/features", s.handleUpdateFeatures)
@@ -199,6 +209,8 @@ func New(cfg *Config) *Server {
 	mux.HandleFunc("GET /queries", s.handleQueriesPage)
 	mux.HandleFunc("GET /policies", s.handlePoliciesPage)
 	mux.HandleFunc("GET /whitelist", s.handleWhitelistPage)
+	mux.HandleFunc("GET /localrecords", s.handleLocalRecordsPage)
+	mux.HandleFunc("GET /conditionalforwarding", s.handleConditionalForwardingPage)
 	mux.HandleFunc("GET /settings", s.handleSettingsPage)
 	mux.HandleFunc("GET /clients", s.handleClientsPage)
 	mux.HandleFunc("GET /blocklists", s.handleBlocklistsPage)

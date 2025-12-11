@@ -1,0 +1,172 @@
+{{template "base.html" .}}
+
+{{define "title"}}Local DNS Records - Gloryhole{{end}}
+
+{{define "content"}}
+<div class="localrecords-page">
+    <div class="page-header">
+        <h2>Local DNS Records</h2>
+        <div class="localrecords-actions">
+            <button class="btn btn-primary" type="button" onclick="showAddModal()">
+                ➕ Add Record
+            </button>
+        </div>
+    </div>
+
+    <div class="localrecords-info">
+        <p>Local DNS records provide authoritative responses without querying upstream servers. Perfect for internal services, development domains, or custom DNS resolution.</p>
+        <div class="examples">
+            <strong>Supported Types:</strong>
+            <span class="type-badge type-a">A</span>
+            <span class="type-badge type-aaaa">AAAA</span>
+            <span class="type-badge type-cname">CNAME</span>
+            <span class="type-badge type-mx">MX</span>
+            <span class="type-badge type-txt">TXT</span>
+            <span class="type-badge type-srv">SRV</span>
+        </div>
+    </div>
+
+    <!-- Local Records List -->
+    <div id="localrecords-container"
+         hx-get="/api/localrecords"
+         hx-trigger="load, localrecords-updated from:body"
+         hx-swap="innerHTML">
+        <div class="loading">Loading local records...</div>
+    </div>
+</div>
+
+<!-- Add Record Modal -->
+<div id="add-modal" class="modal" style="display: none;">
+    <div class="modal-content modal-large">
+        <div class="modal-header">
+            <h3>Add Local DNS Record</h3>
+            <button class="modal-close" onclick="closeAddModal()">&times;</button>
+        </div>
+        <form id="add-form" onsubmit="submitAdd(event)">
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="domain-input">Domain *</label>
+                    <input type="text" id="domain-input" name="domain" required
+                           placeholder="e.g., example.local"
+                           autocomplete="off">
+                    <span class="form-help">Domain name for the DNS record</span>
+                </div>
+
+                <div class="form-group">
+                    <label for="type-input">Record Type *</label>
+                    <select id="type-input" name="type" required onchange="updateFormFields()">
+                        <option value="">Select Type</option>
+                        <option value="A">A - IPv4 Address</option>
+                        <option value="AAAA">AAAA - IPv6 Address</option>
+                        <option value="CNAME">CNAME - Canonical Name</option>
+                        <option value="MX">MX - Mail Exchange</option>
+                        <option value="TXT">TXT - Text Record</option>
+                        <option value="SRV">SRV - Service Record</option>
+                        <option value="PTR">PTR - Pointer Record</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- A/AAAA Record Fields -->
+            <div id="fields-a-aaaa" class="conditional-fields" style="display: none;">
+                <div class="form-group">
+                    <label for="ips-input">IP Addresses *</label>
+                    <textarea id="ips-input" name="ips" rows="3"
+                              placeholder="192.168.1.1&#10;192.168.1.2"></textarea>
+                    <span class="form-help">One IP address per line</span>
+                </div>
+            </div>
+
+            <!-- CNAME/PTR Record Fields -->
+            <div id="fields-cname-ptr" class="conditional-fields" style="display: none;">
+                <div class="form-group">
+                    <label for="target-input">Target *</label>
+                    <input type="text" id="target-input" name="target"
+                           placeholder="e.g., target.example.com"
+                           autocomplete="off">
+                    <span class="form-help">Target domain name</span>
+                </div>
+            </div>
+
+            <!-- MX Record Fields -->
+            <div id="fields-mx" class="conditional-fields" style="display: none;">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="mx-target-input">Mail Server *</label>
+                        <input type="text" id="mx-target-input" name="mx-target"
+                               placeholder="e.g., mail.example.com"
+                               autocomplete="off">
+                    </div>
+                    <div class="form-group">
+                        <label for="priority-input">Priority</label>
+                        <input type="number" id="priority-input" name="priority"
+                               min="0" max="65535" value="10">
+                        <span class="form-help">Lower values = higher priority</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TXT Record Fields -->
+            <div id="fields-txt" class="conditional-fields" style="display: none;">
+                <div class="form-group">
+                    <label for="txt-input">Text Records *</label>
+                    <textarea id="txt-input" name="txt" rows="3"
+                              placeholder="v=spf1 include:_spf.example.com ~all"></textarea>
+                    <span class="form-help">One text record per line</span>
+                </div>
+            </div>
+
+            <!-- SRV Record Fields -->
+            <div id="fields-srv" class="conditional-fields" style="display: none;">
+                <div class="form-group">
+                    <label for="srv-target-input">Target *</label>
+                    <input type="text" id="srv-target-input" name="srv-target"
+                           placeholder="e.g., server.example.com"
+                           autocomplete="off">
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="srv-priority-input">Priority *</label>
+                        <input type="number" id="srv-priority-input" name="srv-priority"
+                               min="0" max="65535" value="0" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="weight-input">Weight *</label>
+                        <input type="number" id="weight-input" name="weight"
+                               min="0" max="65535" value="0" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="port-input">Port *</label>
+                        <input type="number" id="port-input" name="port"
+                               min="0" max="65535" required>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Common Fields -->
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="ttl-input">TTL (seconds)</label>
+                    <input type="number" id="ttl-input" name="ttl"
+                           min="0" max="86400" value="300">
+                    <span class="form-help">Time to live (default: 300)</span>
+                </div>
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" id="wildcard-input" name="wildcard">
+                        Wildcard Match
+                    </label>
+                    <span class="form-help">Match all subdomains</span>
+                </div>
+            </div>
+
+            <div class="form-actions">
+                <button type="button" class="btn btn-secondary" onclick="closeAddModal()">Cancel</button>
+                <button type="submit" class="btn btn-primary">Add Record</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script type="module" src="/static/js/localrecords-init.js"></script>
+{{end}}
