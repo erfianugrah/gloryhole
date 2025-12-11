@@ -139,28 +139,16 @@ func (s *Server) handleAddWhitelist(w http.ResponseWriter, r *http.Request) {
 		s.dnsHandler.Whitelist.Store(&newWhitelist)
 	}
 
-	// Add patterns
+	// Add patterns - we'll rebuild the matcher from config after persistence
+	// For now just validate patterns
 	if len(patternDomains) > 0 {
-		existingPatterns := s.dnsHandler.WhitelistPatterns.Load()
-		allPatterns := make([]string, 0)
-
-		// Copy existing patterns
-		if existingPatterns != nil {
-			allPatterns = append(allPatterns, existingPatterns.Patterns()...)
-		}
-
-		// Add new patterns
-		allPatterns = append(allPatterns, patternDomains...)
-
-		// Create new matcher
-		matcher, err := pattern.NewMatcher(allPatterns)
+		// Validate patterns by trying to create matcher
+		_, err := pattern.NewMatcher(patternDomains)
 		if err != nil {
-			s.logger.Error("Failed to create pattern matcher", "error", err)
+			s.logger.Error("Failed to validate pattern", "error", err)
 			s.writeError(w, http.StatusBadRequest, "Invalid pattern: "+err.Error())
 			return
 		}
-
-		s.dnsHandler.WhitelistPatterns.Store(matcher)
 	}
 
 	// Persist to config - this will collect from runtime and save
@@ -193,6 +181,26 @@ func (s *Server) handleAddWhitelist(w http.ResponseWriter, r *http.Request) {
 	}); err != nil {
 		s.logger.Error("Failed to persist whitelist to config", "error", err)
 		// Don't fail the request - the runtime update succeeded
+	} else {
+		// After successful persistence, rebuild pattern matcher from config
+		cfg := s.currentConfig()
+		if cfg != nil && len(patternDomains) > 0 {
+			// Rebuild patterns from config
+			patterns := make([]string, 0)
+			for _, entry := range cfg.Whitelist {
+				if isPattern(entry) {
+					patterns = append(patterns, entry)
+				}
+			}
+			if len(patterns) > 0 {
+				matcher, err := pattern.NewMatcher(patterns)
+				if err != nil {
+					s.logger.Error("Failed to rebuild pattern matcher", "error", err)
+				} else {
+					s.dnsHandler.WhitelistPatterns.Store(matcher)
+				}
+			}
+		}
 	}
 
 	// Log the action
@@ -222,32 +230,9 @@ func (s *Server) handleRemoveWhitelist(w http.ResponseWriter, r *http.Request) {
 
 	// Check if it's a pattern
 	if isPattern(domain) {
-		// Remove from patterns
-		existingPatterns := s.dnsHandler.WhitelistPatterns.Load()
-		if existingPatterns != nil {
-			patterns := existingPatterns.Patterns()
-			newPatterns := make([]string, 0, len(patterns))
-
-			for _, p := range patterns {
-				if p != domain {
-					newPatterns = append(newPatterns, p)
-				} else {
-					removed = true
-				}
-			}
-
-			if removed && len(newPatterns) > 0 {
-				matcher, err := pattern.NewMatcher(newPatterns)
-				if err != nil {
-					s.logger.Error("Failed to create pattern matcher", "error", err)
-					s.writeError(w, http.StatusInternalServerError, "Failed to update patterns")
-					return
-				}
-				s.dnsHandler.WhitelistPatterns.Store(matcher)
-			} else if removed && len(newPatterns) == 0 {
-				s.dnsHandler.WhitelistPatterns.Store(nil)
-			}
-		}
+		// For patterns, we'll remove from config and rebuild the matcher
+		// Mark as tentatively removed (will verify in config)
+		removed = true
 	} else {
 		// Remove from exact matches
 		// Ensure FQDN format
@@ -282,16 +267,50 @@ func (s *Server) handleRemoveWhitelist(w http.ResponseWriter, r *http.Request) {
 
 		// Filter out the removed domain
 		newWhitelist := make([]string, 0, len(cfg.Whitelist))
+		actuallyRemoved := false
 		for _, d := range cfg.Whitelist {
 			if d != domainToRemove {
 				newWhitelist = append(newWhitelist, d)
+			} else {
+				actuallyRemoved = true
 			}
+		}
+
+		if !actuallyRemoved {
+			return fmt.Errorf("domain not found in config")
 		}
 
 		cfg.Whitelist = newWhitelist
 		return nil
 	}); err != nil {
 		s.logger.Error("Failed to persist whitelist to config", "error", err)
+		if strings.Contains(err.Error(), "not found") {
+			removed = false
+		}
+	} else {
+		// After successful persistence, rebuild pattern matcher if it was a pattern
+		if isPattern(domain) {
+			cfg := s.currentConfig()
+			if cfg != nil {
+				// Rebuild patterns from config
+				patterns := make([]string, 0)
+				for _, entry := range cfg.Whitelist {
+					if isPattern(entry) {
+						patterns = append(patterns, entry)
+					}
+				}
+				if len(patterns) > 0 {
+					matcher, err := pattern.NewMatcher(patterns)
+					if err != nil {
+						s.logger.Error("Failed to rebuild pattern matcher", "error", err)
+					} else {
+						s.dnsHandler.WhitelistPatterns.Store(matcher)
+					}
+				} else {
+					s.dnsHandler.WhitelistPatterns.Store(nil)
+				}
+			}
+		}
 	}
 
 	// Log the action
@@ -372,7 +391,7 @@ func (s *Server) persistWhitelistConfig(mutator func(cfg *config.Config) error) 
 	}
 
 	// Write to disk
-	return config.WriteConfig(s.configPath, cloned)
+	return config.Save(s.configPath, cloned)
 }
 
 // isPattern checks if a domain string contains pattern characters
