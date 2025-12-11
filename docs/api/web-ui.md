@@ -348,6 +348,323 @@ Read-only view of current configuration:
 - Prometheus port
 - Tracing enabled
 
+### Whitelist Management
+
+**Access:** Click "Whitelist" in Settings sidebar
+
+Manage domains that should never be blocked, even if they appear in blocklists. Whitelist entries can be exact domains, wildcard patterns, or regular expressions.
+
+**Current Whitelist Display:**
+- Shows all whitelisted domains organized by type:
+  - **Exact Matches**: Precise domain names (e.g., `analytics.google.com`)
+  - **Wildcard Patterns**: Domains with wildcards (e.g., `*.cdn.example.com`)
+  - **Regex Patterns**: Regular expression patterns (e.g., `^api\d+\.example\.com$`)
+- Each entry shows a delete button (×) for removal
+- Total count displayed at top
+
+**Adding Whitelist Entries:**
+
+1. Click "Add Domain" button
+2. Enter domain or pattern in the input field:
+   - **Exact domain**: `google-analytics.com`
+   - **Wildcard pattern**: `*.taskassist-pa.clients6.google.com` (matches any subdomain)
+   - **Regex pattern**: `^cdn\d+\.example\.com$` (matches cdn1, cdn2, etc.)
+3. Click "Add" button
+4. Success message displays with updated total count
+5. Entry appears in appropriate section
+
+**Removing Whitelist Entries:**
+1. Click the × button next to any domain
+2. Confirmation message displays
+3. Domain is removed from whitelist
+4. Total count updates
+
+**Use Cases:**
+- Allow analytics services that blocklists incorrectly flag
+- Whitelist CDN domains that break websites when blocked
+- Allow specific subdomains while keeping parent domain blocked
+- Use regex for dynamic subdomain patterns
+
+**Notes:**
+- Whitelist has highest priority - overrides all blocklists and policies
+- Changes persist to config file (if running with `--config`)
+- Wildcard patterns support `*` for subdomain matching
+- Regex patterns use Go regular expression syntax
+
+### Local DNS Records
+
+**Access:** Click "Local Records" in Settings sidebar
+
+Create custom DNS records for your local network. Define A (IPv4), AAAA (IPv6), and CNAME records that resolve without querying upstream DNS servers.
+
+**Records List Display:**
+- Shows all configured local DNS records in a table
+- Columns: Domain, Type, Value, TTL, Actions
+- Organized by domain name
+- Each record has a delete button (×)
+- Total count displayed at top
+
+**Record Types:**
+
+**A Record (IPv4):**
+- Maps domain name to IPv4 address(es)
+- Example: `nas.local` → `192.168.1.100`
+- Supports multiple IPs for round-robin load balancing
+
+**AAAA Record (IPv6):**
+- Maps domain name to IPv6 address(es)
+- Example: `server.local` → `2001:db8::1`
+- Supports multiple IPs for load balancing
+
+**CNAME Record (Alias):**
+- Creates an alias pointing to another domain
+- Example: `www.local` → `nas.local`
+- Target domain can be local or external
+
+**Adding Local Records:**
+
+1. Click "Add Record" button
+2. Fill in the form:
+   - **Domain**: Enter the domain name (e.g., `nas.local`)
+     - Trailing dot (`.`) is optional, will be added automatically
+     - Can include subdomains (e.g., `www.nas.local`)
+   - **Type**: Select record type from dropdown:
+     - `A` - IPv4 address
+     - `AAAA` - IPv6 address
+     - `CNAME` - Domain alias
+   - **IP Addresses** (for A/AAAA records):
+     - Enter one or more IP addresses
+     - Multiple IPs enable round-robin DNS (load balancing)
+     - Click "+ Add IP" to add additional addresses
+     - Validates IP format (IPv4 for A, IPv6 for AAAA)
+   - **Target Domain** (for CNAME records):
+     - Enter the domain this alias should point to
+     - Must be a valid domain name
+   - **TTL** (Time-to-Live):
+     - Seconds to cache the DNS response
+     - Default: 300 seconds (5 minutes)
+     - Range: 60-86400 seconds (1 minute to 24 hours)
+3. Click "Save" button
+4. Record is validated and added to configuration
+5. Success message displays
+6. Record appears in the list
+
+**Removing Local Records:**
+1. Click the × button next to any record
+2. Confirmation message displays
+3. Record is removed from configuration
+4. List updates to show remaining records
+
+**Common Use Cases:**
+
+**Home Network:**
+```
+nas.local        → 192.168.1.100  (A)
+router.local     → 192.168.1.1    (A)
+printer.local    → 192.168.1.10   (A)
+www.nas.local    → nas.local      (CNAME)
+```
+
+**Development Environment:**
+```
+dev.local        → 127.0.0.1      (A)
+api.dev.local    → 127.0.0.1      (A)
+db.dev.local     → 192.168.1.50   (A)
+```
+
+**Load Balancing (Round-Robin):**
+```
+web.local → 192.168.1.10, 192.168.1.11, 192.168.1.12 (A)
+```
+Clients will receive different IPs in rotating order.
+
+**IPv6 Network:**
+```
+server.local → 2001:db8::1       (AAAA)
+nas.local    → 2001:db8::100     (AAAA)
+```
+
+**Notes:**
+- Local records have highest priority (resolved before upstream)
+- Changes persist to config file (if running with `--config`)
+- Supports wildcard domains (configure in YAML, not via UI)
+- CNAME records cannot coexist with A/AAAA for the same domain
+- DNS cache applies to local records based on configured TTL
+
+### Conditional Forwarding
+
+**Access:** Click "Conditional Forwarding" in Settings sidebar
+
+Route specific DNS queries to designated upstream DNS servers based on domain patterns, client IP ranges, or query types. Essential for split-horizon DNS in corporate networks, VPNs, and multi-site configurations.
+
+**Rules List Display:**
+- Shows all conditional forwarding rules sorted by priority
+- Displays: Name, Matchers, Upstreams, Priority, Status, Actions
+- Color-coded priority badges (red=high, yellow=medium, blue=low)
+- Enabled/disabled toggle for each rule
+- Each rule has an edit and delete button
+- Total count displayed at top
+
+**Rule Components:**
+
+**Matchers (at least one required):**
+- **Domains**: Domain name patterns (e.g., `*.local`, `*.corp.example.com`)
+- **Client CIDRs**: IP ranges in CIDR notation (e.g., `192.168.1.0/24`, `10.0.0.0/8`)
+- **Query Types**: DNS query types (e.g., `A`, `AAAA`, `PTR`, `MX`)
+
+**Upstreams:**
+- List of DNS servers to forward matching queries to
+- Format: `IP:port` (e.g., `10.0.0.1:53`)
+- Supports multiple servers for redundancy
+
+**Priority:**
+- Integer from 1 to 100 (higher = evaluated first)
+- Default: 50 (medium priority)
+- Higher priority rules are checked before lower priority
+- Use 80-100 for critical/specific rules
+- Use 50-79 for general rules
+- Use 1-49 for fallback rules
+
+**Advanced Options:**
+- **Timeout**: Query timeout duration (e.g., `2s`, `500ms`)
+- **Max Retries**: Number of retry attempts on failure (0-5)
+- **Failover**: Try next upstream server if one fails
+
+**Adding Conditional Forwarding Rules:**
+
+1. Click "Add Rule" button
+2. Fill in the form:
+
+   **Basic Information:**
+   - **Rule Name**: Descriptive name (e.g., "Corporate VPN DNS")
+     - Must be unique
+     - Used for identification in logs and UI
+
+   **Matching Conditions (select at least one):**
+
+   - **Domain Patterns**:
+     - Click "+ Add Domain" to add patterns
+     - Wildcards supported: `*.local`, `*.corp.example.com`
+     - Exact domains: `intranet.company.local`
+     - Multiple patterns evaluated with OR logic
+
+   - **Client IP Ranges (CIDR)**:
+     - Click "+ Add CIDR" to add ranges
+     - Examples: `192.168.1.0/24`, `10.0.0.0/8`, `172.16.0.0/12`
+     - Matches queries from clients in these ranges
+     - Multiple CIDRs evaluated with OR logic
+
+   - **Query Types**:
+     - Click "+ Add Type" to add types
+     - Common types: `A`, `AAAA`, `PTR`, `MX`, `TXT`, `SRV`
+     - Multiple types evaluated with OR logic
+
+   **Upstream DNS Servers:**
+   - Click "+ Add Upstream" to add servers
+   - Format: `IP:port` (e.g., `10.0.0.1:53`)
+   - At least one upstream required
+   - Multiple upstreams provide redundancy
+   - Queried in order unless failover is enabled
+
+   **Priority:**
+   - Enter value from 1-100
+   - Default: 50
+   - Higher values evaluated first
+
+   **Advanced Settings (optional):**
+   - **Timeout**: Query timeout (e.g., `2s`, `3s`, `500ms`)
+   - **Max Retries**: Retry attempts (0-5)
+   - **Failover**: Enable to try next upstream on failure
+
+3. Click "Save Rule" button
+4. Rule is validated and added to configuration
+5. Success message displays
+6. Rule appears in the list sorted by priority
+
+**Editing Rules:**
+1. Click the edit button (pencil icon) next to a rule
+2. Modify any settings in the form
+3. Click "Save Changes"
+4. Rule is updated in configuration
+
+**Removing Rules:**
+1. Click the delete button (×) next to a rule
+2. Confirmation prompt appears
+3. Click "Confirm" to remove
+4. Rule is deleted from configuration
+
+**Enabling/Disabling Rules:**
+1. Click the toggle switch next to a rule
+2. Rule status updates immediately
+3. Disabled rules are skipped during query processing
+4. Useful for temporary rule suspension without deletion
+
+**Common Configurations:**
+
+**Local Network DNS:**
+```
+Name: Local Network Domains
+Domains: *.local, *.lan
+Upstreams: 192.168.1.1:53
+Priority: 80
+```
+
+**Corporate VPN:**
+```
+Name: Corporate Network
+Domains: *.corp.example.com, *.internal
+Upstreams: 10.0.0.1:53, 10.0.0.2:53
+Priority: 90
+Timeout: 3s
+Failover: Yes
+```
+
+**Reverse DNS (PTR queries):**
+```
+Name: Reverse DNS Lookups
+Query Types: PTR
+Upstreams: 10.0.0.1:53
+Priority: 70
+```
+
+**VPN Client Specific:**
+```
+Name: VPN User DNS
+Client CIDRs: 172.16.0.0/12
+Domains: *.vpn.corp
+Upstreams: 172.16.0.1:53
+Priority: 85
+```
+
+**Multi-Condition Rule:**
+```
+Name: Internal A/AAAA Records
+Domains: *.internal.local
+Client CIDRs: 10.0.0.0/8
+Query Types: A, AAAA
+Upstreams: 10.0.0.1:53, 10.0.0.2:53
+Priority: 95
+Timeout: 2s
+Max Retries: 2
+Failover: Yes
+```
+
+**Rule Evaluation:**
+1. Rules are evaluated in priority order (highest first)
+2. First matching rule handles the query
+3. If match conditions are met, query is forwarded to rule's upstreams
+4. If no rules match, query goes to default upstream servers
+5. Disabled rules are skipped
+
+**Notes:**
+- Changes persist to config file (if running with `--config`)
+- Rule order matters - highest priority evaluated first
+- Multiple matchers within a rule use OR logic
+- Use specific rules (high priority) before general rules
+- Failover requires multiple upstreams
+- Empty timeout uses default forwarder timeout (2s)
+- Maximum retries default is 0 (no retries)
+
 ## Mobile Support
 
 The Web UI is fully responsive:
