@@ -303,6 +303,7 @@ code, .stat-value, .domain-name, pre {
     display: flex;
     gap: 0.35rem;
     align-items: center;
+    margin-left: auto;
 }
 
 .nav-logout-form {
@@ -1670,6 +1671,27 @@ main {
 .policy-logic code {
     font-family: 'JetBrains Mono', monospace;
     color: var(--primary);
+    word-break: break-word;
+}
+
+.policy-action-data {
+    background-color: rgba(0, 0, 0, 0.2);
+    padding: 0.5rem 0.75rem;
+    border-radius: 0.375rem;
+    margin-bottom: 1rem;
+    font-size: 0.875rem;
+    border: 1px solid rgba(149, 234, 129, 0.3);
+}
+
+.policy-action-data strong {
+    color: var(--text-muted);
+    font-weight: 500;
+    margin-right: 0.5rem;
+}
+
+.policy-action-data code {
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--secondary);
     word-break: break-word;
 }
 

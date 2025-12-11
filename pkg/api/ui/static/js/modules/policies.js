@@ -85,6 +85,7 @@ export function showEditPolicyModal(policy) {
     document.getElementById('policy-name').value = policy.name;
     document.getElementById('policy-logic').value = policy.logic;
     document.getElementById('policy-action').value = policy.action;
+    document.getElementById('policy-action-data').value = policy.action_data || '';
     document.getElementById('policy-enabled').checked = policy.enabled;
     resetPolicyBuilder();
     const hydrated = restoreBuilderFromLogic(policy.logic);
@@ -106,6 +107,7 @@ export async function submitPolicy(event) {
         name: formData.get('name'),
         logic: formData.get('logic'),
         action: formData.get('action'),
+        action_data: formData.get('action_data') || '',
         enabled: formData.get('enabled') === 'on'
     };
 

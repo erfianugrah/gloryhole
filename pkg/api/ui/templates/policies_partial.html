@@ -20,6 +20,12 @@
             <code>{{.Logic}}</code>
         </div>
 
+        {{if .ActionData}}
+        <div class="policy-action-data">
+            <strong>Action Data:</strong> <code>{{.ActionData}}</code>
+        </div>
+        {{end}}
+
         <div class="policy-footer">
             <button class="btn-icon" onclick='showEditPolicyModal({{. | json}})' title="Edit">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">

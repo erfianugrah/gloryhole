@@ -111,8 +111,23 @@
                     <option value="ALLOW">ALLOW - Bypass blocklist</option>
                     <option value="REDIRECT">REDIRECT - Forward to specific DNS</option>
                     <option value="FORWARD">FORWARD - Use custom upstreams</option>
-                    <option value="RATE_LIMIT">RATE_LIMIT - Apply global rate limiter</option>
+                    <option value="RATE_LIMIT">RATE_LIMIT - Apply rate limiting</option>
                 </select>
+            </div>
+
+            <div class="form-group">
+                <label for="policy-action-data">Action Data</label>
+                <input type="text" id="policy-action-data" name="action_data"
+                       placeholder="e.g., rps=5,burst=10,bucket=client+domain,action=drop">
+                <small class="form-help">
+                    <strong>For RATE_LIMIT:</strong> Configure rate limiting parameters<br>
+                    • <code>rps</code> - Requests per second limit<br>
+                    • <code>burst</code> - Burst allowance<br>
+                    • <code>bucket</code> - Bucket strategy: client, rule, domain, client+domain, client+rule<br>
+                    • <code>action</code> - Action on limit: drop, nxdomain<br>
+                    <strong>For REDIRECT:</strong> Upstream DNS servers (e.g., 1.1.1.1:53,8.8.8.8:53)<br>
+                    <strong>For FORWARD:</strong> Custom upstream addresses
+                </small>
             </div>
 
             <div class="form-group">
