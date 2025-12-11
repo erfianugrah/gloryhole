@@ -156,8 +156,11 @@ window.addEventListener('DOMContentLoaded', function () {
         headers.forEach((th, idx) => {
             const key = map[idx];
             if (!key) return;
-            th.classList.add('sortable');
-            th.addEventListener('click', () => sortTable(key));
+            // Only add sortable class and event listener if not already added
+            if (!th.classList.contains('sortable')) {
+                th.classList.add('sortable');
+                th.addEventListener('click', () => sortTable(key));
+            }
         });
     }
 

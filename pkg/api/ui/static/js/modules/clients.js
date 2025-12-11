@@ -396,8 +396,11 @@ function attachClientSorting() {
     headers.forEach((th, idx) => {
         const key = map[idx];
         if (!key) return;
-        th.classList.add('sortable');
-        th.addEventListener('click', () => sortClients(tbody, key, table));
+        // Only add sortable class and event listener if not already added
+        if (!th.classList.contains('sortable')) {
+            th.classList.add('sortable');
+            th.addEventListener('click', () => sortClients(tbody, key, table));
+        }
     });
 }
 
