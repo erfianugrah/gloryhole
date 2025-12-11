@@ -111,11 +111,30 @@
             if (!entries.length) {
                 return null;
             }
+
+            // Reorder to show pattern and lists first
+            const priorityKeys = ['pattern', 'lists', 'match_kind'];
+            const orderedEntries = [];
+            priorityKeys.forEach(function(key) {
+                const found = entries.find(function([k]) { return k === key; });
+                if (found) orderedEntries.push(found);
+            });
+            entries.forEach(function(entry) {
+                if (!priorityKeys.includes(entry[0])) {
+                    orderedEntries.push(entry);
+                }
+            });
+
             const container = document.createElement('div');
             container.className = 'trace-metadata';
-            entries.forEach(function ([key, value]) {
+            orderedEntries.forEach(function ([key, value]) {
                 const row = document.createElement('div');
                 row.className = 'trace-meta-row';
+
+                // Highlight pattern and lists rows
+                if (key === 'pattern' || key === 'lists') {
+                    row.classList.add('trace-meta-highlight');
+                }
 
                 const keyEl = document.createElement('div');
                 keyEl.className = 'trace-meta-key';

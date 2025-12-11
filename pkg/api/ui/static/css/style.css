@@ -1772,7 +1772,7 @@ input:checked + .toggle-slider:before {
 .modal-content {
     background: var(--surface-card-gradient);
     border-radius: 0.9rem;
-    width: min(900px, 92vw);
+    width: min(1200px, 95vw);
     max-height: 90vh;
     overflow: hidden;
     box-shadow: var(--shadow-lg);
@@ -1962,6 +1962,22 @@ input:checked + .toggle-slider:before {
     display: flex;
     flex-direction: column;
     gap: 0.2rem;
+}
+
+.trace-meta-row.trace-meta-highlight {
+    background-color: rgba(0, 255, 65, 0.08);
+    border-color: rgba(0, 255, 65, 0.3);
+    box-shadow: 0 0 0 1px rgba(0, 255, 65, 0.15);
+}
+
+.trace-meta-row.trace-meta-highlight .trace-meta-key {
+    color: var(--primary);
+    font-weight: 600;
+}
+
+.trace-meta-row.trace-meta-highlight .trace-meta-value {
+    color: var(--primary);
+    font-weight: 500;
 }
 
 .trace-meta-key {
