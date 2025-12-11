@@ -174,14 +174,48 @@
         if (!toggle || !links) {
             return;
         }
-        toggle.addEventListener('click', function() {
-            const isOpen = links.classList.toggle('is-open');
-            toggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+
+        function closeMenu() {
+            links.classList.remove('is-open');
+            toggle.setAttribute('aria-expanded', 'false');
+            document.body.style.overflow = '';
+        }
+
+        function openMenu() {
+            links.classList.add('is-open');
+            toggle.setAttribute('aria-expanded', 'true');
+            document.body.style.overflow = 'hidden';
+        }
+
+        toggle.addEventListener('click', function(e) {
+            e.stopPropagation();
+            const isOpen = links.classList.contains('is-open');
+            if (isOpen) {
+                closeMenu();
+            } else {
+                openMenu();
+            }
         });
+
+        // Close menu when clicking backdrop
+        links.addEventListener('click', function(e) {
+            if (e.target === links && window.innerWidth < 768) {
+                closeMenu();
+            }
+        });
+
+        // Close menu after navigation
         document.addEventListener('htmx:afterSwap', function() {
             if (window.innerWidth < 768 && links.classList.contains('is-open')) {
-                links.classList.remove('is-open');
-                toggle.setAttribute('aria-expanded', 'false');
+                closeMenu();
+            }
+        });
+
+        // Close menu on escape key
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape' && links.classList.contains('is-open')) {
+                closeMenu();
+                toggle.focus();
             }
         });
     })();

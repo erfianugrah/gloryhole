@@ -1,51 +1,53 @@
-<table class="queries-table">
-    <thead>
-        <tr>
-            <th>Time</th>
-            <th>Client</th>
-            <th>Domain</th>
-            <th>Type</th>
-            <th>Status</th>
-            <th>Latency (total/upstream)</th>
-            <th>Trace</th>
-        </tr>
-    </thead>
-    <tbody>
-        {{range .Queries}}
-        <tr class="status-row status-{{.Status}}"
-            data-timestamp="{{.Timestamp.Unix}}" data-client="{{.ClientIP}}"
-            data-domain="{{.Domain}}"
-            data-type="{{.QueryType}}"
-            data-status="{{.Status}}"
-            data-latency="{{printf "%.4f" .ResponseTimeMs}}"
-            data-upstream="{{printf "%.4f" .UpstreamTimeMs}}">
-            <td>{{.Timestamp.Format "15:04:05"}}</td>
-            <td>{{.ClientIP}}</td>
-            <td>{{.Domain}}</td>
-            <td>{{.QueryType}}</td>
-            <td>
-                <span class="status-chip status-{{.Status}}">{{.StatusLabel}}</span>
-            </td>
-            <td>{{printf "%.2f" .ResponseTimeMs}} / {{printf "%.2f" .UpstreamTimeMs}} ms</td>
-            <td>
-                {{if .BlockTrace}}
-                <button class="btn btn-secondary btn-xs"
-                        type="button"
-                        data-trace-btn
-                        data-domain="{{.Domain}}"
-                        data-client="{{.ClientIP}}"
-                        data-trace='{{json .BlockTrace | html}}'>
-                    View
-                </button>
-                {{else}}
-                <span class="text-muted">--</span>
-                {{end}}
-            </td>
-        </tr>
-        {{else}}
-        <tr>
-            <td colspan="7" class="no-data">No queries yet</td>
-        </tr>
-        {{end}}
-    </tbody>
-</table>
+<div class="table-wrapper">
+    <table class="queries-table">
+        <thead>
+            <tr>
+                <th>Time</th>
+                <th>Client</th>
+                <th>Domain</th>
+                <th>Type</th>
+                <th>Status</th>
+                <th>Latency (total/upstream)</th>
+                <th>Trace</th>
+            </tr>
+        </thead>
+        <tbody>
+            {{range .Queries}}
+            <tr class="status-row status-{{.Status}}"
+                data-timestamp="{{.Timestamp.Unix}}" data-client="{{.ClientIP}}"
+                data-domain="{{.Domain}}"
+                data-type="{{.QueryType}}"
+                data-status="{{.Status}}"
+                data-latency="{{printf "%.4f" .ResponseTimeMs}}"
+                data-upstream="{{printf "%.4f" .UpstreamTimeMs}}">
+                <td>{{.Timestamp.Format "15:04:05"}}</td>
+                <td>{{.ClientIP}}</td>
+                <td>{{.Domain}}</td>
+                <td>{{.QueryType}}</td>
+                <td>
+                    <span class="status-chip status-{{.Status}}">{{.StatusLabel}}</span>
+                </td>
+                <td>{{printf "%.2f" .ResponseTimeMs}} / {{printf "%.2f" .UpstreamTimeMs}} ms</td>
+                <td>
+                    {{if .BlockTrace}}
+                    <button class="btn btn-secondary btn-xs"
+                            type="button"
+                            data-trace-btn
+                            data-domain="{{.Domain}}"
+                            data-client="{{.ClientIP}}"
+                            data-trace='{{json .BlockTrace | html}}'>
+                        View
+                    </button>
+                    {{else}}
+                    <span class="text-muted">--</span>
+                    {{end}}
+                </td>
+            </tr>
+            {{else}}
+            <tr>
+                <td colspan="7" class="no-data">No queries yet</td>
+            </tr>
+            {{end}}
+        </tbody>
+    </table>
+</div>
