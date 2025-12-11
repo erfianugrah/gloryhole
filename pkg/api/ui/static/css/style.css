@@ -845,6 +845,35 @@ main {
     border-bottom: 2px solid var(--primary);
 }
 
+/* Sortable table headers */
+.queries-table th.sortable,
+.clients-table th.sortable {
+    cursor: pointer;
+    user-select: none;
+    transition: all 0.2s ease;
+    position: relative;
+}
+
+.queries-table th.sortable:hover,
+.clients-table th.sortable:hover {
+    color: var(--primary);
+    background-color: rgba(0, 255, 65, 0.08);
+}
+
+.queries-table th.sortable::after,
+.clients-table th.sortable::after {
+    content: '⇅';
+    margin-left: 0.5rem;
+    opacity: 0.3;
+    font-size: 0.9rem;
+    transition: opacity 0.2s ease;
+}
+
+.queries-table th.sortable:hover::after,
+.clients-table th.sortable:hover::after {
+    opacity: 0.7;
+}
+
 .queries-table td {
     padding: 0.75rem 1rem;
     border-top: 1px solid var(--border);
