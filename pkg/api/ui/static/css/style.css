@@ -260,10 +260,10 @@ code, .stat-value, .domain-name, pre {
 
 .navbar .container,
 .navbar .container-fluid {
-    position: relative;
     display: flex;
-    justify-content: space-between;
+    flex-direction: column;
     align-items: center;
+    gap: 1rem;
 }
 
 .nav-brand {
@@ -271,7 +271,6 @@ code, .stat-value, .domain-name, pre {
     align-items: center;
     gap: 0.75rem;
     flex-shrink: 0;
-    z-index: 1;
 }
 
 .nav-brand > div {
@@ -309,13 +308,11 @@ code, .stat-value, .domain-name, pre {
 }
 
 .nav-links {
-    position: absolute;
-    left: 50%;
-    transform: translateX(-50%);
     display: flex;
     gap: 0.75rem;
     align-items: center;
     justify-content: center;
+    flex-wrap: wrap;
 }
 
 .nav-logout-form {
@@ -348,7 +345,6 @@ code, .stat-value, .domain-name, pre {
     cursor: pointer;
     color: var(--text);
     transition: all 0.2s ease;
-    z-index: 1;
 }
 
 .nav-toggle:hover,
@@ -459,23 +455,33 @@ code, .stat-value, .domain-name, pre {
 @media (max-width: 1100px) {
     .navbar .container,
     .navbar .container-fluid {
-        display: flex;
-        justify-content: space-between;
+        position: relative;
+        flex-direction: column;
+        align-items: center;
         gap: 0.75rem;
-        padding: 0 1.25rem;
+        padding: 0.75rem 1.25rem;
+    }
+
+    .nav-toggle {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        position: absolute;
+        top: 0.75rem;
+        right: 1.25rem;
+        z-index: 1002;
     }
 
     .nav-links {
         position: fixed;
         top: 0;
         right: -100%;
-        left: auto;
-        transform: none;
         width: 280px;
         max-width: 85vw;
         height: 100vh;
         flex-direction: column;
         align-items: flex-start;
+        flex-wrap: nowrap;
         background: var(--surface);
         box-shadow: -4px 0 12px rgba(0, 0, 0, 0.3);
         padding: 1.5rem;
@@ -524,13 +530,6 @@ code, .stat-value, .domain-name, pre {
     .nav-logout-form .nav-link-button {
         width: 100%;
         text-align: left;
-    }
-
-    .nav-toggle {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        z-index: 1002;
     }
 
     .nav-toggle:focus-visible {
