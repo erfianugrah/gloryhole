@@ -303,7 +303,9 @@ code, .stat-value, .domain-name, pre {
     display: flex;
     gap: 0.35rem;
     align-items: center;
-    margin-left: auto;
+    flex: 1;
+    justify-content: center;
+    padding-left: 2rem;
 }
 
 .nav-logout-form {
