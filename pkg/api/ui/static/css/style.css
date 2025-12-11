@@ -253,9 +253,10 @@ code, .stat-value, .domain-name, pre {
 }
 
 .navbar .container {
-    display: flex;
-    justify-content: space-between;
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
     align-items: center;
+    gap: 1rem;
 }
 
 .nav-brand {
@@ -263,6 +264,7 @@ code, .stat-value, .domain-name, pre {
     align-items: center;
     gap: 0.75rem;
     flex-shrink: 0;
+    grid-column: 1;
 }
 
 .nav-brand > div {
@@ -303,9 +305,8 @@ code, .stat-value, .domain-name, pre {
     display: flex;
     gap: 0.35rem;
     align-items: center;
-    flex: 1;
     justify-content: center;
-    padding-left: 2rem;
+    grid-column: 2;
 }
 
 .nav-logout-form {
@@ -447,8 +448,13 @@ code, .stat-value, .domain-name, pre {
 
 @media (max-width: 768px) {
     .navbar .container {
-        flex-wrap: wrap;
+        display: flex;
+        justify-content: space-between;
         gap: 0.75rem;
+    }
+
+    .nav-brand {
+        grid-column: unset;
     }
 
     .nav-links {
@@ -467,6 +473,7 @@ code, .stat-value, .domain-name, pre {
         transition: right 0.3s ease-in-out;
         z-index: 1001;
         overflow-y: auto;
+        grid-column: unset;
     }
 
     .nav-links.is-open {
@@ -3056,16 +3063,6 @@ form {
 
 /* Responsive */
 @media (max-width: 768px) {
-    .navbar .container {
-        flex-direction: column;
-        gap: 1rem;
-    }
-
-    .nav-links {
-        width: 100%;
-        justify-content: center;
-    }
-
     .stats-grid {
         grid-template-columns: 1fr;
     }
