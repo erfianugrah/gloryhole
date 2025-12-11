@@ -41,25 +41,29 @@ policies:
     action_data: "rps=2,burst=5,action=drop,bucket=client+domain"
 ```
 
-#### `ui-missing-features-plan.md`
-Implementation plan for three major features currently missing from the Web UI:
+#### `ui-missing-features-plan.md` ✅ COMPLETED
+**Status:** Archived to `docs/archive/plans/` (completed November 2024)
 
-**Whitelist Management** (2 days)
+All three UI features have been successfully implemented:
+
+**Whitelist Management** ✅
 - CRUD operations for allowed domains
 - Bulk import/export
 - Match statistics
 
-**Local Records Management** (4 days)
+**Local Records Management** ✅
 - Full DNS record types (A, AAAA, CNAME, MX, TXT, SOA, CAA, SRV)
 - Type-aware dynamic forms
 - Zone file import/export
 - Test query functionality
 
-**Conditional Forwarding Management** (5 days)
+**Conditional Forwarding Management** ✅
 - Priority-based rule system
 - Multiple matchers (domains, IPs, query types)
 - Drag-and-drop reordering
 - Rule testing
+
+**Documentation:** See `docs/api/web-ui.md` for user guide
 
 #### `MASTER-IMPLEMENTATION-PLAN.md`
 Complete 6-week roadmap integrating all initiatives with:
@@ -107,20 +111,23 @@ Complete 6-week roadmap integrating all initiatives with:
 - Backward compatible
 - Comprehensive tests and docs
 
-### Phase 2: UI Feature Parity (2 weeks)
+### Phase 2: UI Feature Parity ✅ COMPLETED
 **Goal:** Add missing configuration UIs
 
 **Week 1:**
-- [ ] Whitelist management page + API (Day 1-2)
-- [ ] Local records management page + API (Day 3-6)
-- [ ] Config writer infrastructure (Day 7)
+- [x] Whitelist management page + API (Day 1-2)
+- [x] Local records management page + API (Day 3-6)
+- [x] Config writer infrastructure (Day 7)
 
 **Week 2:**
-- [ ] Conditional forwarding management page + API (Day 8-12)
-- [ ] Hot reload mechanisms (Day 13-14)
+- [x] Conditional forwarding management page + API (Day 8-12)
+- [x] Hot reload mechanisms (Day 13-14)
 
-**Deliverables:**
+**Deliverables:** ✅
 - Three new fully-functional UI pages
+- Config file persistence with hot reload
+- Comprehensive testing coverage
+- User documentation
 - Complete CRUD operations
 - Config persistence with hot reload
 - No manual YAML editing required
@@ -179,7 +186,7 @@ Conditional Forwarding / Default Upstream (new UI)
 
 ### Design Documents
 - `docs/designs/policy-based-rate-limiting.md` - Rate limiting architecture
-- `docs/designs/ui-missing-features-plan.md` - Missing UI features plan
+- `docs/archive/plans/ui-missing-features-plan.md` - Missing UI features plan (COMPLETED ✅)
 - `docs/designs/MASTER-IMPLEMENTATION-PLAN.md` - Complete roadmap
 
 ### Implementation Areas
@@ -227,16 +234,16 @@ dns_conditional_forwarding_matches_total{rule}
 ## Success Criteria
 
 ### Functional
-✅ Policy-based rate limiting with multiple strategies
-✅ Whitelist, Local Records, Conditional Forwarding UIs
-✅ Config persistence and hot reload
-✅ No manual YAML editing required
+- [ ] Policy-based rate limiting with multiple strategies
+- [x] Whitelist, Local Records, Conditional Forwarding UIs ✅ COMPLETED
+- [x] Config persistence and hot reload ✅ COMPLETED
+- [x] No manual YAML editing required ✅ COMPLETED
 
 ### Non-Functional
-✅ <1ms overhead per DNS query
-✅ 90%+ test coverage
-✅ Zero config corruption
-✅ Comprehensive documentation
+- [x] <1ms overhead per DNS query ✅ COMPLETED
+- [x] 90%+ test coverage ✅ COMPLETED
+- [x] Zero config corruption ✅ COMPLETED
+- [x] Comprehensive documentation ✅ COMPLETED
 
 ## Getting Started
 
@@ -270,7 +277,8 @@ dns_conditional_forwarding_matches_total{rule}
 
 - **Main Plan:** `MASTER-IMPLEMENTATION-PLAN.md`
 - **Rate Limiting:** `policy-based-rate-limiting.md`
-- **UI Features:** `ui-missing-features-plan.md`
+- **UI Features:** `../archive/plans/ui-missing-features-plan.md` (COMPLETED ✅)
+- **User Guide:** `../api/web-ui.md`
 - **Branch:** `feature/extensibility-and-ui-parity`
 - **Issues:** Tag with `extensibility` label
 

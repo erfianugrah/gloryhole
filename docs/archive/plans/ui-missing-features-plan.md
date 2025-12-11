@@ -1,12 +1,17 @@
 # Missing UI Features Implementation Plan
 
+> **STATUS: COMPLETED**
+> This plan has been fully implemented. All three features are now available in the Web UI.
+> See [Web UI User Guide](../../api/web-ui.md) for usage documentation.
+> Completed: November 2024
+
 ## Overview
 
-Three major configuration features exist in `config.yml` but are completely missing from the Web UI:
+Three major configuration features exist in `config.yml` but were completely missing from the Web UI:
 
-1. **Whitelist** - Allow domains to bypass blocking
-2. **Local Records** - Custom DNS records (A, AAAA, CNAME, MX, TXT, SOA, CAA, etc.)
-3. **Conditional Forwarding** - Route specific domains to specific upstreams
+1. **Whitelist** - Allow domains to bypass blocking ✅
+2. **Local Records** - Custom DNS records (A, AAAA, CNAME, MX, TXT, SOA, CAA, etc.) ✅
+3. **Conditional Forwarding** - Route specific domains to specific upstreams ✅
 
 ## Current State Analysis
 

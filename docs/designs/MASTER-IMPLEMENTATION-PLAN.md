@@ -59,23 +59,24 @@ policies:
 **Priority:** High
 **Complexity:** Medium
 
-## Initiative 2: Missing UI Features
+## Initiative 2: Missing UI Features ✅ COMPLETED
 
-### Current Problem
-Three major features only configurable via YAML:
-1. **Whitelist** - Allow domains to bypass blocking
-2. **Local Records** - Custom DNS records (A, AAAA, CNAME, MX, etc.)
-3. **Conditional Forwarding** - Route domains to specific upstreams
+### Current Problem (RESOLVED)
+Three major features were only configurable via YAML:
+1. **Whitelist** - Allow domains to bypass blocking ✅
+2. **Local Records** - Custom DNS records (A, AAAA, CNAME, MX, etc.) ✅
+3. **Conditional Forwarding** - Route domains to specific upstreams ✅
 
-Users must manually edit config files and restart the server.
+All features are now fully available in the Web UI.
 
-### Solution
-Build full-featured UI pages with CRUD operations, validation, and hot reload.
+### Solution (IMPLEMENTED)
+Built full-featured UI pages with CRUD operations, validation, and hot reload.
 
-**Design Document:** `docs/designs/ui-missing-features-plan.md`
+**Design Document:** `docs/archive/plans/ui-missing-features-plan.md` (archived - completed November 2024)
+**User Documentation:** `docs/api/web-ui.md` (sections: Whitelist, Local Records, Conditional Forwarding)
 
-### Feature 2.1: Whitelist Management
-**Effort:** 2 days | **Priority:** High | **Complexity:** Low
+### Feature 2.1: Whitelist Management ✅
+**Effort:** 2 days | **Priority:** High | **Complexity:** Low | **Status:** COMPLETED
 
 ```
 UI: /whitelist
@@ -86,14 +87,14 @@ UI: /whitelist
 ```
 
 **Tasks:**
-- [ ] `pkg/api/handlers_whitelist.go` - API handlers
-- [ ] `pkg/api/ui/templates/whitelist.html` - UI page
-- [ ] Config hot reload for whitelist
-- [ ] Metrics integration
-- [ ] Tests
+- [x] `pkg/api/handlers_whitelist.go` - API handlers
+- [x] `pkg/api/ui/templates/whitelist.html` - UI page
+- [x] Config hot reload for whitelist
+- [x] Metrics integration
+- [x] Tests
 
-### Feature 2.2: Local Records Management
-**Effort:** 4 days | **Priority:** Medium | **Complexity:** Medium
+### Feature 2.2: Local Records Management ✅
+**Effort:** 4 days | **Priority:** Medium | **Complexity:** Medium | **Status:** COMPLETED
 
 ```
 UI: /local-records
@@ -105,15 +106,15 @@ UI: /local-records
 ```
 
 **Tasks:**
-- [ ] `pkg/api/handlers_local_records.go` - API handlers
-- [ ] `pkg/api/ui/templates/local_records.html` - UI page
-- [ ] `pkg/api/ui/static/js/local-records-init.js` - Dynamic forms
-- [ ] Type-specific validation
-- [ ] Import/export functionality
-- [ ] Tests
+- [x] `pkg/api/handlers_local_records.go` - API handlers
+- [x] `pkg/api/ui/templates/local_records.html` - UI page
+- [x] `pkg/api/ui/static/js/local-records-init.js` - Dynamic forms
+- [x] Type-specific validation
+- [x] Import/export functionality
+- [x] Tests
 
-### Feature 2.3: Conditional Forwarding Management
-**Effort:** 5 days | **Priority:** Medium | **Complexity:** High
+### Feature 2.3: Conditional Forwarding Management ✅
+**Effort:** 5 days | **Priority:** Medium | **Complexity:** High | **Status:** COMPLETED
 
 ```
 UI: /forwarding
@@ -125,20 +126,20 @@ UI: /forwarding
 ```
 
 **Tasks:**
-- [ ] `pkg/api/handlers_conditional_forwarding.go` - API handlers
-- [ ] `pkg/api/ui/templates/conditional_forwarding.html` - UI page
-- [ ] `pkg/api/ui/static/js/forwarding-init.js` - Reordering, dynamic forms
-- [ ] Priority management
-- [ ] Rule testing endpoint
-- [ ] Tests
+- [x] `pkg/api/handlers_conditional_forwarding.go` - API handlers
+- [x] `pkg/api/ui/templates/conditional_forwarding.html` - UI page
+- [x] `pkg/api/ui/static/js/forwarding-init.js` - Reordering, dynamic forms
+- [x] Priority management
+- [x] Rule testing endpoint
+- [x] Tests
 
-### Common Infrastructure
-**Effort:** 2 days
+### Common Infrastructure ✅
+**Effort:** 2 days | **Status:** COMPLETED
 
-- [ ] `pkg/config/writer.go` - Safe config file updates
-- [ ] Hot reload mechanisms for each feature
-- [ ] Backup/restore functionality
-- [ ] Audit logging for config changes
+- [x] `pkg/config/writer.go` - Safe config file updates
+- [x] Hot reload mechanisms for each feature
+- [x] Backup/restore functionality
+- [x] Audit logging for config changes
 
 ## Initiative 3: Policy Engine Extension Framework
 
