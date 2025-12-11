@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Web UI performance improvements: removed continuous animations (scanning lines, pulsing badges), replaced backdrop blur with solid backgrounds
+- Web UI responsiveness: added horizontal scroll for tables on mobile, improved modal sizing, better form layouts for small screens
+- Web UI accessibility: added focus-visible states to all interactive elements, improved keyboard navigation, clearer sortable table header indicators
+- Web UI mobile navigation: converted to slide-in drawer with backdrop overlay, added Escape key support and body scroll prevention
+- JavaScript organization: extracted policy management code to separate module (474 lines), replaced unsafe innerHTML with DOM methods
+
 ## [0.9.5] - 2025-12-08
 
 ### Added
