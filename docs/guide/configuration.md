@@ -13,6 +13,7 @@ This guide provides comprehensive documentation for all Glory-Hole DNS Server co
 - [Cache Configuration](#cache-configuration)
 - [Database Configuration](#database-configuration)
 - [Local DNS Records](#local-dns-records)
+- [Conditional Forwarding](#conditional-forwarding)
 - [Policy Engine](#policy-engine)
 - [Logging Configuration](#logging-configuration)
 - [Telemetry Configuration](#telemetry-configuration)
@@ -917,6 +918,409 @@ local_records:
         - "192.168.1.21"
         - "192.168.1.22"
 ```
+
+## Conditional Forwarding
+
+Route specific DNS queries to designated upstream DNS servers based on domain patterns, client IP ranges, or query types. Essential for split-horizon DNS in corporate networks, VPNs, and multi-site configurations.
+
+### Basic Configuration
+
+```yaml
+conditional_forwarding:
+  enabled: true
+  rules:
+    # Forward local network queries
+    - name: "Local network DNS"
+      domains:
+        - "*.local"
+        - "*.lan"
+      upstreams:
+        - "192.168.1.1:53"
+      priority: 80
+      enabled: true
+
+    # Forward corporate domain queries to internal DNS
+    - name: "Corporate network"
+      domains:
+        - "*.corp.example.com"
+        - "*.internal"
+      upstreams:
+        - "10.0.0.1:53"
+        - "10.0.0.2:53"
+      priority: 90
+      timeout: 3s
+      failover: true
+      enabled: true
+```
+
+### Configuration Options
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `enabled` | bool | No | `false` | Enable/disable conditional forwarding globally |
+| `rules` | []object | No | `[]` | List of forwarding rules |
+
+### Rule Configuration
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `name` | string | Yes | - | Unique rule name |
+| `domains` | []string | * | `[]` | Domain patterns to match |
+| `client_cidrs` | []string | * | `[]` | Client IP ranges (CIDR notation) |
+| `query_types` | []string | * | `[]` | DNS query types (A, AAAA, PTR, etc.) |
+| `upstreams` | []string | Yes | - | Upstream DNS servers (IP:port) |
+| `priority` | int | No | `50` | Rule priority (1-100, higher = first) |
+| `timeout` | duration | No | `0` | Query timeout (e.g., `2s`, `500ms`) |
+| `max_retries` | int | No | `0` | Maximum retry attempts |
+| `failover` | bool | No | `false` | Try next upstream on failure |
+| `enabled` | bool | No | `true` | Enable/disable this rule |
+
+**Note:** At least one matching condition (`domains`, `client_cidrs`, or `query_types`) is required per rule.
+
+### Matching Conditions
+
+**Domain Patterns:**
+- Exact domain: `example.com`
+- Wildcard subdomain: `*.local`, `*.corp.example.com`
+- Multiple domains evaluated with OR logic
+
+**Client CIDRs:**
+- IPv4 ranges: `192.168.1.0/24`, `10.0.0.0/8`
+- IPv6 ranges: `2001:db8::/32`
+- Multiple CIDRs evaluated with OR logic
+
+**Query Types:**
+- Common types: `A`, `AAAA`, `PTR`, `MX`, `TXT`, `SRV`, `CNAME`
+- Multiple types evaluated with OR logic
+
+### Priority System
+
+Rules are evaluated in priority order (highest to lowest):
+
+- **90-100**: Critical/specific rules (e.g., VPN, corporate domains)
+- **50-89**: General rules (e.g., local network domains)
+- **1-49**: Fallback rules (e.g., reverse DNS)
+
+Higher priority rules are checked first. The first matching rule handles the query.
+
+### Complete Examples
+
+**Home Network Configuration:**
+
+```yaml
+conditional_forwarding:
+  enabled: true
+  rules:
+    - name: "Local network"
+      domains:
+        - "*.local"
+        - "*.lan"
+        - "*.home"
+      upstreams:
+        - "192.168.1.1:53"
+      priority: 80
+      enabled: true
+```
+
+**Corporate VPN:**
+
+```yaml
+conditional_forwarding:
+  enabled: true
+  rules:
+    - name: "Corporate domains"
+      domains:
+        - "*.corp.example.com"
+        - "*.internal"
+      upstreams:
+        - "10.0.0.1:53"
+        - "10.0.0.2:53"
+      priority: 90
+      timeout: 3s
+      max_retries: 2
+      failover: true
+      enabled: true
+
+    - name: "VPN client DNS"
+      client_cidrs:
+        - "172.16.0.0/12"
+      domains:
+        - "*.vpn.corp"
+      upstreams:
+        - "172.16.0.1:53"
+      priority: 85
+      enabled: true
+```
+
+**Reverse DNS (PTR) Queries:**
+
+```yaml
+conditional_forwarding:
+  enabled: true
+  rules:
+    - name: "Reverse DNS lookups"
+      query_types:
+        - "PTR"
+      upstreams:
+        - "10.0.0.1:53"
+      priority: 70
+      enabled: true
+
+    - name: "Reverse DNS for local network"
+      domains:
+        - "*.in-addr.arpa"
+        - "*.ip6.arpa"
+      upstreams:
+        - "192.168.1.1:53"
+      priority: 75
+      enabled: true
+```
+
+**Multi-Condition Rules:**
+
+```yaml
+conditional_forwarding:
+  enabled: true
+  rules:
+    # Forward internal A/AAAA records from corporate network
+    - name: "Internal DNS"
+      domains:
+        - "*.internal.local"
+      client_cidrs:
+        - "10.0.0.0/8"
+      query_types:
+        - "A"
+        - "AAAA"
+      upstreams:
+        - "10.0.0.1:53"
+        - "10.0.0.2:53"
+      priority: 95
+      timeout: 2s
+      max_retries: 2
+      failover: true
+      enabled: true
+```
+
+**Development Environment:**
+
+```yaml
+conditional_forwarding:
+  enabled: true
+  rules:
+    # Forward .test domains to local dev environment
+    - name: "Development DNS"
+      domains:
+        - "*.test"
+        - "*.dev.local"
+      upstreams:
+        - "127.0.0.1:5353"
+      priority: 90
+      enabled: true
+
+    # Forward .local domains to network DNS
+    - name: "Local network"
+      domains:
+        - "*.local"
+      upstreams:
+        - "192.168.1.1:53"
+      priority: 80
+      enabled: true
+```
+
+### Rule Evaluation
+
+1. **Priority Order**: Rules evaluated from highest to lowest priority
+2. **First Match Wins**: First rule matching all conditions handles the query
+3. **Matcher Logic**: Multiple matchers within a rule use OR logic
+4. **Fallback**: If no rules match, query goes to default `upstream_dns_servers`
+5. **Disabled Rules**: Skipped during evaluation
+
+**Example Evaluation:**
+
+```yaml
+conditional_forwarding:
+  enabled: true
+  rules:
+    - name: "Critical VPN"     # Checked first (priority 95)
+      priority: 95
+      domains: ["*.vpn.corp"]
+      upstreams: ["172.16.0.1:53"]
+
+    - name: "Corporate"        # Checked second (priority 90)
+      priority: 90
+      domains: ["*.corp.example.com"]
+      upstreams: ["10.0.0.1:53"]
+
+    - name: "General local"    # Checked third (priority 80)
+      priority: 80
+      domains: ["*.local"]
+      upstreams: ["192.168.1.1:53"]
+```
+
+Query for `api.vpn.corp` → Matches first rule → Forwarded to `172.16.0.1:53`
+
+Query for `intranet.corp.example.com` → Matches second rule → Forwarded to `10.0.0.1:53`
+
+Query for `nas.local` → Matches third rule → Forwarded to `192.168.1.1:53`
+
+Query for `google.com` → No match → Forwarded to default `upstream_dns_servers`
+
+### Timeout and Failover
+
+**Timeout:**
+```yaml
+timeout: 3s        # Wait 3 seconds before giving up
+timeout: 500ms     # Wait 500 milliseconds
+timeout: 0         # Use default forwarder timeout (2s)
+```
+
+**Failover:**
+```yaml
+upstreams:
+  - "10.0.0.1:53"   # Try first
+  - "10.0.0.2:53"   # If first fails, try second
+failover: true      # Enable failover behavior
+```
+
+Without `failover: true`, only the first upstream is used.
+
+### Integration with Other Features
+
+**Interaction Priority (highest to lowest):**
+
+1. **Local DNS Records**: Resolved before any forwarding
+2. **Conditional Forwarding**: Matched rules forward to specific upstreams
+3. **Blocklist/Whitelist**: Applied to queries not handled by above
+4. **Default Upstreams**: Fallback for unmatched queries
+
+**Example Flow:**
+
+```yaml
+local_records:
+  records:
+    - domain: "router.local"      # Priority 1: Resolved immediately
+      type: "A"
+      ips: ["192.168.1.1"]
+
+conditional_forwarding:
+  rules:
+    - name: "Local network"       # Priority 2: Forwarded if not in local_records
+      domains: ["*.local"]
+      upstreams: ["192.168.1.1:53"]
+
+blocklists:
+  - "https://..."                 # Priority 3: Checked if not forwarded
+
+upstream_dns_servers:
+  - "1.1.1.1:53"                  # Priority 4: Fallback
+```
+
+### Common Use Cases
+
+**Split-Horizon DNS:**
+```yaml
+# Internal domains go to internal DNS, external domains go to public DNS
+conditional_forwarding:
+  enabled: true
+  rules:
+    - name: "Internal domains"
+      domains: ["*.internal.company.com"]
+      upstreams: ["10.0.0.1:53"]
+      priority: 90
+```
+
+**Multiple Sites:**
+```yaml
+# Different sites use different DNS servers
+conditional_forwarding:
+  enabled: true
+  rules:
+    - name: "Site A"
+      client_cidrs: ["192.168.1.0/24"]
+      upstreams: ["192.168.1.1:53"]
+      priority: 80
+
+    - name: "Site B"
+      client_cidrs: ["192.168.2.0/24"]
+      upstreams: ["192.168.2.1:53"]
+      priority: 80
+```
+
+**Kubernetes/Docker:**
+```yaml
+# Forward cluster.local domains to cluster DNS
+conditional_forwarding:
+  enabled: true
+  rules:
+    - name: "Kubernetes DNS"
+      domains:
+        - "*.cluster.local"
+        - "*.svc.cluster.local"
+      upstreams: ["10.96.0.10:53"]
+      priority: 90
+```
+
+### Best Practices
+
+1. **Specific Before General**: Use higher priorities for specific rules
+   ```yaml
+   - name: "Specific VPN domain"
+     domains: ["*.vpn.corp.example.com"]
+     priority: 95
+
+   - name: "General corporate"
+     domains: ["*.corp.example.com"]
+     priority: 90
+   ```
+
+2. **Redundant Upstreams**: Provide multiple upstreams with failover
+   ```yaml
+   upstreams:
+     - "10.0.0.1:53"
+     - "10.0.0.2:53"
+   failover: true
+   ```
+
+3. **Timeout Tuning**: Set appropriate timeouts for network conditions
+   ```yaml
+   timeout: 2s         # Local network
+   timeout: 5s         # VPN or slow network
+   ```
+
+4. **Enable/Disable Rules**: Use `enabled: false` for temporary suspension
+   ```yaml
+   - name: "Maintenance rule"
+     domains: ["*.maintenance.local"]
+     enabled: false    # Temporarily disabled
+   ```
+
+5. **Descriptive Names**: Use clear rule names for logs and debugging
+   ```yaml
+   - name: "Corporate VPN - Full tunnel"    # Good
+   - name: "Rule 1"                         # Bad
+   ```
+
+### Troubleshooting
+
+**Query Not Matching Rule:**
+- Verify domain pattern (exact match vs wildcard)
+- Check rule priority order
+- Ensure rule is enabled
+- Verify client CIDR includes querying client
+- Check logs for evaluation details
+
+**Forwarding Failing:**
+- Test upstream DNS server connectivity
+- Verify upstream port is 53 (or specified port)
+- Check timeout settings
+- Enable failover if using multiple upstreams
+- Review logs for error messages
+
+**Performance Issues:**
+- Reduce timeout for faster failures
+- Enable failover for redundancy
+- Optimize rule priority order (most common first)
+- Consider caching behavior
 
 ## Policy Engine
 
