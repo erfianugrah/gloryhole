@@ -438,6 +438,26 @@ code, .stat-value, .domain-name, pre {
     border-radius: 0.75rem;
 }
 
+.skeleton-loader {
+    opacity: 0.7;
+}
+
+.skeleton-row td {
+    padding: 0.75rem 1rem !important;
+    border-bottom: 1px solid rgba(31, 45, 92, 0.2);
+}
+
+.skeleton-line {
+    height: 1.2rem;
+    background: linear-gradient(90deg,
+        rgba(31, 45, 92, 0.3) 25%,
+        rgba(31, 45, 92, 0.5) 37%,
+        rgba(31, 45, 92, 0.3) 63%);
+    background-size: 400% 100%;
+    animation: skeletonPulse 1.4s ease infinite;
+    border-radius: 0.25rem;
+}
+
 /* ============================================
    Sidebar Layout
    ============================================ */

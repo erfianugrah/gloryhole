@@ -20,7 +20,7 @@ whitelist: []
 local_dns_records: []
 policies: []
 
-storage:
+database:
   enabled: true
   backend: "sqlite"
   sqlite:
@@ -37,7 +37,7 @@ cache:
   max_ttl: 24h
 
 logging:
-  level: "info"
+  level: "debug"
   format: "text"
   output: "stdout"
 
