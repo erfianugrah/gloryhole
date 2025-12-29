@@ -570,6 +570,7 @@ func (s *Server) handleQueriesPartial(w http.ResponseWriter, r *http.Request) {
 		ResponseCode   int
 		Status         string
 		StatusLabel    string
+		Upstream       string
 		BlockTrace     []storage.BlockTraceEntry
 		ResponseTimeMs float64
 		UpstreamTimeMs float64
@@ -597,6 +598,7 @@ func (s *Server) handleQueriesPartial(w http.ResponseWriter, r *http.Request) {
 					ResponseCode:   q.ResponseCode,
 					Status:         status,
 					StatusLabel:    label,
+					Upstream:       q.Upstream,
 					BlockTrace:     q.BlockTrace,
 					ResponseTimeMs: q.ResponseTimeMs,
 					UpstreamTimeMs: q.UpstreamTimeMs,

@@ -21,7 +21,7 @@
                 data-type="{{.QueryType}}"
                 data-status="{{.Status}}"
                 data-rcode="{{.ResponseCode}}"
-                data-upstream="{{.UpstreamServer}}"
+                data-upstream="{{.Upstream}}"
                 data-latency="{{printf "%.4f" .ResponseTimeMs}}"
                 data-upstream-time="{{printf "%.4f" .UpstreamTimeMs}}">
                 <td>{{.Timestamp.Format "15:04:05"}}</td>
@@ -45,8 +45,8 @@
                     {{end}}
                 </td>
                 <td class="upstream-cell">
-                    {{if .UpstreamServer}}
-                    <span class="upstream-name">{{.UpstreamServer}}</span>
+                    {{if .Upstream}}
+                    <span class="upstream-name">{{.Upstream}}</span>
                     {{else}}
                     <span class="text-muted">--</span>
                     {{end}}
