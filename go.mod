@@ -4,7 +4,7 @@ go 1.24.0
 
 require (
 	github.com/dustin/go-humanize v1.0.1
-	github.com/expr-lang/expr v1.17.6
+	github.com/expr-lang/expr v1.17.7
 	github.com/fsnotify/fsnotify v1.9.0
 	github.com/go-acme/lego/v4 v4.29.0
 	github.com/miekg/dns v1.1.68
