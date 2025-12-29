@@ -544,6 +544,20 @@ func buildQueryFilterFromRequest(r *http.Request) storage.QueryFilter {
 		filter.QueryType = qtype
 	}
 
+	if clientIP := strings.TrimSpace(values.Get("client")); clientIP != "" {
+		filter.ClientIP = clientIP
+	}
+
+	if upstream := strings.TrimSpace(values.Get("upstream")); upstream != "" {
+		filter.Upstream = upstream
+	}
+
+	if responseCode := strings.TrimSpace(values.Get("response_code")); responseCode != "" {
+		if code, err := strconv.Atoi(responseCode); err == nil && code > 0 {
+			filter.ResponseCode = code
+		}
+	}
+
 	if status := strings.ToLower(values.Get("status")); status != "" {
 		switch status {
 		case "blocked":

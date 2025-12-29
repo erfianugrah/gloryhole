@@ -1,4 +1,4 @@
-.PHONY: help build build-all install clean test test-race test-coverage lint fmt vet run dev version
+.PHONY: help build build-all install clean test test-race test-coverage lint fmt vet run dev version npm-install npm-build
 
 # Variables
 BINARY_NAME=glory-hole
@@ -30,8 +30,18 @@ help:
 	@echo "Targets:"
 	@grep -E '^## ' Makefile | sed 's/## /  /'
 
+## npm-install: Install npm dependencies
+npm-install:
+	@echo "Installing npm dependencies..."
+	@npm install
+
+## npm-build: Build frontend assets from npm packages
+npm-build: npm-install
+	@echo "Building frontend assets..."
+	@npm run build:vendor
+
 ## build: Build the binary for current platform
-build:
+build: npm-build
 	@echo "Building $(BINARY_NAME) $(VERSION)..."
 	@mkdir -p $(BUILD_DIR)
 	go build $(GOFLAGS) $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME) $(MAIN_PATH)
@@ -58,6 +68,9 @@ clean:
 	@echo "Cleaning build artifacts..."
 	rm -rf $(BUILD_DIR)
 	rm -f $(BINARY_NAME)
+	rm -rf node_modules
+	rm -rf pkg/api/ui/static/js/vendor
+	rm -rf pkg/api/ui/static/fonts
 	go clean
 
 ## test: Run tests

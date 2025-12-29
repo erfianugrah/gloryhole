@@ -6,8 +6,19 @@
 <div class="queries-page">
     <div class="page-header">
         <h2>Query Log</h2>
+
+        <!-- Quick Time Range Buttons -->
+        <div class="time-range-buttons" style="margin-bottom: 1rem; display: flex; gap: 0.5rem; flex-wrap: wrap;">
+            <button class="btn btn-secondary btn-sm" type="button" data-time-range="1h">Last Hour</button>
+            <button class="btn btn-secondary btn-sm" type="button" data-time-range="24h">Last 24 Hours</button>
+            <button class="btn btn-secondary btn-sm" type="button" data-time-range="7d">Last 7 Days</button>
+            <button class="btn btn-secondary btn-sm" type="button" data-time-range="custom">Custom</button>
+        </div>
+
         <form id="query-filter-form" class="filters" autocomplete="off">
             <input type="text" id="filter-domain" name="domain" placeholder="Filter by domain..." class="filter-input">
+            <input type="text" id="filter-client" name="client" placeholder="Filter by client IP..." class="filter-input">
+            <input type="text" id="filter-upstream" name="upstream" placeholder="Filter by upstream..." class="filter-input">
             <select id="filter-type" name="type" class="filter-select">
                 <option value="">All Types</option>
                 <option value="A">A</option>
@@ -23,8 +34,15 @@
                 <option value="allowed">Allowed Only</option>
                 <option value="cached">Cached Only</option>
             </select>
-            <input type="datetime-local" id="filter-start" name="start" class="filter-input" placeholder="Start time">
-            <input type="datetime-local" id="filter-end" name="end" class="filter-input" placeholder="End time">
+            <select id="filter-rcode" name="rcode" class="filter-select">
+                <option value="">All Response Codes</option>
+                <option value="0">0 - NOERROR</option>
+                <option value="2">2 - SERVFAIL</option>
+                <option value="3">3 - NXDOMAIN</option>
+                <option value="5">5 - REFUSED</option>
+            </select>
+            <input type="datetime-local" id="filter-start" name="start" class="filter-input" placeholder="Start time" style="display: none;">
+            <input type="datetime-local" id="filter-end" name="end" class="filter-input" placeholder="End time" style="display: none;">
             <button class="btn btn-secondary btn-sm" type="button" data-reset-filters>Reset</button>
             <div class="is-visually-hidden">
                 <input type="hidden" name="limit" id="queries-limit" value="100">
@@ -44,10 +62,10 @@
     </div>
     <div id="queries-loading" class="hx-indicator">Refreshing…</div>
 
-    <div class="pagination">
+    <div class="pagination" id="queries-pagination">
         <button id="prev-btn" class="btn btn-secondary" type="button" data-page-shift="-1">Previous</button>
         <span id="page-info" style="margin: 0 1rem;">Page <span id="current-page">1</span></span>
-        <button class="btn btn-secondary" type="button" data-page-shift="1">Next</button>
+        <button id="next-btn" class="btn btn-secondary" type="button" data-page-shift="1">Next</button>
     </div>
 </div>
 
@@ -61,6 +79,9 @@ window.addEventListener('DOMContentLoaded', function () {
     const prevBtn = document.getElementById('prev-btn');
     const resetBtn = document.querySelector('[data-reset-filters]');
     const pageButtons = document.querySelectorAll('[data-page-shift]');
+    const timeRangeButtons = document.querySelectorAll('[data-time-range]');
+    const startInput = document.getElementById('filter-start');
+    const endInput = document.getElementById('filter-end');
     const hx = window.htmx;
     let filterTimer = null;
 
@@ -136,7 +157,7 @@ window.addEventListener('DOMContentLoaded', function () {
         rows.sort((a, b) => {
             const va = a.dataset[key] || '';
             const vb = b.dataset[key] || '';
-            if (key === 'timestamp' || key === 'latency' || key === 'upstream') {
+            if (key === 'timestamp' || key === 'latency' || key === 'upstream' || key === 'rcode') {
                 const na = parseFloat(va) || 0;
                 const nb = parseFloat(vb) || 0;
                 return nextDir === 'asc' ? na - nb : nb - na;
@@ -152,7 +173,7 @@ window.addEventListener('DOMContentLoaded', function () {
         const table = container?.querySelector('.queries-table');
         if (!table) return;
         const headers = table.querySelectorAll('th');
-        const map = ['timestamp','client','domain','type','status','latency'];
+        const map = ['timestamp','client','domain','type','status','rcode','upstream','latency'];
         headers.forEach((th, idx) => {
             const key = map[idx];
             if (!key) return;
@@ -172,8 +193,56 @@ window.addEventListener('DOMContentLoaded', function () {
 
     attachSortHandlers();
 
+    // Time range button handlers
+    timeRangeButtons.forEach((button) => {
+        button.addEventListener('click', () => {
+            const range = button.dataset.timeRange;
+            const now = new Date();
+            let start;
+
+            if (range === 'custom') {
+                // Show datetime inputs
+                startInput.style.display = '';
+                endInput.style.display = '';
+                startInput.value = '';
+                endInput.value = '';
+                return;
+            }
+
+            // Hide datetime inputs for preset ranges
+            startInput.style.display = 'none';
+            endInput.style.display = 'none';
+
+            // Calculate start time based on range
+            switch (range) {
+                case '1h':
+                    start = new Date(now.getTime() - 60 * 60 * 1000);
+                    break;
+                case '24h':
+                    start = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+                    break;
+                case '7d':
+                    start = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+                    break;
+            }
+
+            if (start) {
+                // Format as datetime-local value
+                const formatDateTime = (date) => {
+                    const pad = (n) => n.toString().padStart(2, '0');
+                    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+                };
+                startInput.value = formatDateTime(start);
+                endInput.value = formatDateTime(now);
+                scheduleFilterRefresh();
+            }
+        });
+    });
+
     resetBtn?.addEventListener('click', () => {
         filterForm?.reset();
+        startInput.style.display = 'none';
+        endInput.style.display = 'none';
         scheduleFilterRefresh();
     });
 

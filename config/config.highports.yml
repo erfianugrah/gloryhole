@@ -1,0 +1,48 @@
+# High ports configuration for testing
+server:
+  listen_address: "0.0.0.0:15353"
+  udp_enabled: true
+  tcp_enabled: true
+  dot_enabled: false
+  enable_blocklist: false
+  enable_policies: false
+
+api:
+  enabled: true
+  listen_address: "0.0.0.0:8080"
+
+upstream_dns_servers:
+  - "1.1.1.1:53"
+  - "8.8.8.8:53"
+
+blocklists: []
+whitelist: []
+local_dns_records: []
+policies: []
+
+storage:
+  enabled: true
+  backend: "sqlite"
+  sqlite:
+    path: "./glory-hole-test.db"
+  buffer_size: 500
+  flush_interval: 5s
+  batch_size: 100
+  retention_days: 7
+
+cache:
+  enabled: true
+  max_entries: 10000
+  min_ttl: 60s
+  max_ttl: 24h
+
+logging:
+  level: "info"
+  format: "text"
+  output: "stdout"
+
+telemetry:
+  enabled: true
+  service_name: "glory-hole-test"
+  prometheus_enabled: true
+  prometheus_port: 9191

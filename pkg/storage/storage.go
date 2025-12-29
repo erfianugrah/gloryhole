@@ -120,12 +120,15 @@ type TraceFilter struct {
 
 // QueryFilter represents filter options for fetching queries.
 type QueryFilter struct {
-	Domain    string
-	QueryType string
-	Blocked   *bool
-	Cached    *bool
-	Start     time.Time
-	End       time.Time
+	Domain       string
+	QueryType    string
+	ClientIP     string
+	Upstream     string
+	ResponseCode int
+	Blocked      *bool
+	Cached       *bool
+	Start        time.Time
+	End          time.Time
 }
 
 // ClientSummary aggregates per-client statistics for display.

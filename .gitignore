@@ -25,8 +25,14 @@ bin/
 # Database files
 *.db
 
-# Dependency directories
-vendor/
+# Dependency directories (Go vendor, but not UI static vendor)
+/vendor/
+# Allow UI static vendor files
+!pkg/api/ui/static/js/vendor/
+
+# Node.js
+node_modules/
+package-lock.json
 
 # GoLand
 .idea/

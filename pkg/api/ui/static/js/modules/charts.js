@@ -154,9 +154,12 @@ async function refreshTimeSeriesCharts() {
     if (!queryChart && !cacheHitChart) return;
 
     try {
-        const response = await fetch('/api/stats/timeseries?period=hour&points=24');
+        const response = await fetch('/api/stats/timeseries?period=hour&points=24', {
+            credentials: 'same-origin'
+        });
         if (!response.ok) {
-            throw new Error('Failed to load time-series data');
+            const errorText = await response.text().catch(() => response.statusText);
+            throw new Error(`Failed to load time-series data: ${response.status} ${errorText}`);
         }
 
         const payload = await response.json();
@@ -246,9 +249,12 @@ async function updateQueryTypeChart() {
             params.set('since', selectedRange);
         }
 
-        const response = await fetch(`/api/stats/query-types?${params.toString()}`);
+        const response = await fetch(`/api/stats/query-types?${params.toString()}`, {
+            credentials: 'same-origin'
+        });
         if (!response.ok) {
-            throw new Error('Failed to load query-type data');
+            const errorText = await response.text().catch(() => response.statusText);
+            throw new Error(`Failed to load query-type data: ${response.status} ${errorText}`);
         }
 
         const payload = await response.json();
@@ -393,9 +399,12 @@ async function updateTopDomainsChart(url, chart) {
     if (!chart) return;
 
     try {
-        const response = await fetch(url);
+        const response = await fetch(url, {
+            credentials: 'same-origin'
+        });
         if (!response.ok) {
-            throw new Error('Failed to load top domains data');
+            const errorText = await response.text().catch(() => response.statusText);
+            throw new Error(`Failed to load top domains data: ${response.status} ${errorText}`);
         }
 
         const payload = await response.json();

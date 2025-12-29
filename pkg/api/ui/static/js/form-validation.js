@@ -275,7 +275,7 @@
         // Real-time validation on blur
         document.addEventListener('blur', function(event) {
             const input = event.target;
-            if (input.hasAttribute('data-validate')) {
+            if (input && input.nodeType === Node.ELEMENT_NODE && input.hasAttribute && input.hasAttribute('data-validate')) {
                 validateInput(input);
             }
         }, true);
@@ -283,7 +283,7 @@
         // Clear validation on focus
         document.addEventListener('focus', function(event) {
             const input = event.target;
-            if (input.hasAttribute('data-validate')) {
+            if (input && input.nodeType === Node.ELEMENT_NODE && input.hasAttribute && input.hasAttribute('data-validate')) {
                 // Only clear if it was invalid
                 if (input.classList.contains('is-invalid')) {
                     clearValidation(input);
@@ -311,7 +311,7 @@
         let inputTimer;
         document.addEventListener('input', function(event) {
             const input = event.target;
-            if (input.hasAttribute('data-validate')) {
+            if (input && input.nodeType === Node.ELEMENT_NODE && input.hasAttribute && input.hasAttribute('data-validate')) {
                 clearTimeout(inputTimer);
                 inputTimer = setTimeout(() => {
                     // Only validate if the input has been touched (blurred at least once)

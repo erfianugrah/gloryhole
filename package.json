@@ -1,0 +1,20 @@
+{
+  "name": "glory-hole-ui",
+  "version": "0.10.9",
+  "description": "Frontend dependencies for Glory-Hole DNS UI",
+  "private": true,
+  "scripts": {
+    "install:deps": "npm install",
+    "build:vendor": "node scripts/copy-vendor.js",
+    "build": "npm run build:vendor",
+    "clean": "rm -rf pkg/api/ui/static/js/vendor pkg/api/ui/static/fonts node_modules"
+  },
+  "devDependencies": {},
+  "dependencies": {
+    "htmx.org": "^1.9.12",
+    "idiomorph": "^0.3.0",
+    "chart.js": "^4.4.5",
+    "@fontsource/jetbrains-mono": "^5.0.18",
+    "@fontsource/space-grotesk": "^5.0.20"
+  }
+}

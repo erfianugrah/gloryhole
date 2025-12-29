@@ -722,6 +722,21 @@ func (s *SQLiteStorage) GetQueriesFiltered(ctx context.Context, filter QueryFilt
 		args = append(args, strings.ToUpper(filter.QueryType))
 	}
 
+	if filter.ClientIP != "" {
+		conditions = append(conditions, "client_ip = ?")
+		args = append(args, filter.ClientIP)
+	}
+
+	if filter.Upstream != "" {
+		conditions = append(conditions, "LOWER(upstream) LIKE ?")
+		args = append(args, "%"+strings.ToLower(filter.Upstream)+"%")
+	}
+
+	if filter.ResponseCode > 0 {
+		conditions = append(conditions, "response_code = ?")
+		args = append(args, filter.ResponseCode)
+	}
+
 	if filter.Blocked != nil {
 		conditions = append(conditions, "blocked = ?")
 		if *filter.Blocked {

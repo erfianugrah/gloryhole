@@ -5,6 +5,8 @@ project_name: glory-hole
 before:
   hooks:
     - go mod tidy
+    - npm install
+    - npm run build:vendor
 
 builds:
   - id: glory-hole
@@ -102,6 +104,9 @@ dockers:
     extra_files:
       - go.mod
       - go.sum
+      - package.json
+      - package-lock.json
+      - scripts/
       - config/config.example.yml
       - cmd/
       - pkg/
@@ -124,6 +129,9 @@ dockers:
     extra_files:
       - go.mod
       - go.sum
+      - package.json
+      - package-lock.json
+      - scripts/
       - config/config.example.yml
       - cmd/
       - pkg/
