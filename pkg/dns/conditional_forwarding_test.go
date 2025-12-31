@@ -257,7 +257,7 @@ func TestConditionalForwarding_PolicyForward(t *testing.T) {
 	handler.SetForwarder(fwd)
 
 	// Setup policy engine with FORWARD action
-	policyEngine := policy.NewEngine()
+	policyEngine := policy.NewEngine(nil)
 	rule := &policy.Rule{
 		Name:       "Forward local domains",
 		Logic:      `DomainMatches(Domain, ".local")`,

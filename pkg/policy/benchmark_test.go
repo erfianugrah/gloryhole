@@ -7,7 +7,7 @@ import (
 
 // BenchmarkEvaluate_SimpleRule benchmarks evaluation of a simple rule
 func BenchmarkEvaluate_SimpleRule(b *testing.B) {
-	e := NewEngine()
+	e := NewEngine(nil)
 	rule := &Rule{
 		Name:    "Simple Rule",
 		Logic:   "true",
@@ -26,7 +26,7 @@ func BenchmarkEvaluate_SimpleRule(b *testing.B) {
 
 // BenchmarkEvaluate_DomainMatch benchmarks domain matching rule
 func BenchmarkEvaluate_DomainMatch(b *testing.B) {
-	e := NewEngine()
+	e := NewEngine(nil)
 	rule := &Rule{
 		Name:    "Domain Match",
 		Logic:   `Domain == "facebook.com"`,
@@ -45,7 +45,7 @@ func BenchmarkEvaluate_DomainMatch(b *testing.B) {
 
 // BenchmarkEvaluate_ComplexRule benchmarks complex rule with multiple conditions
 func BenchmarkEvaluate_ComplexRule(b *testing.B) {
-	e := NewEngine()
+	e := NewEngine(nil)
 	rule := &Rule{
 		Name:    "Complex Rule",
 		Logic:   `(Hour >= 22 || Hour < 6) && ClientIP == "192.168.1.50" && Domain == "facebook.com"`,
@@ -64,7 +64,7 @@ func BenchmarkEvaluate_ComplexRule(b *testing.B) {
 
 // BenchmarkEvaluate_DomainMatchesHelper benchmarks DomainMatches helper function
 func BenchmarkEvaluate_DomainMatchesHelper(b *testing.B) {
-	e := NewEngine()
+	e := NewEngine(nil)
 	rule := &Rule{
 		Name:    "Domain Matches Helper",
 		Logic:   `DomainMatches(Domain, "facebook")`,
@@ -83,7 +83,7 @@ func BenchmarkEvaluate_DomainMatchesHelper(b *testing.B) {
 
 // BenchmarkEvaluate_IPInCIDRHelper benchmarks IPInCIDR helper function
 func BenchmarkEvaluate_IPInCIDRHelper(b *testing.B) {
-	e := NewEngine()
+	e := NewEngine(nil)
 	rule := &Rule{
 		Name:    "IP In CIDR",
 		Logic:   `IPInCIDR(ClientIP, "192.168.1.0/24")`,
@@ -102,7 +102,7 @@ func BenchmarkEvaluate_IPInCIDRHelper(b *testing.B) {
 
 // BenchmarkEvaluate_MultipleRules benchmarks evaluation with multiple rules
 func BenchmarkEvaluate_MultipleRules(b *testing.B) {
-	e := NewEngine()
+	e := NewEngine(nil)
 
 	// Add 10 rules
 	for i := 0; i < 10; i++ {
@@ -134,7 +134,7 @@ func BenchmarkEvaluate_MultipleRules(b *testing.B) {
 
 // BenchmarkEvaluate_ManyRules benchmarks evaluation with many rules (worst case)
 func BenchmarkEvaluate_ManyRules(b *testing.B) {
-	e := NewEngine()
+	e := NewEngine(nil)
 
 	// Add 100 rules
 	for i := 0; i < 100; i++ {
@@ -166,7 +166,7 @@ func BenchmarkEvaluate_ManyRules(b *testing.B) {
 
 // BenchmarkEvaluate_NoMatch benchmarks evaluation when no rules match
 func BenchmarkEvaluate_NoMatch(b *testing.B) {
-	e := NewEngine()
+	e := NewEngine(nil)
 
 	// Add rules that won't match
 	for i := 0; i < 10; i++ {
@@ -189,7 +189,7 @@ func BenchmarkEvaluate_NoMatch(b *testing.B) {
 
 // BenchmarkAddRule benchmarks rule compilation and addition
 func BenchmarkAddRule(b *testing.B) {
-	e := NewEngine()
+	e := NewEngine(nil)
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -229,7 +229,7 @@ func BenchmarkIPInCIDR(b *testing.B) {
 
 // BenchmarkConcurrentEvaluate benchmarks concurrent evaluation
 func BenchmarkConcurrentEvaluate(b *testing.B) {
-	e := NewEngine()
+	e := NewEngine(nil)
 	rule := &Rule{
 		Name:    "Test Rule",
 		Logic:   `Domain == "facebook.com"`,

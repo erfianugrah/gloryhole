@@ -13,7 +13,6 @@ import (
 	"glory-hole/pkg/localrecords"
 	"glory-hole/pkg/logging"
 	"glory-hole/pkg/policy"
-	"glory-hole/pkg/ratelimit"
 	"glory-hole/pkg/storage"
 
 	"github.com/miekg/dns"
@@ -114,7 +113,7 @@ func TestHandler_SetLocalRecords(t *testing.T) {
 
 func TestHandler_SetPolicyEngine(t *testing.T) {
 	handler := NewHandler()
-	engine := policy.NewEngine()
+	engine := policy.NewEngine(nil)
 
 	handler.SetPolicyEngine(engine)
 
@@ -123,26 +122,26 @@ func TestHandler_SetPolicyEngine(t *testing.T) {
 	}
 }
 
-func TestHandler_SetRateLimiter(t *testing.T) {
-	handler := NewHandler()
-	rl := ratelimit.NewManager(&config.RateLimitConfig{
-		Enabled:           true,
-		RequestsPerSecond: 1,
-		Burst:             1,
-		CleanupInterval:   time.Second,
-		MaxTrackedClients: 10,
-	}, logging.NewDefault())
-	if rl == nil {
-		t.Fatal("expected rate limiter instance")
-	}
-	defer rl.Stop()
-
-	handler.SetRateLimiter(rl)
-
-	if handler.RateLimiter == nil {
-		t.Error("SetRateLimiter() failed to set limiter")
-	}
-}
+// REMOVED: func TestHandler_SetRateLimiter(t *testing.T) {
+// REMOVED: 	handler := NewHandler()
+// REMOVED: 	rl := ratelimit.NewManager(&config.RateLimitConfig{
+// REMOVED: 		Enabled:           true,
+// REMOVED: 		RequestsPerSecond: 1,
+// REMOVED: 		Burst:             1,
+// REMOVED: 		CleanupInterval:   time.Second,
+// REMOVED: 		MaxTrackedClients: 10,
+// REMOVED: 	}, logging.NewDefault())
+// REMOVED: 	if rl == nil {
+// REMOVED: 		t.Fatal("expected rate limiter instance")
+// REMOVED: 	}
+// REMOVED: 	defer rl.Stop()
+// REMOVED: 
+// REMOVED: 	handler.SetRateLimiter(rl)
+// REMOVED: 
+// REMOVED: 	if handler.RateLimiter == nil {
+// REMOVED: 		t.Error("SetRateLimiter() failed to set limiter")
+// REMOVED: 	}
+// REMOVED: }
 
 // Test ServeDNS edge cases
 func TestServeDNS_CacheHit(t *testing.T) {
@@ -207,36 +206,36 @@ func TestServeDNS_CacheHit(t *testing.T) {
 	}
 }
 
-func TestServeDNS_RateLimitDrop(t *testing.T) {
-	handler := NewHandler()
-	rl := ratelimit.NewManager(&config.RateLimitConfig{
-		Enabled:           true,
-		RequestsPerSecond: 1,
-		Burst:             1,
-		Action:            config.RateLimitActionDrop,
-		CleanupInterval:   time.Minute,
-		MaxTrackedClients: 10,
-	}, logging.NewDefault())
-	if rl == nil {
-		t.Fatal("expected rate limiter instance")
-	}
-	defer rl.Stop()
-	handler.SetRateLimiter(rl)
-
-	req := new(dns.Msg)
-	req.SetQuestion("ratelimit.test.", dns.TypeA)
-
-	w1 := &mockResponseWriter{remoteAddr: &net.UDPAddr{IP: net.ParseIP("10.0.0.1"), Port: 5300}}
-	ctx := context.Background()
-	handler.ServeDNS(ctx, w1, req)
-
-	w2 := &mockResponseWriter{remoteAddr: &net.UDPAddr{IP: net.ParseIP("10.0.0.1"), Port: 5301}}
-	handler.ServeDNS(ctx, w2, req)
-
-	if w2.msg != nil {
-		t.Fatalf("expected second response to be dropped by rate limiter")
-	}
-}
+// REMOVED: func TestServeDNS_RateLimitDrop(t *testing.T) {
+// REMOVED: 	handler := NewHandler()
+// REMOVED: 	rl := ratelimit.NewManager(&config.RateLimitConfig{
+// REMOVED: 		Enabled:           true,
+// REMOVED: 		RequestsPerSecond: 1,
+// REMOVED: 		Burst:             1,
+// REMOVED: 		Action:            config.RateLimitActionDrop,
+// REMOVED: 		CleanupInterval:   time.Minute,
+// REMOVED: 		MaxTrackedClients: 10,
+// REMOVED: 	}, logging.NewDefault())
+// REMOVED: 	if rl == nil {
+// REMOVED: 		t.Fatal("expected rate limiter instance")
+// REMOVED: 	}
+// REMOVED: 	defer rl.Stop()
+// REMOVED: 	handler.SetRateLimiter(rl)
+// REMOVED: 
+// REMOVED: 	req := new(dns.Msg)
+// REMOVED: 	req.SetQuestion("ratelimit.test.", dns.TypeA)
+// REMOVED: 
+// REMOVED: 	w1 := &mockResponseWriter{remoteAddr: &net.UDPAddr{IP: net.ParseIP("10.0.0.1"), Port: 5300}}
+// REMOVED: 	ctx := context.Background()
+// REMOVED: 	handler.ServeDNS(ctx, w1, req)
+// REMOVED: 
+// REMOVED: 	w2 := &mockResponseWriter{remoteAddr: &net.UDPAddr{IP: net.ParseIP("10.0.0.1"), Port: 5301}}
+// REMOVED: 	handler.ServeDNS(ctx, w2, req)
+// REMOVED: 
+// REMOVED: 	if w2.msg != nil {
+// REMOVED: 		t.Fatalf("expected second response to be dropped by rate limiter")
+// REMOVED: 	}
+// REMOVED: }
 
 func TestServeDNS_LocalRecordWildcard(t *testing.T) {
 	handler := NewHandler()
@@ -276,7 +275,7 @@ func TestServeDNS_PolicyEngineAllow(t *testing.T) {
 	handler := NewHandler()
 
 	// Setup policy engine with ALLOW rule
-	policyEngine := policy.NewEngine()
+	policyEngine := policy.NewEngine(nil)
 	rule := &policy.Rule{
 		Name:    "Allow Test",
 		Logic:   `Domain == "allowed.test."`,
@@ -548,7 +547,7 @@ func TestServeDNS_PolicyEngineRedirect_IPv4(t *testing.T) {
 	handler := NewHandler()
 
 	// Setup policy engine with REDIRECT rule
-	policyEngine := policy.NewEngine()
+	policyEngine := policy.NewEngine(nil)
 	rule := &policy.Rule{
 		Name:       "Redirect to local server",
 		Logic:      `Domain == "redirect.test"`, // No trailing dot in policy logic
@@ -596,7 +595,7 @@ func TestServeDNS_PolicyEngineRedirect_IPv6(t *testing.T) {
 	handler := NewHandler()
 
 	// Setup policy engine with REDIRECT rule
-	policyEngine := policy.NewEngine()
+	policyEngine := policy.NewEngine(nil)
 	rule := &policy.Rule{
 		Name:       "Redirect to IPv6 local server",
 		Logic:      `Domain == "redirect6.test"`, // No trailing dot
@@ -644,7 +643,7 @@ func TestServeDNS_PolicyEngineRedirect_InvalidIP(t *testing.T) {
 	handler := NewHandler()
 
 	// Setup policy engine with REDIRECT rule with invalid IP
-	policyEngine := policy.NewEngine()
+	policyEngine := policy.NewEngine(nil)
 	rule := &policy.Rule{
 		Name:       "Redirect with invalid IP",
 		Logic:      `Domain == "badredirect.test"`, // No trailing dot
@@ -680,7 +679,7 @@ func TestServeDNS_PolicyEngineRedirect_TypeMismatch(t *testing.T) {
 	handler := NewHandler()
 
 	// Setup policy engine with IPv4 redirect
-	policyEngine := policy.NewEngine()
+	policyEngine := policy.NewEngine(nil)
 	rule := &policy.Rule{
 		Name:       "Redirect to IPv4",
 		Logic:      `Domain == "redirect.test"`, // No trailing dot
@@ -721,7 +720,7 @@ func TestServeDNS_PolicyEngineBlock(t *testing.T) {
 	handler := NewHandler()
 
 	// Setup policy engine with BLOCK rule
-	policyEngine := policy.NewEngine()
+	policyEngine := policy.NewEngine(nil)
 	rule := &policy.Rule{
 		Name:    "Block Test",
 		Logic:   `Domain == "policy-blocked.test."`,

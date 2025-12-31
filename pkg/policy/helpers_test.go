@@ -357,7 +357,7 @@ func TestInTimeRange(t *testing.T) {
 
 // Test helper functions in expressions
 func TestHelperFunctionsInExpressions(t *testing.T) {
-	engine := NewEngine()
+	engine := NewEngine(nil)
 
 	tests := []struct {
 		rule     *Rule

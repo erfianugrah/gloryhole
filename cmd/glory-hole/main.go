@@ -161,7 +161,6 @@ func main() {
 
 	// Initialize blocklist manager if configured (lock-free, high performance)
 	var blocklistMgr *blocklist.Manager
-	var rateLimiter *ratelimit.Manager
 	var apiRateLimiter *ratelimit.Manager
 	var dnsCache cache.Interface
 	if len(cfg.Blocklists) > 0 {
@@ -189,10 +188,8 @@ func main() {
 			"burst", cfg.RateLimit.Burst,
 			"action", cfg.RateLimit.Action,
 		)
-		rateLimiter = ratelimit.NewManager(&cfg.RateLimit, logger)
-		if rateLimiter != nil {
-			handler.SetRateLimiter(rateLimiter)
-		}
+		// DNS rate limiting is now handled by policy engine with per-rule limiters
+		// Keep HTTP API rate limiter separate for session management protection
 		apiRateLimiter = ratelimit.NewManager(&cfg.RateLimit, logger)
 	}
 
@@ -463,7 +460,7 @@ func main() {
 
 	// Initialize policy engine so the API/UI can add rules even when none exist yet.
 	// Evaluation is gated by the runtime kill-switch (server.enable_policies).
-	policyEngine := policy.NewEngine()
+	policyEngine := policy.NewEngine(logger)
 
 	for _, entry := range cfg.Policy.Rules {
 		rule := &policy.Rule{
@@ -583,7 +580,7 @@ func main() {
 			if newCfg.Policy.Enabled {
 				if policyEngine == nil {
 					logger.Info("Policy engine enabled; creating new engine")
-					policyEngine = policy.NewEngine()
+					policyEngine = policy.NewEngine(logger)
 				} else {
 					policyEngine.Clear()
 				}
@@ -724,31 +721,26 @@ func main() {
 
 		if !equalRateLimitConfig(&cfg.RateLimit, &newCfg.RateLimit) {
 			logger.Info("Rate limit configuration changed")
-			if rateLimiter != nil {
-				rateLimiter.Stop()
-				rateLimiter = nil
-			}
+			// DNS rate limiter removed; policy engine handles per-rule rate limiting
 			if apiRateLimiter != nil {
 				apiRateLimiter.Stop()
 				apiRateLimiter = nil
 			}
 
 			if newCfg.RateLimit.Enabled {
-				rateLimiter = ratelimit.NewManager(&newCfg.RateLimit, logger)
-				handler.SetRateLimiter(rateLimiter)
-
+				// DNS rate limiting is now handled by policy engine with per-rule limiters
+				// Only reload HTTP API rate limiter
 				apiRateLimiter = ratelimit.NewManager(&newCfg.RateLimit, logger)
 				apiServer.SetHTTPRateLimiter(apiRateLimiter)
 
-				logger.Info("Rate limiter reloaded",
+				logger.Info("HTTP API rate limiter reloaded",
 					"requests_per_second", newCfg.RateLimit.RequestsPerSecond,
 					"burst", newCfg.RateLimit.Burst,
 					"action", newCfg.RateLimit.Action,
 				)
 			} else {
-				handler.SetRateLimiter(nil)
 				apiServer.SetHTTPRateLimiter(nil)
-				logger.Info("Rate limiter disabled")
+				logger.Info("HTTP API rate limiter disabled")
 			}
 
 			// Refresh trusted proxy CIDRs for HTTP rate limiting / real client IP extraction
@@ -951,9 +943,7 @@ func main() {
 			blocklistMgr.Stop()
 		}
 
-		if rateLimiter != nil {
-			rateLimiter.Stop()
-		}
+		// DNS rate limiter removed; policy engine handles per-rule rate limiting
 		if apiRateLimiter != nil {
 			apiRateLimiter.Stop()
 		}

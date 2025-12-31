@@ -42,7 +42,7 @@ func TestServeDNS_PolicyEngineForwardWithCache(t *testing.T) {
 	}
 	handler.SetForwarder(forwarder.NewForwarder(cfg, logger))
 
-	engine := policy.NewEngine()
+	engine := policy.NewEngine(nil)
 	rule := &policy.Rule{
 		Name:       "forward-corporate",
 		Logic:      `Domain == "corp.example.com"`,

@@ -394,7 +394,7 @@ func TestServeDNS_ConditionalForwardingEvaluation(t *testing.T) {
 func TestServeDNS_PolicyEngineAllowNoForwarder(t *testing.T) {
 	handler := NewHandler()
 
-	engine := policy.NewEngine()
+	engine := policy.NewEngine(nil)
 	rule := &policy.Rule{
 		Name:    "allow-test",
 		Logic:   `Domain == "allowed.example.com"`,
@@ -430,7 +430,7 @@ func TestServeDNS_PolicyEngineAllowNoForwarder(t *testing.T) {
 func TestServeDNS_PolicyEngineRedirectTypeMismatchAAAA(t *testing.T) {
 	handler := NewHandler()
 
-	engine := policy.NewEngine()
+	engine := policy.NewEngine(nil)
 	// Redirect to IPv4 address but query for AAAA
 	rule := &policy.Rule{
 		Name:       "redirect-mismatch",

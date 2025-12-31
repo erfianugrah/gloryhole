@@ -685,7 +685,7 @@ func setupTestHandler(t *testing.T, cfg LoadTestConfig) *dns.Handler {
 	handler.SetLocalRecords(localMgr)
 
 	// Setup policy engine with test rules
-	policyEngine := policy.NewEngine()
+	policyEngine := policy.NewEngine(nil)
 	handler.SetPolicyEngine(policyEngine)
 
 	return handler

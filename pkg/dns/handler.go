@@ -19,7 +19,6 @@ import (
 	"glory-hole/pkg/logging"
 	"glory-hole/pkg/pattern"
 	"glory-hole/pkg/policy"
-	"glory-hole/pkg/ratelimit"
 	"glory-hole/pkg/storage"
 	"glory-hole/pkg/telemetry"
 
@@ -56,7 +55,6 @@ type Handler struct {
 	ConfigWatcher     *config.Watcher   // For kill-switch feature (hot-reload config access)
 	KillSwitch        KillSwitchChecker // For duration-based temporary disabling
 	DecisionTrace     bool
-	RateLimiter       *ratelimit.Manager
 	Metrics           *telemetry.Metrics
 	Logger            *logging.Logger
 	lookupMu          sync.RWMutex
@@ -125,18 +123,6 @@ func (h *Handler) SetDecisionTrace(enabled bool) {
 	h.DecisionTrace = enabled
 }
 
-// SetRateLimiter wires a rate limiter implementation.
-func (h *Handler) SetRateLimiter(rl *ratelimit.Manager) {
-	h.RateLimiter = rl
-}
-
-// If a policy explicitly uses RATE_LIMIT action, we defer rate limiting to that policy rule
-// so operators can scope limits by domain/client/type. Otherwise apply the global limiter
-// up front.
-func (h *Handler) shouldDeferRateLimitToPolicies() bool {
-	return h.PolicyEngine != nil && h.PolicyEngine.HasAction(policy.ActionRateLimit)
-}
-
 // writeMsg writes a DNS message to the response writer with error handling
 // If the write fails (e.g., client disconnected), the error is silently ignored
 // as there's no way to notify the client at that point
@@ -146,6 +132,34 @@ func (h *Handler) writeMsg(w dns.ResponseWriter, msg *dns.Msg) {
 		// Telemetry will track the overall error rate if needed
 		_ = err
 	}
+}
+
+// serveFromCache attempts to serve a cached DNS response
+func (h *Handler) serveFromCache(ctx context.Context, w dns.ResponseWriter, r, msg *dns.Msg, trace *blockTraceRecorder, outcome *serveDNSOutcome) bool {
+	if h.Cache == nil {
+		return false
+	}
+
+	cachedResp, cachedTrace := h.Cache.GetWithTrace(ctx, r)
+	if cachedResp == nil {
+		return false
+	}
+
+	cachedResp.Id = r.Id
+	HandleEDNS0(r, cachedResp)
+
+	outcome.cached = true
+	outcome.responseCode = cachedResp.Rcode
+	trace.Append(cachedTrace)
+	if cachedResp.Rcode == dns.RcodeNameError {
+		outcome.blocked = true
+		trace.Record(traceStageCache, "blocked_hit", func(entry *storage.BlockTraceEntry) {
+			entry.Source = "response_cache"
+		})
+	}
+
+	h.writeMsg(w, cachedResp)
+	return true
 }
 
 // ServeDNS implements the dns.Handler interface
@@ -178,9 +192,6 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 	qtype := question.Qtype
 	qtypeLabel := dnsTypeLabel(qtype)
 
-	if !h.shouldDeferRateLimitToPolicies() && h.enforceRateLimit(ctx, w, r, msg, clientIP, domain, qtypeLabel, trace, outcome) {
-		return
-	}
 	if h.serveFromCache(ctx, w, r, msg, trace, outcome) {
 		return
 	}

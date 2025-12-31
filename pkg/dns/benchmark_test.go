@@ -43,7 +43,7 @@ func BenchmarkHandler_PolicyBlock(b *testing.B) {
 	handler := NewHandler()
 
 	// Setup policy engine
-	policyEngine := policy.NewEngine()
+	policyEngine := policy.NewEngine(nil)
 	rule := &policy.Rule{
 		Name:    "Block Test",
 		Logic:   `Domain == "blocked.test."`,
@@ -180,7 +180,7 @@ func BenchmarkHandler_FullStack(b *testing.B) {
 	handler.SetLocalRecords(localMgr)
 
 	// Policy engine
-	policyEngine := policy.NewEngine()
+	policyEngine := policy.NewEngine(nil)
 	rule := &policy.Rule{
 		Name:    "Block Test",
 		Logic:   `Domain == "blocked.test."`,
