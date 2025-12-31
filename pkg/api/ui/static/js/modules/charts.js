@@ -384,21 +384,26 @@ function createDomainBarConfig(color) {
  * Update both top domains charts
  */
 async function updateTopDomainsCharts() {
+    const allowedRange = document.getElementById('top-allowed-range')?.value || '';
+    const blockedRange = document.getElementById('top-blocked-range')?.value || '';
+
     await Promise.all([
-        updateTopDomainsChart('/api/top-domains?limit=6&blocked=false', topAllowedChart),
-        updateTopDomainsChart('/api/top-domains?limit=6&blocked=true', topBlockedChart),
+        updateTopDomainsChart('/api/top-domains?limit=6&blocked=false', topAllowedChart, allowedRange),
+        updateTopDomainsChart('/api/top-domains?limit=6&blocked=true', topBlockedChart, blockedRange),
     ]);
 }
 
 /**
  * Update a single top domains chart
- * @param {string} url - API endpoint
+ * @param {string} baseUrl - Base API endpoint
  * @param {Chart} chart - Chart.js instance
+ * @param {string} range - Time range (e.g., '24h', '7d')
  */
-async function updateTopDomainsChart(url, chart) {
+async function updateTopDomainsChart(baseUrl, chart, range = '') {
     if (!chart) return;
 
     try {
+        const url = range ? `${baseUrl}&since=${range}` : baseUrl;
         const response = await fetch(url, {
             credentials: 'same-origin'
         });
@@ -434,5 +439,21 @@ export function setupQueryTypeRangeSelector() {
     const queryTypeRangeSelect = document.getElementById('query-type-range');
     if (queryTypeRangeSelect) {
         queryTypeRangeSelect.addEventListener('change', () => updateQueryTypeChart());
+    }
+}
+
+/**
+ * Set up top domains range selector event listeners
+ */
+export function setupTopDomainsRangeSelectors() {
+    const allowedRangeSelect = document.getElementById('top-allowed-range');
+    const blockedRangeSelect = document.getElementById('top-blocked-range');
+
+    if (allowedRangeSelect) {
+        allowedRangeSelect.addEventListener('change', () => updateTopDomainsCharts());
+    }
+
+    if (blockedRangeSelect) {
+        blockedRangeSelect.addEventListener('change', () => updateTopDomainsCharts());
     }
 }
