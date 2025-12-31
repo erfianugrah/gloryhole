@@ -14,9 +14,7 @@ import (
 
 const maxConfigPayloadSize = 64 * 1024 // 64KB
 const (
-	settingsTemplateRateLimit = "settings-rate-limit"
 	settingsTemplateTLS       = "settings-tls"
-	flashKeyRateLimit         = "rate_limit"
 	flashKeyTLS               = "tls"
 )
 
@@ -123,44 +121,6 @@ func (s *Server) handleUpdateLogging(w http.ResponseWriter, r *http.Request) {
 
 	data := s.newSettingsPageData(cfg)
 	s.respondConfigUpdate(w, r, settingsTemplateLogging, flashKeyLogging, "Logging settings updated", data)
-}
-
-// handleUpdateRateLimit handles PUT /api/config/rate-limit
-func (s *Server) handleUpdateRateLimit(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPut {
-		s.writeError(w, http.StatusMethodNotAllowed, "Method not allowed")
-		return
-	}
-
-	cfg, err := s.mutableConfig()
-	if err != nil {
-		s.writeError(w, http.StatusServiceUnavailable, err.Error())
-		return
-	}
-
-	r.Body = http.MaxBytesReader(w, r.Body, maxConfigPayloadSize)
-	payload, err := parseRateLimitPayload(r, cfg.RateLimit)
-	if err != nil {
-		s.respondConfigValidationError(w, r, settingsTemplateRateLimit, flashKeyRateLimit, err.Error(), cfg, http.StatusBadRequest)
-		return
-	}
-
-	updated := *cfg
-	updated.RateLimit.Enabled = payload.Enabled
-	updated.RateLimit.RequestsPerSecond = payload.RequestsPerSecond
-	updated.RateLimit.Burst = payload.Burst
-	updated.RateLimit.Action = payload.Action
-	updated.RateLimit.LogViolations = payload.LogViolations
-	updated.RateLimit.CleanupInterval = payload.CleanupInterval
-	updated.RateLimit.MaxTrackedClients = payload.MaxTrackedClients
-	// Keep overrides/trusted proxies untouched for now
-
-	if !s.persistConfigSection(w, r, &updated, settingsTemplateRateLimit, flashKeyRateLimit, cfg) {
-		return
-	}
-
-	data := s.newSettingsPageData(cfg)
-	s.respondConfigUpdate(w, r, settingsTemplateRateLimit, flashKeyRateLimit, "Rate limiting updated", data)
 }
 
 // handleUpdateTLS handles PUT /api/config/tls
@@ -371,127 +331,7 @@ func parseCachePayload(r *http.Request, current config.CacheConfig) (cachePayloa
 	return payload, nil
 }
 
-type rateLimitPayload struct {
-	Enabled           bool
-	RequestsPerSecond float64
-	Burst             int
-	Action            config.RateLimitAction
-	LogViolations     bool
-	CleanupInterval   time.Duration
-	MaxTrackedClients int
-}
-
-func parseRateLimitPayload(r *http.Request, current config.RateLimitConfig) (rateLimitPayload, error) {
-	type request struct {
-		Enabled           *bool    `json:"enabled,omitempty"`
-		RequestsPerSecond *float64 `json:"requests_per_second,omitempty"`
-		Burst             *int     `json:"burst,omitempty"`
-		Action            string   `json:"on_exceed"`
-		LogViolations     *bool    `json:"log_violations,omitempty"`
-		CleanupInterval   string   `json:"cleanup_interval"`
-		MaxTrackedClients *int     `json:"max_tracked_clients,omitempty"`
-	}
-
-	var req request
-	if isJSONContent(r) {
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			return rateLimitPayload{}, fmt.Errorf("invalid JSON payload: %w", err)
-		}
-	} else {
-		if err := r.ParseForm(); err != nil {
-			return rateLimitPayload{}, fmt.Errorf("invalid form payload: %w", err)
-		}
-		if val := r.FormValue("enabled"); val != "" {
-			enabled := parseCheckbox(val)
-			req.Enabled = &enabled
-		}
-		if val := r.FormValue("requests_per_second"); val != "" {
-			if f, err := strconv.ParseFloat(val, 64); err == nil {
-				req.RequestsPerSecond = &f
-			} else {
-				return rateLimitPayload{}, fmt.Errorf("invalid requests_per_second: %v", err)
-			}
-		}
-		if val := r.FormValue("burst"); val != "" {
-			if i, err := strconv.Atoi(val); err == nil {
-				req.Burst = &i
-			} else {
-				return rateLimitPayload{}, fmt.Errorf("invalid burst: %v", err)
-			}
-		}
-		if val := r.FormValue("on_exceed"); val != "" {
-			req.Action = val
-		}
-		if val := r.FormValue("log_violations"); val != "" {
-			lv := parseCheckbox(val)
-			req.LogViolations = &lv
-		}
-		if val := r.FormValue("cleanup_interval"); val != "" {
-			req.CleanupInterval = val
-		}
-		if val := r.FormValue("max_tracked_clients"); val != "" {
-			if i, err := strconv.Atoi(val); err == nil {
-				req.MaxTrackedClients = &i
-			} else {
-				return rateLimitPayload{}, fmt.Errorf("invalid max_tracked_clients: %v", err)
-			}
-		}
-	}
-
-	result := rateLimitPayload{
-		Enabled:           current.Enabled,
-		RequestsPerSecond: current.RequestsPerSecond,
-		Burst:             current.Burst,
-		Action:            current.Action,
-		LogViolations:     current.LogViolations,
-		CleanupInterval:   current.CleanupInterval,
-		MaxTrackedClients: current.MaxTrackedClients,
-	}
-
-	if req.Enabled != nil {
-		result.Enabled = *req.Enabled
-	}
-	if req.RequestsPerSecond != nil {
-		result.RequestsPerSecond = *req.RequestsPerSecond
-	}
-	if req.Burst != nil {
-		result.Burst = *req.Burst
-	}
-	if strings.TrimSpace(req.Action) != "" {
-		act := config.RateLimitAction(strings.ToLower(req.Action))
-		if act != config.RateLimitActionDrop && act != config.RateLimitActionNXDOMAIN && act != "nxdomain" {
-			return rateLimitPayload{}, fmt.Errorf("on_exceed must be 'drop' or 'nxdomain'")
-		}
-		if act == "nxdomain" {
-			act = config.RateLimitActionNXDOMAIN
-		}
-		result.Action = act
-	}
-	if req.LogViolations != nil {
-		result.LogViolations = *req.LogViolations
-	}
-	if strings.TrimSpace(req.CleanupInterval) != "" {
-		d, err := time.ParseDuration(req.CleanupInterval)
-		if err != nil {
-			return rateLimitPayload{}, fmt.Errorf("invalid cleanup_interval: %v", err)
-		}
-		result.CleanupInterval = d
-	}
-	if req.MaxTrackedClients != nil {
-		result.MaxTrackedClients = *req.MaxTrackedClients
-	}
-
-	if result.RequestsPerSecond <= 0 {
-		return rateLimitPayload{}, fmt.Errorf("requests_per_second must be > 0")
-	}
-	if result.Burst <= 0 {
-		result.Burst = int(result.RequestsPerSecond)
-	}
-
-	return result, nil
-}
-
-type tlsPayload struct {
+type tlsPayload struct{
 	DotEnabled bool
 	DotAddress string
 	TLS        config.TLSConfig

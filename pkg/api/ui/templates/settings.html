@@ -167,70 +167,6 @@
 </div>
 {{end}}
 
-{{define "settings-rate-limit"}}
-{{$cfg := .Config}}
-<div class="settings-section" id="rate-limit-section">
-    <h3>Rate Limiting</h3>
-    <p class="section-description">Global per-client token bucket before policy/blocklist evaluation.</p>
-
-    {{with index .Flash "rate_limit"}}
-        <div class="alert alert-success">{{.}}</div>
-    {{end}}
-    {{with index .Errors "rate_limit"}}
-        <div class="alert alert-danger">{{.}}</div>
-    {{end}}
-
-    <form hx-put="/api/config/rate-limit" hx-target="#rate-limit-section" hx-swap="outerHTML">
-        <label class="checkbox-label" for="rl-enabled">
-            <input id="rl-enabled" type="checkbox" name="enabled" {{if $cfg.RateLimit.Enabled}}checked{{end}}>
-            Enable rate limiting
-        </label>
-
-        <div class="form-grid">
-            <div class="form-group">
-                <label for="rl-rps">Requests per second</label>
-                <input id="rl-rps" type="number" min="1" step="1" name="requests_per_second" value="{{$cfg.RateLimit.RequestsPerSecond}}">
-            </div>
-            <div class="form-group">
-                <label for="rl-burst">Burst</label>
-                <input id="rl-burst" type="number" min="1" step="1" name="burst" value="{{$cfg.RateLimit.Burst}}">
-            </div>
-        </div>
-
-        <div class="form-group">
-            <label for="rl-action">On exceed</label>
-            <select id="rl-action" name="on_exceed">
-                <option value="nxdomain" {{if eq $cfg.RateLimit.Action "nxdomain"}}selected{{end}}>NXDOMAIN</option>
-                <option value="drop" {{if eq $cfg.RateLimit.Action "drop"}}selected{{end}}>Drop</option>
-            </select>
-        </div>
-
-        <div class="form-grid">
-            <div class="form-group">
-                <label for="rl-cleanup">Cleanup interval</label>
-                <input id="rl-cleanup" type="text" name="cleanup_interval" value="{{$cfg.RateLimit.CleanupInterval}}" placeholder="e.g., 10m">
-            </div>
-            <div class="form-group">
-                <label for="rl-max-tracked">Max tracked clients</label>
-                <input id="rl-max-tracked" type="number" min="1" step="1" name="max_tracked_clients" value="{{$cfg.RateLimit.MaxTrackedClients}}">
-            </div>
-        </div>
-
-        <label class="checkbox-label" for="rl-log">
-            <input id="rl-log" type="checkbox" name="log_violations" {{if $cfg.RateLimit.LogViolations}}checked{{end}}>
-            Log violations
-        </label>
-
-        <p class="form-help">Overrides ({{len $cfg.RateLimit.Overrides}}) and trusted proxies remain unchanged; edit in config.yml if needed.</p>
-
-        <div class="form-actions">
-            <button type="reset" class="btn btn-secondary btn-sm">Reset</button>
-            <button type="submit" class="btn btn-primary btn-sm">Save Rate Limit</button>
-        </div>
-    </form>
-</div>
-{{end}}
-
 {{define "settings-tls"}}
 {{$cfg := .Config}}
 <div class="settings-section" id="tls-section">
@@ -527,8 +463,6 @@
             </div>
         </div>
     </div>
-
-    {{template "settings-rate-limit" .}}
 
     <!-- Danger Zone -->
     <div class="settings-section danger-zone">

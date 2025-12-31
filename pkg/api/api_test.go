@@ -349,15 +349,6 @@ func TestHandleGetConfig(t *testing.T) {
 				{Name: "Test", Logic: "true", Action: "BLOCK", Enabled: true},
 			},
 		},
-		RateLimit: config.RateLimitConfig{
-			Enabled:           true,
-			RequestsPerSecond: 200,
-			Burst:             400,
-			Action:            config.RateLimitActionDrop,
-			LogViolations:     true,
-			CleanupInterval:   time.Minute,
-			MaxTrackedClients: 1000,
-		},
 		Logging: config.LoggingConfig{
 			Level:  "info",
 			Format: "json",
@@ -402,9 +393,6 @@ func TestHandleGetConfig(t *testing.T) {
 	}
 	if len(resp.Policy.Rules) != 1 {
 		t.Fatalf("expected 1 policy rule, got %d", len(resp.Policy.Rules))
-	}
-	if resp.RateLimit.Action != string(config.RateLimitActionDrop) {
-		t.Errorf("expected action drop, got %s", resp.RateLimit.Action)
 	}
 }
 

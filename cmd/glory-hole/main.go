@@ -23,7 +23,6 @@ import (
 	"glory-hole/pkg/logging"
 	"glory-hole/pkg/pattern"
 	"glory-hole/pkg/policy"
-	"glory-hole/pkg/ratelimit"
 	"glory-hole/pkg/resolver"
 	"glory-hole/pkg/storage"
 	"glory-hole/pkg/telemetry"
@@ -161,7 +160,6 @@ func main() {
 
 	// Initialize blocklist manager if configured (lock-free, high performance)
 	var blocklistMgr *blocklist.Manager
-	var apiRateLimiter *ratelimit.Manager
 	var dnsCache cache.Interface
 	if len(cfg.Blocklists) > 0 {
 		logger.Info("Initializing blocklist manager", "sources", len(cfg.Blocklists))
@@ -180,17 +178,6 @@ func main() {
 				"auto_update", cfg.AutoUpdateBlocklists,
 			)
 		}
-	}
-
-	if cfg.RateLimit.Enabled {
-		logger.Info("Initializing rate limiter",
-			"requests_per_second", cfg.RateLimit.RequestsPerSecond,
-			"burst", cfg.RateLimit.Burst,
-			"action", cfg.RateLimit.Action,
-		)
-		// DNS rate limiting is now handled by policy engine with per-rule limiters
-		// Keep HTTP API rate limiter separate for session management protection
-		apiRateLimiter = ratelimit.NewManager(&cfg.RateLimit, logger)
 	}
 
 	// Load whitelist if configured
@@ -535,7 +522,6 @@ func main() {
 		ConfigWatcher:    cfgWatcher,  // For kill-switch feature
 		ConfigPath:       *configPath, // For persisting kill-switch changes
 		KillSwitch:       killSwitch,  // For duration-based temporary disabling
-		RateLimiter:      apiRateLimiter,
 	})
 	apiServer.SetCache(dnsCache)
 
@@ -717,34 +703,6 @@ func main() {
 				"exact", len(exactMatches),
 				"patterns", len(patterns),
 				"total", len(newCfg.Whitelist))
-		}
-
-		if !equalRateLimitConfig(&cfg.RateLimit, &newCfg.RateLimit) {
-			logger.Info("Rate limit configuration changed")
-			// DNS rate limiter removed; policy engine handles per-rule rate limiting
-			if apiRateLimiter != nil {
-				apiRateLimiter.Stop()
-				apiRateLimiter = nil
-			}
-
-			if newCfg.RateLimit.Enabled {
-				// DNS rate limiting is now handled by policy engine with per-rule limiters
-				// Only reload HTTP API rate limiter
-				apiRateLimiter = ratelimit.NewManager(&newCfg.RateLimit, logger)
-				apiServer.SetHTTPRateLimiter(apiRateLimiter)
-
-				logger.Info("HTTP API rate limiter reloaded",
-					"requests_per_second", newCfg.RateLimit.RequestsPerSecond,
-					"burst", newCfg.RateLimit.Burst,
-					"action", newCfg.RateLimit.Action,
-				)
-			} else {
-				apiServer.SetHTTPRateLimiter(nil)
-				logger.Info("HTTP API rate limiter disabled")
-			}
-
-			// Refresh trusted proxy CIDRs for HTTP rate limiting / real client IP extraction
-			apiServer.SetTrustedProxies(newCfg.RateLimit.TrustedProxyCIDRs)
 		}
 
 		// Hot-reload local records if changed
@@ -943,11 +901,6 @@ func main() {
 			blocklistMgr.Stop()
 		}
 
-		// DNS rate limiter removed; policy engine handles per-rule rate limiting
-		if apiRateLimiter != nil {
-			apiRateLimiter.Stop()
-		}
-
 		// Shutdown storage
 		if stor != nil {
 			if err := stor.Close(); err != nil {
@@ -987,69 +940,6 @@ func equalPolicyConfig(a, b *config.PolicyConfig) bool {
 		}
 	}
 	return true
-}
-
-func equalRateLimitConfig(a, b *config.RateLimitConfig) bool {
-	if a == nil || b == nil {
-		return a == b
-	}
-	return a.Enabled == b.Enabled &&
-		a.RequestsPerSecond == b.RequestsPerSecond &&
-		a.Burst == b.Burst &&
-		a.Action == b.Action &&
-		a.LogViolations == b.LogViolations &&
-		a.CleanupInterval == b.CleanupInterval &&
-		a.MaxTrackedClients == b.MaxTrackedClients &&
-		equalStringSlice(a.TrustedProxyCIDRs, b.TrustedProxyCIDRs) &&
-		equalRateLimitOverrides(a.Overrides, b.Overrides)
-}
-
-func equalRateLimitOverrides(a, b []config.RateLimitOverride) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if a[i].Name != b[i].Name {
-			return false
-		}
-		if !equalStringSlice(a[i].Clients, b[i].Clients) {
-			return false
-		}
-		if !equalStringSlice(a[i].CIDRs, b[i].CIDRs) {
-			return false
-		}
-		if !equalFloatPtr(a[i].RequestsPerSecond, b[i].RequestsPerSecond) {
-			return false
-		}
-		if !equalIntPtr(a[i].Burst, b[i].Burst) {
-			return false
-		}
-		if !equalRateLimitActionPtr(a[i].Action, b[i].Action) {
-			return false
-		}
-	}
-	return true
-}
-
-func equalFloatPtr(a, b *float64) bool {
-	if a == nil || b == nil {
-		return a == b
-	}
-	return *a == *b
-}
-
-func equalIntPtr(a, b *int) bool {
-	if a == nil || b == nil {
-		return a == b
-	}
-	return *a == *b
-}
-
-func equalRateLimitActionPtr(a, b *config.RateLimitAction) bool {
-	if a == nil || b == nil {
-		return a == b
-	}
-	return *a == *b
 }
 
 func equalCacheConfig(a, b *config.CacheConfig) bool {

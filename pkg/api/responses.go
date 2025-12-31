@@ -229,7 +229,6 @@ type ConfigResponse struct {
 	Server               ConfigServerResponse    `json:"server"`
 	Cache                ConfigCacheResponse     `json:"cache"`
 	Policy               ConfigPolicyResponse    `json:"policy"`
-	RateLimit            ConfigRateLimitResponse `json:"rate_limit"`
 	Storage              ConfigStorageResponse   `json:"storage"`
 	Logging              config.LoggingConfig    `json:"logging"`
 	Telemetry            config.TelemetryConfig  `json:"telemetry"`
@@ -277,17 +276,6 @@ type ConfigPolicyResponse struct {
 	Rules   []config.PolicyRuleEntry `json:"rules"`
 }
 
-type ConfigRateLimitResponse struct {
-	Enabled           bool                       `json:"enabled"`
-	RequestsPerSecond float64                    `json:"requests_per_second"`
-	Burst             int                        `json:"burst"`
-	Action            string                     `json:"on_exceed"`
-	LogViolations     bool                       `json:"log_violations"`
-	CleanupInterval   string                     `json:"cleanup_interval"`
-	MaxTrackedClients int                        `json:"max_tracked_clients"`
-	Overrides         []config.RateLimitOverride `json:"overrides"`
-}
-
 type ConfigStorageResponse struct {
 	Backend       string `json:"backend"`
 	BufferSize    int    `json:"buffer_size"`
@@ -330,16 +318,6 @@ func convertConfigResponse(cfg *config.Config) ConfigResponse {
 		Policy: ConfigPolicyResponse{
 			Enabled: cfg.Policy.Enabled,
 			Rules:   cfg.Policy.Rules,
-		},
-		RateLimit: ConfigRateLimitResponse{
-			Enabled:           cfg.RateLimit.Enabled,
-			RequestsPerSecond: cfg.RateLimit.RequestsPerSecond,
-			Burst:             cfg.RateLimit.Burst,
-			Action:            string(cfg.RateLimit.Action),
-			LogViolations:     cfg.RateLimit.LogViolations,
-			CleanupInterval:   durationToString(cfg.RateLimit.CleanupInterval),
-			MaxTrackedClients: cfg.RateLimit.MaxTrackedClients,
-			Overrides:         cfg.RateLimit.Overrides,
 		},
 		Storage: ConfigStorageResponse{
 			Backend:       string(cfg.Database.Backend),

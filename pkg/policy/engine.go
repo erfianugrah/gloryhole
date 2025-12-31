@@ -11,9 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"glory-hole/pkg/config"
 	"glory-hole/pkg/logging"
-	"glory-hole/pkg/ratelimit"
 
 	"github.com/expr-lang/expr"
 	"github.com/expr-lang/expr/vm"
@@ -28,13 +26,12 @@ type Engine struct {
 
 // Rule represents a single policy rule
 type Rule struct {
-	program     *vm.Program
-	RateLimiter *ratelimit.Manager
-	Name        string
-	Logic       string
-	Action      string
-	ActionData  string
-	Enabled     bool
+	program    *vm.Program
+	Name       string
+	Logic      string
+	Action     string
+	ActionData string
+	Enabled    bool
 }
 
 // Action constants
@@ -176,19 +173,6 @@ func (e *Engine) AddRule(rule *Rule) error {
 
 	rule.program = program
 
-	// Initialize per-rule rate limiter if action is RATE_LIMIT
-	if rule.Action == ActionRateLimit {
-		rps, burst := parseRateLimitData(rule.ActionData)
-		rule.RateLimiter = ratelimit.NewManager(&config.RateLimitConfig{
-			Enabled:           true,
-			RequestsPerSecond: rps,
-			Burst:             burst,
-			Action:            config.RateLimitActionNXDOMAIN,
-			CleanupInterval:   10 * time.Minute,
-			MaxTrackedClients: 10000,
-		}, e.logger)
-	}
-
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
@@ -230,10 +214,6 @@ func (e *Engine) RemoveRule(name string) bool {
 
 	for i, rule := range e.rules {
 		if rule.Name == name {
-			// Stop rate limiter before removing rule
-			if rule.RateLimiter != nil {
-				rule.RateLimiter.Stop()
-			}
 			e.rules = append(e.rules[:i], e.rules[i+1:]...)
 			return true
 		}
@@ -312,29 +292,11 @@ func (e *Engine) UpdateRule(index int, rule *Rule) error {
 
 	rule.program = program
 
-	// Initialize per-rule rate limiter if action is RATE_LIMIT
-	if rule.Action == ActionRateLimit {
-		rps, burst := parseRateLimitData(rule.ActionData)
-		rule.RateLimiter = ratelimit.NewManager(&config.RateLimitConfig{
-			Enabled:           true,
-			RequestsPerSecond: rps,
-			Burst:             burst,
-			Action:            config.RateLimitActionNXDOMAIN,
-			CleanupInterval:   10 * time.Minute,
-			MaxTrackedClients: 10000,
-		}, e.logger)
-	}
-
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
 	if index < 0 || index >= len(e.rules) {
 		return fmt.Errorf("index %d out of bounds (have %d rules)", index, len(e.rules))
-	}
-
-	// Stop old rate limiter before replacing rule
-	if e.rules[index].RateLimiter != nil {
-		e.rules[index].RateLimiter.Stop()
 	}
 
 	e.rules[index] = rule
@@ -364,26 +326,12 @@ func (e *Engine) Clear() {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
-	// Stop all rate limiters before clearing
-	for _, rule := range e.rules {
-		if rule.RateLimiter != nil {
-			rule.RateLimiter.Stop()
-		}
-	}
-
 	e.rules = make([]*Rule, 0)
 }
 
-// Stop terminates all background goroutines for rate limiters
+// Stop terminates all background goroutines
 func (e *Engine) Stop() {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-
-	for _, rule := range e.rules {
-		if rule.RateLimiter != nil {
-			rule.RateLimiter.Stop()
-		}
-	}
+	// No-op: no background goroutines in policy engine anymore
 }
 
 // Helper functions that can be used in expressions

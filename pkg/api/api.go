@@ -18,7 +18,6 @@ import (
 	"glory-hole/pkg/config"
 	"glory-hole/pkg/dns"
 	"glory-hole/pkg/policy"
-	"glory-hole/pkg/ratelimit"
 	"glory-hole/pkg/storage"
 )
 
@@ -41,8 +40,6 @@ type Server struct {
 	startTime        time.Time
 	version          string
 	configPath       string // Path to config file for persistence
-	rateLimiter      *ratelimit.Manager
-	trustedProxies   []*net.IPNet // Parsed trusted proxy CIDRs for rate limiting
 	allowedOrigins   []string     // Allowed CORS origins
 	authMu           sync.RWMutex
 	authEnabled      bool
@@ -67,7 +64,6 @@ type Config struct {
 	Version          string
 	ConfigPath       string // Path to config file
 	InitialConfig    *config.Config
-	RateLimiter      *ratelimit.Manager
 }
 
 // New creates a new API server
@@ -94,26 +90,11 @@ func New(cfg *Config) *Server {
 		killSwitch:       cfg.KillSwitch,
 		configSnapshot:   cfg.InitialConfig,
 		startTime:        time.Now(),
-		rateLimiter:      cfg.RateLimiter,
 		sessionManager:   newSessionManager(24 * time.Hour),
 	}
 
 	if cfg.InitialConfig != nil {
 		s.applyAuthConfig(cfg.InitialConfig.Auth)
-
-		// Parse trusted proxy CIDRs for rate limiting
-		// Only trust X-Forwarded-For/X-Real-IP headers if explicitly configured
-		for _, cidr := range cfg.InitialConfig.RateLimit.TrustedProxyCIDRs {
-			_, network, err := net.ParseCIDR(cidr)
-			if err != nil {
-				cfg.Logger.Warn("Invalid trusted proxy CIDR, skipping", "cidr", cidr, "error", err)
-				continue
-			}
-			s.trustedProxies = append(s.trustedProxies, network)
-		}
-		if len(s.trustedProxies) > 0 {
-			cfg.Logger.Info("Trusted proxy CIDRs configured for rate limiting", "count", len(s.trustedProxies))
-		}
 
 		// Set allowed CORS origins (defaults to empty = no cross-origin requests)
 		s.allowedOrigins = cfg.InitialConfig.Server.CORSAllowedOrigins
@@ -198,7 +179,6 @@ func New(cfg *Config) *Server {
 	mux.HandleFunc("PUT /api/config/upstreams", s.handleUpdateUpstreams)
 	mux.HandleFunc("PUT /api/config/cache", s.handleUpdateCache)
 	mux.HandleFunc("PUT /api/config/logging", s.handleUpdateLogging)
-	mux.HandleFunc("PUT /api/config/rate-limit", s.handleUpdateRateLimit)
 	mux.HandleFunc("PUT /api/config/tls", s.handleUpdateTLS)
 
 	// UI routes (add after API routes to avoid conflicts)
@@ -241,7 +221,6 @@ func New(cfg *Config) *Server {
 	// Apply middleware
 	handler := http.Handler(mux)
 	handler = s.authMiddleware(handler)
-	handler = s.rateLimitMiddleware(handler)
 	handler = s.loggingMiddleware(handler)
 	handler = s.securityHeadersMiddleware(handler)
 	handler = s.corsMiddleware(handler)
@@ -343,30 +322,6 @@ func (s *Server) Shutdown(ctx context.Context) error {
 // SetCache updates the cache reference used by cache-related handlers.
 func (s *Server) SetCache(c cache.Interface) {
 	s.cache = c
-}
-
-// SetHTTPRateLimiter configures the HTTP rate limiter middleware.
-func (s *Server) SetHTTPRateLimiter(rl *ratelimit.Manager) {
-	s.rateLimiter = rl
-}
-
-// SetTrustedProxies refreshes the list of CIDRs considered trusted for XFF/X-Real-IP extraction.
-func (s *Server) SetTrustedProxies(cidrs []string) {
-	s.trustedProxies = s.trustedProxies[:0]
-	for _, cidr := range cidrs {
-		_, network, err := net.ParseCIDR(cidr)
-		if err != nil {
-			s.logger.Warn("Invalid trusted proxy CIDR, skipping", "cidr", cidr, "error", err)
-			continue
-		}
-		s.trustedProxies = append(s.trustedProxies, network)
-	}
-
-	if len(s.trustedProxies) > 0 {
-		s.logger.Info("Trusted proxy CIDRs configured for rate limiting", "count", len(s.trustedProxies))
-	} else {
-		s.logger.Debug("Trusted proxy CIDRs cleared")
-	}
 }
 
 // SetPolicyEngine updates the policy engine reference used by API handlers.

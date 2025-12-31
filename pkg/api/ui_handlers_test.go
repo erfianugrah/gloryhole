@@ -157,15 +157,6 @@ func TestHandleSettingsPage(t *testing.T) {
 				{Name: "Test", Logic: "true", Action: "BLOCK", Enabled: true},
 			},
 		},
-		RateLimit: config.RateLimitConfig{
-			Enabled:           true,
-			RequestsPerSecond: 150,
-			Burst:             300,
-			Action:            config.RateLimitActionNXDOMAIN,
-			LogViolations:     true,
-			CleanupInterval:   2 * time.Minute,
-			MaxTrackedClients: 500,
-		},
 		Telemetry: config.TelemetryConfig{
 			ServiceName:       "glory-hole",
 			ServiceVersion:    "test",

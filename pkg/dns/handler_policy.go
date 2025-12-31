@@ -6,7 +6,6 @@ import (
 	"strings"
 	"time"
 
-	"glory-hole/pkg/config"
 	"glory-hole/pkg/policy"
 	"glory-hole/pkg/storage"
 
@@ -249,53 +248,14 @@ func (h *Handler) handlePolicyForward(ctx context.Context, w dns.ResponseWriter,
 }
 
 func (h *Handler) handlePolicyRateLimit(ctx context.Context, w dns.ResponseWriter, r, msg *dns.Msg, rule *policy.Rule, domain, clientIP, qtypeLabel string, trace *blockTraceRecorder, outcome *serveDNSOutcome) bool {
-	if rule.RateLimiter == nil {
-		if h.Logger != nil {
-			h.Logger.Warn("Policy rule has RATE_LIMIT action but no limiter configured",
-				"rule", rule.Name,
-				"domain", domain,
-				"client_ip", clientIP)
-		}
-		return false
+	// Rate limiting has been removed from the system
+	// This function is kept for backwards compatibility with policy action parsing
+	// but does not enforce any rate limits
+	if h.Logger != nil {
+		h.Logger.Warn("RATE_LIMIT policy action is no longer supported and has no effect",
+			"rule", rule.Name,
+			"domain", domain,
+			"client_ip", clientIP)
 	}
-
-	// Apply THIS rule's rate limiter (not global)
-	allowed, limited, action, _ := rule.RateLimiter.Allow(clientIP)
-	if !allowed && limited {
-		// Rate limit exceeded for THIS specific rule
-		trace.Record(traceStagePolicy, string(action), func(entry *storage.BlockTraceEntry) {
-			entry.Rule = rule.Name
-			entry.Source = "policy_engine"
-			entry.Metadata = map[string]string{
-				"client_ip": clientIP,
-				"limit":     rule.ActionData,
-			}
-		})
-
-		h.recordRateLimit(ctx, clientIP, qtypeLabel, string(action), false)
-
-		if h.Logger != nil && rule.RateLimiter.LogViolations() {
-			h.Logger.Warn("Policy rate limit exceeded",
-				"rule", rule.Name,
-				"client_ip", clientIP,
-				"domain", domain,
-				"action", action,
-				"limit", rule.ActionData,
-			)
-		}
-
-		// Return NXDOMAIN or drop
-		if action == config.RateLimitActionDrop {
-			outcome.responseCode = dns.RcodeRefused
-			return true
-		}
-
-		outcome.responseCode = dns.RcodeNameError
-		msg.SetRcode(r, dns.RcodeNameError)
-		h.writeMsg(w, msg)
-		return true
-	}
-
-	// Not limited; continue to next rule
 	return false
 }

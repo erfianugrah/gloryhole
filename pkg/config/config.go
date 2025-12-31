@@ -4,7 +4,6 @@ package config
 
 import (
 	"fmt"
-	"net"
 	"os"
 	"strings"
 	"time"
@@ -31,7 +30,6 @@ type Config struct {
 	Logging               LoggingConfig               `yaml:"logging"`
 	Database              storage.Config              `yaml:"database"`
 	Cache                 CacheConfig                 `yaml:"cache"`
-	RateLimit             RateLimitConfig             `yaml:"rate_limit"`
 	UpdateInterval        time.Duration               `yaml:"update_interval"`
 	AutoUpdateBlocklists  bool                        `yaml:"auto_update_blocklists"`
 }
@@ -179,40 +177,6 @@ type PolicyRuleEntry struct {
 	Action     string `yaml:"action"`      // Action: BLOCK, ALLOW, REDIRECT
 	ActionData string `yaml:"action_data"` // Optional action data (e.g., redirect target)
 	Enabled    bool   `yaml:"enabled"`     // Whether the rule is active
-}
-
-// RateLimitAction represents how the server responds when the limit is exceeded.
-type RateLimitAction string
-
-const (
-	RateLimitActionDrop     RateLimitAction = "drop"
-	RateLimitActionNXDOMAIN RateLimitAction = "nxdomain"
-)
-
-// RateLimitConfig controls optional per-client rate limiting.
-// RateLimitConfig controls optional per-client rate limiting.
-//
-//nolint:fieldalignment // Alignment cost is negligible compared to readability.
-type RateLimitConfig struct {
-	Enabled           bool                `yaml:"enabled"`
-	RequestsPerSecond float64             `yaml:"requests_per_second"`
-	Burst             int                 `yaml:"burst"`
-	Action            RateLimitAction     `yaml:"on_exceed"`
-	LogViolations     bool                `yaml:"log_violations"`
-	CleanupInterval   time.Duration       `yaml:"cleanup_interval"`
-	MaxTrackedClients int                 `yaml:"max_tracked_clients"`
-	Overrides         []RateLimitOverride `yaml:"overrides"`
-	TrustedProxyCIDRs []string            `yaml:"trusted_proxy_cidrs"` // CIDRs of trusted reverse proxies (for X-Forwarded-For/X-Real-IP)
-}
-
-// RateLimitOverride allows per-client or per-CIDR customization of limits.
-type RateLimitOverride struct {
-	Name              string           `yaml:"name"`
-	Clients           []string         `yaml:"clients"`
-	CIDRs             []string         `yaml:"cidrs"`
-	RequestsPerSecond *float64         `yaml:"requests_per_second"`
-	Burst             *int             `yaml:"burst"`
-	Action            *RateLimitAction `yaml:"on_exceed"`
 }
 
 // LoggingConfig holds logging settings
@@ -430,23 +394,6 @@ func (c *Config) applyDefaults() {
 		c.Cache.BlockedTTL = 1 * time.Second
 	}
 
-	// Rate limit defaults
-	if c.RateLimit.RequestsPerSecond <= 0 {
-		c.RateLimit.RequestsPerSecond = 200
-	}
-	if c.RateLimit.Burst <= 0 {
-		c.RateLimit.Burst = int(c.RateLimit.RequestsPerSecond)
-	}
-	if c.RateLimit.Action == "" {
-		c.RateLimit.Action = RateLimitActionNXDOMAIN
-	}
-	if c.RateLimit.CleanupInterval == 0 {
-		c.RateLimit.CleanupInterval = 10 * time.Minute
-	}
-	if c.RateLimit.MaxTrackedClients == 0 {
-		c.RateLimit.MaxTrackedClients = 10000
-	}
-
 	// Logging defaults
 	if c.Logging.Level == "" {
 		c.Logging.Level = "info"
@@ -606,46 +553,6 @@ func (c *Config) Validate() error {
 	// Validate conditional forwarding
 	if err := c.ConditionalForwarding.Validate(); err != nil {
 		return fmt.Errorf("conditional_forwarding validation failed: %w", err)
-	}
-
-	if c.RateLimit.Enabled {
-		if c.RateLimit.RequestsPerSecond <= 0 {
-			return fmt.Errorf("rate_limit.requests_per_second must be > 0 when rate limiting is enabled")
-		}
-		if c.RateLimit.Burst <= 0 {
-			return fmt.Errorf("rate_limit.burst must be > 0 when rate limiting is enabled")
-		}
-		switch c.RateLimit.Action {
-		case RateLimitActionDrop, RateLimitActionNXDOMAIN:
-		default:
-			return fmt.Errorf("rate_limit.on_exceed must be 'drop' or 'nxdomain'")
-		}
-
-		// Validate trusted proxy CIDRs
-		for i, cidr := range c.RateLimit.TrustedProxyCIDRs {
-			if _, _, err := net.ParseCIDR(cidr); err != nil {
-				return fmt.Errorf("rate_limit.trusted_proxy_cidrs[%d] is invalid: %w", i, err)
-			}
-		}
-
-		for i, override := range c.RateLimit.Overrides {
-			if len(override.Clients) == 0 && len(override.CIDRs) == 0 {
-				return fmt.Errorf("rate_limit.overrides[%d] must specify at least one client or CIDR", i)
-			}
-			if override.RequestsPerSecond != nil && *override.RequestsPerSecond <= 0 {
-				return fmt.Errorf("rate_limit.overrides[%d].requests_per_second must be > 0", i)
-			}
-			if override.Burst != nil && *override.Burst <= 0 {
-				return fmt.Errorf("rate_limit.overrides[%d].burst must be > 0", i)
-			}
-			if override.Action != nil {
-				switch *override.Action {
-				case RateLimitActionDrop, RateLimitActionNXDOMAIN:
-				default:
-					return fmt.Errorf("rate_limit.overrides[%d].on_exceed must be 'drop' or 'nxdomain'", i)
-				}
-			}
-		}
 	}
 
 	return nil

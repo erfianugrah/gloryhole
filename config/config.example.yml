@@ -49,29 +49,6 @@ auth:
   api_key: ""             # API key for Bearer token auth (alternative to Basic Auth)
   header: "Authorization" # Header name for API key (default: Authorization)
 
-# Optional per-client rate limiting
-rate_limit:
-  enabled: false
-  requests_per_second: 100
-  burst: 200
-  on_exceed: "nxdomain"  # drop or nxdomain
-  log_violations: true
-  cleanup_interval: "10m"
-  max_tracked_clients: 10000
-  overrides:
-    - name: "kids"
-      clients:
-        - "192.168.1.120"
-        - "192.168.1.121"
-      requests_per_second: 25
-      burst: 50
-      on_exceed: "drop"
-    - name: "iot-network"
-      cidrs:
-        - "192.168.10.0/24"
-      requests_per_second: 5
-      burst: 10
-
 # Upstream DNS servers
 upstream_dns_servers:
   - "1.1.1.1:53"
