@@ -211,7 +211,7 @@ func DefaultConfig() Config {
 			CacheSize:   4096,
 			MMapSize:    268435456,
 		},
-		BufferSize:    500,
+		BufferSize:    50000, // Increased from 500 to handle high QPS
 		FlushInterval: 5 * time.Second,
 		BatchSize:     100,
 		RetentionDays: 7,

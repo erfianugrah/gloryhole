@@ -27,14 +27,16 @@ var initialSchema string
 
 // SQLiteStorage implements the Storage interface using SQLite
 type SQLiteStorage struct {
-	db              *sql.DB
-	cfg             *Config
-	metrics         MetricsRecorder
-	buffer          chan *QueryLog
-	stmtInsertQuery *sql.Stmt
-	wg              sync.WaitGroup
-	mu              sync.RWMutex
-	closed          bool
+	db                  *sql.DB
+	cfg                 *Config
+	metrics             MetricsRecorder
+	buffer              chan *QueryLog
+	stmtInsertQuery     *sql.Stmt
+	wg                  sync.WaitGroup
+	mu                  sync.RWMutex
+	closed              bool
+	bufferHighWatermark int  // 80% of buffer capacity
+	warningLogged       bool // Track if high watermark warning has been logged
 }
 
 // NewSQLiteStorage creates a new SQLite storage backend
@@ -101,11 +103,12 @@ func NewSQLiteStorage(cfg *Config, metrics MetricsRecorder) (Storage, error) {
 	}
 
 	storage := &SQLiteStorage{
-		db:              db,
-		cfg:             cfg,
-		metrics:         metrics,
-		buffer:          make(chan *QueryLog, cfg.BufferSize),
-		stmtInsertQuery: stmtInsert,
+		db:                  db,
+		cfg:                 cfg,
+		metrics:             metrics,
+		buffer:              make(chan *QueryLog, cfg.BufferSize),
+		stmtInsertQuery:     stmtInsert,
+		bufferHighWatermark: int(float64(cfg.BufferSize) * 0.8), // 80% threshold
 	}
 
 	// Start background flush worker
@@ -148,6 +151,20 @@ func (s *SQLiteStorage) LogQuery(ctx context.Context, query *QueryLog) error {
 		query.Timestamp = time.Now()
 	}
 
+	// Check buffer utilization and warn if high
+	currentSize := len(s.buffer)
+	if currentSize > s.bufferHighWatermark && !s.warningLogged {
+		utilization := float64(currentSize) / float64(cap(s.buffer)) * 100
+		slog.Default().Warn("Query buffer high watermark exceeded",
+			"current", currentSize,
+			"capacity", cap(s.buffer),
+			"utilization_pct", fmt.Sprintf("%.1f", utilization))
+		s.warningLogged = true
+	} else if currentSize < s.bufferHighWatermark/2 && s.warningLogged {
+		// Reset warning flag when buffer drains below 40%
+		s.warningLogged = false
+	}
+
 	// Non-blocking write to buffer
 	select {
 	case s.buffer <- query:
@@ -159,6 +176,9 @@ func (s *SQLiteStorage) LogQuery(ctx context.Context, query *QueryLog) error {
 		if s.metrics != nil {
 			s.metrics.AddDroppedQuery(ctx, 1)
 		}
+		slog.Default().Error("Query buffer full - dropping entry",
+			"domain", query.Domain,
+			"client_ip", query.ClientIP)
 		return ErrBufferFull
 	}
 }
@@ -188,12 +208,29 @@ func (s *SQLiteStorage) flushWorker() {
 			return
 		}
 
+		startTime := time.Now()
+		batchSize := len(batch)
+
 		if err := s.flushBatch(batch); err != nil {
 			// Log error but continue (we don't want to crash the server)
 			slog.Default().Error("Failed to flush query batch",
 				"error", err,
-				"batch_size", len(batch),
+				"batch_size", batchSize,
 			)
+		} else {
+			flushDuration := time.Since(startTime)
+
+			// Log successful flush with timing
+			slog.Default().Debug("Flushed query batch",
+				"batch_size", batchSize,
+				"duration_ms", flushDuration.Milliseconds())
+
+			// Alert if flush taking too long (>100ms is slow for batch writes)
+			if flushDuration > 100*time.Millisecond {
+				slog.Default().Warn("Slow batch flush detected",
+					"batch_size", batchSize,
+					"duration_ms", flushDuration.Milliseconds())
+			}
 		}
 
 		// Clear batch
@@ -884,6 +921,34 @@ func truncateToBucket(t time.Time, bucket time.Duration) time.Time {
 	return time.Unix(truncated, 0).UTC()
 }
 
+// BufferStats represents storage buffer statistics
+type BufferStats struct {
+	Size        int     `json:"size"`         // Current buffer size
+	Capacity    int     `json:"capacity"`     // Maximum capacity
+	Utilization float64 `json:"utilization"`  // Percentage (0-100)
+	HighWater   int     `json:"high_water"`   // High watermark threshold
+}
+
+// GetBufferStats returns current buffer statistics
+func (s *SQLiteStorage) GetBufferStats() BufferStats {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	size := len(s.buffer)
+	capacity := cap(s.buffer)
+	utilization := 0.0
+	if capacity > 0 {
+		utilization = float64(size) / float64(capacity) * 100
+	}
+
+	return BufferStats{
+		Size:        size,
+		Capacity:    capacity,
+		Utilization: utilization,
+		HighWater:   s.bufferHighWatermark,
+	}
+}
+
 // Close closes the storage backend
 func (s *SQLiteStorage) Close() error {
 	s.mu.Lock()
@@ -893,6 +958,13 @@ func (s *SQLiteStorage) Close() error {
 	}
 	s.closed = true
 	s.mu.Unlock()
+
+	// Log buffer stats before closing
+	stats := s.GetBufferStats()
+	slog.Default().Info("Closing storage",
+		"buffer_size", stats.Size,
+		"buffer_capacity", stats.Capacity,
+		"buffer_utilization_pct", fmt.Sprintf("%.1f", stats.Utilization))
 
 	// Close buffer channel
 	close(s.buffer)
