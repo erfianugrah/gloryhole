@@ -148,6 +148,19 @@ var migrations = []Migration{
 			CREATE INDEX IF NOT EXISTS idx_queries_blocked_domain ON queries(blocked, domain);
 		`,
 	},
+	{
+		Version:     8,
+		Description: "Add indexes for client summaries to improve clients page performance",
+		SQL: `
+			-- Composite index for client IP grouping and aggregations
+			-- Speeds up: GROUP BY client_ip queries in GetClientSummaries
+			CREATE INDEX IF NOT EXISTS idx_queries_client_ip_id ON queries(client_ip, id);
+
+			-- Composite index for client IP + timestamp queries
+			-- Speeds up: Finding first/last seen timestamps per client
+			CREATE INDEX IF NOT EXISTS idx_queries_client_ip_timestamp_id ON queries(client_ip, timestamp, id);
+		`,
+	},
 }
 
 // getMigrations returns all migrations sorted by version

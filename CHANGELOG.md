@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - Database performance: Added missing indexes on `query_type` and composite index on `(blocked, domain)` to prevent 5+ second query timeouts on `/api/stats/query-types` and `/api/top-domains` endpoints
+- Clients page performance: Added composite indexes on `(client_ip, id)` and `(client_ip, timestamp, id)` to speed up client summaries GROUP BY operations and eliminate slow page loads
 
 ## [0.9.5] - 2025-12-08
 
