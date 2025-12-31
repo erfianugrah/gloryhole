@@ -235,12 +235,23 @@ func sanitizeRedirectTarget(next string) string {
 	if next == "" {
 		return "/"
 	}
+
+	// Only allow paths starting with single /
 	if !strings.HasPrefix(next, "/") {
 		return "/"
 	}
+
+	// Block protocol-relative URLs
 	if strings.HasPrefix(next, "//") {
 		return "/"
 	}
+
+	// Block encoded characters that could bypass checks
+	// % for URL encoding, \ for Windows paths, tabs/newlines
+	if strings.ContainsAny(next, "\t\n\r%\\") {
+		return "/"
+	}
+
 	return next
 }
 

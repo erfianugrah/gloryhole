@@ -250,6 +250,9 @@ func (s *Server) handleLoginPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Prevent session fixation: revoke any existing session before creating new one
+	s.revokeSession(w, r)
+
 	if err := s.createSession(w, r, subject); err != nil {
 		s.logger.Error("failed to create session", "error", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
