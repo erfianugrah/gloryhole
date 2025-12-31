@@ -51,11 +51,12 @@ func TestBufferHighWatermark(t *testing.T) {
 
 	// Fill buffer to just below high watermark
 	for i := 0; i < 7; i++ {
-		query := &QueryLog{
+		// Create new QueryLog for each iteration to avoid data race
+		err = sqliteStor.LogQuery(context.Background(), &QueryLog{
 			Domain:   "example.com",
 			ClientIP: "1.2.3.4",
-		}
-		if err := sqliteStor.LogQuery(context.Background(), query); err != nil {
+		})
+		if err != nil {
 			t.Errorf("Failed to log query: %v", err)
 		}
 	}
@@ -230,11 +231,11 @@ func TestFlushTiming(t *testing.T) {
 
 	// Add queries to trigger flush
 	for i := 0; i < 50; i++ {
-		query := &QueryLog{
+		// Create new QueryLog for each iteration to avoid data race
+		err = sqliteStor.LogQuery(context.Background(), &QueryLog{
 			Domain:   "example.com",
 			ClientIP: "1.2.3.4",
-		}
-		err = sqliteStor.LogQuery(context.Background(), query)
+		})
 		if err != nil {
 			t.Errorf("Failed to log query: %v", err)
 		}
