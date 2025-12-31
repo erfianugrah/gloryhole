@@ -24,6 +24,7 @@ type Config struct {
 	Auth                  AuthConfig                  `yaml:"auth"`
 	LocalRecords          LocalRecordsConfig          `yaml:"local_records"`
 	ConditionalForwarding ConditionalForwardingConfig `yaml:"conditional_forwarding"`
+	Forwarder             ForwarderConfig             `yaml:"forwarder"`        // Upstream DNS forwarder config
 	UpstreamDNSServers    []string                    `yaml:"upstream_dns_servers"`
 	Blocklists            []string                    `yaml:"blocklists"`
 	Whitelist             []string                    `yaml:"whitelist"`
@@ -32,6 +33,19 @@ type Config struct {
 	Cache                 CacheConfig                 `yaml:"cache"`
 	UpdateInterval        time.Duration               `yaml:"update_interval"`
 	AutoUpdateBlocklists  bool                        `yaml:"auto_update_blocklists"`
+}
+
+// ForwarderConfig holds DNS forwarder configuration
+type ForwarderConfig struct {
+	CircuitBreaker CircuitBreakerConfig `yaml:"circuit_breaker"` // Circuit breaker for upstream health
+}
+
+// CircuitBreakerConfig holds circuit breaker settings
+type CircuitBreakerConfig struct {
+	Enabled          bool `yaml:"enabled"`           // Enable circuit breaker (default: true)
+	FailureThreshold int  `yaml:"failure_threshold"` // Failures before opening (default: 5)
+	SuccessThreshold int  `yaml:"success_threshold"` // Successes to close from half-open (default: 2)
+	TimeoutSeconds   int  `yaml:"timeout_seconds"`   // Seconds before half-open (default: 30)
 }
 
 // ServerConfig holds server-specific settings

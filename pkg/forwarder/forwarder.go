@@ -21,6 +21,7 @@ type Forwarder struct {
 	clientPool sync.Pool
 	logger     *logging.Logger
 	upstreams  []string
+	health     *UpstreamHealth // Circuit breaker for each upstream
 	timeout    time.Duration
 	retries    int
 	index      atomic.Uint32
@@ -44,11 +45,41 @@ func NewForwarder(cfg *config.Config, logger *logging.Logger) *Forwarder {
 		}
 	}
 
+	// Apply circuit breaker defaults
+	cbCfg := cfg.Forwarder.CircuitBreaker
+	if cbCfg.FailureThreshold == 0 {
+		cbCfg.FailureThreshold = 5
+	}
+	if cbCfg.SuccessThreshold == 0 {
+		cbCfg.SuccessThreshold = 2
+	}
+	if cbCfg.TimeoutSeconds == 0 {
+		cbCfg.TimeoutSeconds = 30
+	}
+	// Circuit breaker enabled by default
+	if !cbCfg.Enabled && cbCfg.FailureThreshold == 0 {
+		cbCfg.Enabled = true
+	}
+
 	f := &Forwarder{
 		upstreams: upstreams,
 		timeout:   2 * time.Second, // Default 2 second timeout
 		retries:   2,               // Try up to 2 different upstreams
 		logger:    logger,
+	}
+
+	// Initialize circuit breaker health tracking
+	if cbCfg.Enabled {
+		f.health = NewUpstreamHealth(upstreams, CircuitBreakerConfig{
+			Enabled:          cbCfg.Enabled,
+			FailureThreshold: cbCfg.FailureThreshold,
+			SuccessThreshold: cbCfg.SuccessThreshold,
+			TimeoutSeconds:   cbCfg.TimeoutSeconds,
+		})
+		logger.Info("Circuit breaker initialized",
+			"failure_threshold", cbCfg.FailureThreshold,
+			"success_threshold", cbCfg.SuccessThreshold,
+			"timeout_seconds", cbCfg.TimeoutSeconds)
 	}
 
 	// Initialize connection pool
@@ -63,6 +94,7 @@ func NewForwarder(cfg *config.Config, logger *logging.Logger) *Forwarder {
 		"upstreams", upstreams,
 		"timeout", f.timeout,
 		"retries", f.retries,
+		"circuit_breaker", cbCfg.Enabled,
 	)
 
 	return f
@@ -79,8 +111,12 @@ func (f *Forwarder) Forward(ctx context.Context, r *dns.Msg) (*dns.Msg, error) {
 	var lastErr error
 
 	for i := 0; i < attempts; i++ {
-		// Select upstream using round-robin
-		upstream := f.selectUpstream()
+		// Select upstream using round-robin (filters by health)
+		upstream, err := f.selectUpstream()
+		if err != nil {
+			f.logger.Error("No healthy upstreams available", "error", err)
+			return nil, err
+		}
 
 		// Get client from pool
 		client := f.clientPool.Get().(*dns.Client)
@@ -94,21 +130,43 @@ func (f *Forwarder) Forward(ctx context.Context, r *dns.Msg) (*dns.Msg, error) {
 			"attempt", i+1,
 		)
 
-		// Forward the query
-		resp, rtt, err := client.ExchangeContext(ctx, r, upstream)
-		if err != nil {
+		// Forward the query (wrapped in circuit breaker if enabled)
+		var resp *dns.Msg
+		var rtt time.Duration
+		queryErr := error(nil)
+
+		if f.health != nil {
+			breaker := f.health.GetBreaker(upstream)
+			if breaker != nil {
+				queryErr = breaker.Call(func() error {
+					var exchangeErr error
+					resp, rtt, exchangeErr = client.ExchangeContext(ctx, r, upstream)
+					return exchangeErr
+				})
+			} else {
+				resp, rtt, queryErr = client.ExchangeContext(ctx, r, upstream)
+			}
+		} else {
+			resp, rtt, queryErr = client.ExchangeContext(ctx, r, upstream)
+		}
+
+		if queryErr != nil {
 			f.logger.Warn("Upstream query failed",
 				"upstream", upstream,
-				"error", err,
+				"error", queryErr,
 				"attempt", i+1,
 			)
-			lastErr = err
+			lastErr = queryErr
 			continue
 		}
 
 		// Check if response is valid
 		if resp == nil {
 			lastErr = fmt.Errorf("received nil response from %s", upstream)
+			// Record failure in circuit breaker
+			if f.health != nil {
+				f.health.RecordResult(upstream, lastErr)
+			}
 			continue
 		}
 
@@ -258,14 +316,24 @@ func (f *Forwarder) ForwardWithUpstreams(ctx context.Context, r *dns.Msg, upstre
 }
 
 // selectUpstream selects the next upstream server using round-robin
-func (f *Forwarder) selectUpstream() string {
-	// #nosec G115 - Conversion is safe: len(f.upstreams) will never exceed uint32 max (4 billion upstreams is unrealistic)
-	upstreamCount := uint32(len(f.upstreams))
+func (f *Forwarder) selectUpstream() (string, error) {
+	// Get healthy upstreams if circuit breaker enabled
+	upstreams := f.upstreams
+	if f.health != nil {
+		upstreams = f.health.GetHealthyUpstreams(f.upstreams)
+		if len(upstreams) == 0 {
+			return "", ErrNoHealthyUpstreams
+		}
+	}
+
+	// Round-robin among (healthy) upstreams
+	// #nosec G115 - Conversion is safe: len(upstreams) will never exceed uint32 max
+	upstreamCount := uint32(len(upstreams))
 	if upstreamCount == 0 {
-		return ""
+		return "", fmt.Errorf("no upstreams available")
 	}
 	idx := f.index.Add(1) % upstreamCount
-	return f.upstreams[idx]
+	return upstreams[idx], nil
 }
 
 // SetTimeout sets the query timeout duration
