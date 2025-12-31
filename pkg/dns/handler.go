@@ -40,7 +40,8 @@ type KillSwitchChecker interface {
 }
 
 type Handler struct {
-	Storage           storage.Storage
+	Storage           storage.Storage   // Legacy: kept for backwards compatibility
+	QueryLogger       *QueryLogger      // New: worker pool for async query logging
 	BlocklistManager  *blocklist.Manager
 	Blocklist         map[string]struct{}
 	Whitelist         atomic.Pointer[map[string]struct{}] // Exact-match whitelist (hot-reloadable)
@@ -91,6 +92,11 @@ func (h *Handler) SetBlocklistManager(m *blocklist.Manager) {
 // SetStorage sets the query logging storage
 func (h *Handler) SetStorage(s storage.Storage) {
 	h.Storage = s
+}
+
+// SetQueryLogger sets the query logger worker pool
+func (h *Handler) SetQueryLogger(ql *QueryLogger) {
+	h.QueryLogger = ql
 }
 
 // SetLocalRecords sets the local DNS records manager
@@ -235,7 +241,9 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 }
 
 func (h *Handler) asyncLogQuery(startTime time.Time, r *dns.Msg, clientIP string, trace *blockTraceRecorder, outcome *serveDNSOutcome) {
-	if h.Storage == nil {
+	// Use QueryLogger if available (new worker pool pattern)
+	// Fall back to direct Storage for backwards compatibility
+	if h.QueryLogger == nil && h.Storage == nil {
 		return
 	}
 
@@ -246,23 +254,33 @@ func (h *Handler) asyncLogQuery(startTime time.Time, r *dns.Msg, clientIP string
 		queryType = dnsTypeLabel(r.Question[0].Qtype)
 	}
 
+	queryLog := &storage.QueryLog{
+		Timestamp:      startTime,
+		ClientIP:       clientIP,
+		Domain:         domain,
+		QueryType:      queryType,
+		ResponseCode:   outcome.responseCode,
+		Blocked:        outcome.blocked,
+		Cached:         outcome.cached,
+		ResponseTimeMs: time.Since(startTime).Seconds() * 1000,
+		UpstreamTimeMs: outcome.upstreamDuration.Seconds() * 1000,
+		Upstream:       outcome.upstream,
+		BlockTrace:     trace.Entries(),
+	}
+
+	// New path: use worker pool (no goroutine spawn)
+	if h.QueryLogger != nil {
+		if err := h.QueryLogger.LogAsync(queryLog); err != nil && h.Logger != nil {
+			// Buffer full - already logged by QueryLogger
+			_ = err
+		}
+		return
+	}
+
+	// Legacy path: spawn goroutine (backwards compatibility)
 	go func() {
 		logCtx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 		defer cancel()
-
-		queryLog := &storage.QueryLog{
-			Timestamp:      startTime,
-			ClientIP:       clientIP,
-			Domain:         domain,
-			QueryType:      queryType,
-			ResponseCode:   outcome.responseCode,
-			Blocked:        outcome.blocked,
-			Cached:         outcome.cached,
-			ResponseTimeMs: time.Since(startTime).Seconds() * 1000,
-			UpstreamTimeMs: outcome.upstreamDuration.Seconds() * 1000,
-			Upstream:       outcome.upstream,
-			BlockTrace:     trace.Entries(),
-		}
 
 		if err := h.Storage.LogQuery(logCtx, queryLog); err != nil && h.Logger != nil {
 			h.Logger.Error("Failed to log query to storage",

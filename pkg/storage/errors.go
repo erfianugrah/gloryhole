@@ -1,6 +1,12 @@
 package storage
 
-import "errors"
+import (
+	"errors"
+	"time"
+)
+
+// DefaultLogTimeout is the default timeout for logging operations
+const DefaultLogTimeout = 1 * time.Second
 
 var (
 	// ErrInvalidBackend is returned when an invalid backend type is specified

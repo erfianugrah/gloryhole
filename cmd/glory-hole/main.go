@@ -239,6 +239,36 @@ func main() {
 				"buffer_size", cfg.Database.BufferSize,
 				"retention_days", cfg.Database.RetentionDays,
 			)
+
+			// Initialize query logger worker pool (if enabled)
+			if cfg.Server.QueryLogger.Enabled || (cfg.Server.QueryLogger.BufferSize == 0 && cfg.Server.QueryLogger.Workers == 0) {
+				// Apply defaults if not configured
+				bufferSize := cfg.Server.QueryLogger.BufferSize
+				if bufferSize == 0 {
+					bufferSize = 50000 // Default: 50K queries
+				}
+				workers := cfg.Server.QueryLogger.Workers
+				if workers == 0 {
+					workers = 8 // Default: 8 workers
+				}
+
+				queryLogger := dns.NewQueryLogger(stor, logger, bufferSize, workers)
+				handler.SetQueryLogger(queryLogger)
+
+				// Register cleanup on shutdown
+				defer func() {
+					if queryLogger != nil {
+						logger.Info("Shutting down query logger")
+						if err := queryLogger.Close(); err != nil {
+							logger.Error("Failed to close query logger", "error", err)
+						}
+					}
+				}()
+
+				logger.Info("Query logger worker pool initialized",
+					"buffer_size", bufferSize,
+					"workers", workers)
+			}
 		}
 	}
 
