@@ -131,6 +131,23 @@ var migrations = []Migration{
 			ALTER TABLE queries ADD COLUMN upstream_time_ms REAL NOT NULL DEFAULT 0;
 		`,
 	},
+	{
+		Version:     7,
+		Description: "Add indexes for query type statistics and top domains queries",
+		SQL: `
+			-- Index for GROUP BY query_type operations
+			-- Speeds up: SELECT query_type, COUNT(*) FROM queries GROUP BY query_type
+			CREATE INDEX IF NOT EXISTS idx_queries_query_type ON queries(query_type);
+
+			-- Composite index for time-based query type analytics
+			-- Speeds up: SELECT query_type, COUNT(*) FROM queries WHERE timestamp >= ? GROUP BY query_type
+			CREATE INDEX IF NOT EXISTS idx_queries_query_type_timestamp ON queries(query_type, timestamp);
+
+			-- Composite index for top domains queries (blocked + domain grouping)
+			-- Speeds up: SELECT domain, COUNT(*) FROM queries WHERE blocked = ? GROUP BY domain
+			CREATE INDEX IF NOT EXISTS idx_queries_blocked_domain ON queries(blocked, domain);
+		`,
+	},
 }
 
 // getMigrations returns all migrations sorted by version

@@ -19,6 +19,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Web UI mobile navigation: converted to slide-in drawer with backdrop overlay, added Escape key support and body scroll prevention
 - JavaScript organization: extracted policy management code to separate module (474 lines), replaced unsafe innerHTML with DOM methods
 
+### Fixed
+- Database performance: Added missing indexes on `query_type` and composite index on `(blocked, domain)` to prevent 5+ second query timeouts on `/api/stats/query-types` and `/api/top-domains` endpoints
+
 ## [0.9.5] - 2025-12-08
 
 ### Added
