@@ -234,7 +234,8 @@ func TestFlushTiming(t *testing.T) {
 			Domain:   "example.com",
 			ClientIP: "1.2.3.4",
 		}
-		if err := sqliteStor.LogQuery(context.Background(), query); err != nil {
+		err = sqliteStor.LogQuery(context.Background(), query)
+		if err != nil {
 			t.Errorf("Failed to log query: %v", err)
 		}
 	}

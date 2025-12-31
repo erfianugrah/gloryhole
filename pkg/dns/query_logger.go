@@ -101,7 +101,7 @@ func (ql *QueryLogger) drainChannel() {
 
 			ql.buffered.Add(^uint64(0)) // Atomic decrement
 
-			// Use background context since main context is cancelled
+			// Use background context since main context is canceled
 			logCtx, cancel := context.WithTimeout(context.Background(), storage.DefaultLogTimeout)
 
 			if err := ql.storage.LogQuery(logCtx, entry); err != nil {
