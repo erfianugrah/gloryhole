@@ -36,17 +36,25 @@ type Config struct {
 
 // ServerConfig holds server-specific settings
 type ServerConfig struct {
-	ListenAddress      string    `yaml:"listen_address"`
-	WebUIAddress       string    `yaml:"web_ui_address"`
-	TCPEnabled         bool      `yaml:"tcp_enabled"`
-	UDPEnabled         bool      `yaml:"udp_enabled"`
-	EnableBlocklist    bool      `yaml:"enable_blocklist"`     // Kill-switch for ad-blocking
-	EnablePolicies     bool      `yaml:"enable_policies"`      // Kill-switch for policy engine
-	DecisionTrace      bool      `yaml:"decision_trace"`       // Capture block decision traces
-	CORSAllowedOrigins []string  `yaml:"cors_allowed_origins"` // Allowed CORS origins (empty = none, "*" = all)
-	DotEnabled         bool      `yaml:"dot_enabled"`
-	DotAddress         string    `yaml:"dot_address"`
-	TLS                TLSConfig `yaml:"tls"`
+	ListenAddress      string            `yaml:"listen_address"`
+	WebUIAddress       string            `yaml:"web_ui_address"`
+	TCPEnabled         bool              `yaml:"tcp_enabled"`
+	UDPEnabled         bool              `yaml:"udp_enabled"`
+	EnableBlocklist    bool              `yaml:"enable_blocklist"`     // Kill-switch for ad-blocking
+	EnablePolicies     bool              `yaml:"enable_policies"`      // Kill-switch for policy engine
+	DecisionTrace      bool              `yaml:"decision_trace"`       // Capture block decision traces
+	CORSAllowedOrigins []string          `yaml:"cors_allowed_origins"` // Allowed CORS origins (empty = none, "*" = all)
+	DotEnabled         bool              `yaml:"dot_enabled"`
+	DotAddress         string            `yaml:"dot_address"`
+	TLS                TLSConfig         `yaml:"tls"`
+	QueryLogger        QueryLoggerConfig `yaml:"query_logger"` // Worker pool config for async query logging
+}
+
+// QueryLoggerConfig holds query logger worker pool settings
+type QueryLoggerConfig struct {
+	Enabled    bool `yaml:"enabled"`     // Enable worker pool (default: true)
+	BufferSize int  `yaml:"buffer_size"` // Query log buffer size (default: 50000)
+	Workers    int  `yaml:"workers"`     // Number of worker goroutines (default: 8)
 }
 
 // TLSConfig holds TLS settings for DoT (and optional future listeners).
