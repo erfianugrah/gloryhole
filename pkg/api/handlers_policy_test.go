@@ -17,7 +17,7 @@ import (
 func setupTestAPIServer() *Server {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 
-	policyEngine := policy.NewEngine()
+	policyEngine := policy.NewEngine(nil)
 
 	return New(&Config{
 		ListenAddress:    ":8080",
@@ -655,7 +655,7 @@ func TestPolicyAPI_EnableEngineAfterStart(t *testing.T) {
 	}
 
 	// Hot-plug engine and retry
-	engine := policy.NewEngine()
+	engine := policy.NewEngine(nil)
 	server.SetPolicyEngine(engine)
 
 	w2 := httptest.NewRecorder()

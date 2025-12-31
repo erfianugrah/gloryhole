@@ -166,7 +166,7 @@ func TestHandleLiveness_MethodNotAllowed(t *testing.T) {
 // TestHandleReadiness tests the readiness probe endpoint
 func TestHandleReadiness(t *testing.T) {
 	mock := &mockStorageForHealth{shouldFail: false}
-	policyEngine := policy.NewEngine()
+	policyEngine := policy.NewEngine(nil)
 
 	server := New(&Config{
 		ListenAddress: ":8080",

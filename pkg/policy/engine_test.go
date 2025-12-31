@@ -6,9 +6,9 @@ import (
 )
 
 func TestNewEngine(t *testing.T) {
-	e := NewEngine()
+	e := NewEngine(nil)
 	if e == nil {
-		t.Fatal("NewEngine() returned nil")
+		t.Fatal("NewEngine(nil) returned nil")
 	}
 
 	if e.Count() != 0 {
@@ -17,7 +17,7 @@ func TestNewEngine(t *testing.T) {
 }
 
 func TestAddRule(t *testing.T) {
-	e := NewEngine()
+	e := NewEngine(nil)
 	rule := &Rule{
 		Name:    "Test Rule",
 		Logic:   "true",
@@ -34,7 +34,7 @@ func TestAddRule(t *testing.T) {
 }
 
 func TestAddRule_InvalidLogic(t *testing.T) {
-	e := NewEngine()
+	e := NewEngine(nil)
 	rule := &Rule{
 		Name:    "Invalid Rule",
 		Logic:   "invalid expression!!",
@@ -48,7 +48,7 @@ func TestAddRule_InvalidLogic(t *testing.T) {
 }
 
 func TestEvaluate_SimpleTrue(t *testing.T) {
-	e := NewEngine()
+	e := NewEngine(nil)
 	rule := &Rule{
 		Name:    "Always Match",
 		Logic:   "true",
@@ -77,7 +77,7 @@ func TestEvaluate_SimpleTrue(t *testing.T) {
 }
 
 func TestEvaluate_SimpleFalse(t *testing.T) {
-	e := NewEngine()
+	e := NewEngine(nil)
 	rule := &Rule{
 		Name:    "Never Match",
 		Logic:   "false",
@@ -102,7 +102,7 @@ func TestEvaluate_SimpleFalse(t *testing.T) {
 }
 
 func TestEvaluate_DomainMatch(t *testing.T) {
-	e := NewEngine()
+	e := NewEngine(nil)
 	rule := &Rule{
 		Name:    "Block Facebook",
 		Logic:   `Domain == "facebook.com"`,
@@ -130,7 +130,7 @@ func TestEvaluate_DomainMatch(t *testing.T) {
 }
 
 func TestEvaluate_ClientIPMatch(t *testing.T) {
-	e := NewEngine()
+	e := NewEngine(nil)
 	rule := &Rule{
 		Name:    "Block Kids Device",
 		Logic:   `ClientIP == "192.168.1.50"`,
@@ -158,7 +158,7 @@ func TestEvaluate_ClientIPMatch(t *testing.T) {
 }
 
 func TestEvaluate_TimeBasedRule(t *testing.T) {
-	e := NewEngine()
+	e := NewEngine(nil)
 	rule := &Rule{
 		Name:    "Block After 10 PM",
 		Logic:   "Hour >= 22 || Hour < 6",
@@ -179,7 +179,7 @@ func TestEvaluate_TimeBasedRule(t *testing.T) {
 }
 
 func TestEvaluate_ComplexRule(t *testing.T) {
-	e := NewEngine()
+	e := NewEngine(nil)
 	rule := &Rule{
 		Name:    "Block Social Media After Hours for Kids",
 		Logic:   `(Hour >= 22 || Hour < 6) && ClientIP == "192.168.1.50" && (Domain == "facebook.com" || Domain == "instagram.com")`,
@@ -198,7 +198,7 @@ func TestEvaluate_ComplexRule(t *testing.T) {
 }
 
 func TestEvaluate_DisabledRule(t *testing.T) {
-	e := NewEngine()
+	e := NewEngine(nil)
 	rule := &Rule{
 		Name:    "Disabled Rule",
 		Logic:   "true",
@@ -219,7 +219,7 @@ func TestEvaluate_DisabledRule(t *testing.T) {
 }
 
 func TestEvaluate_MultipleRules_FirstMatch(t *testing.T) {
-	e := NewEngine()
+	e := NewEngine(nil)
 
 	rule1 := &Rule{
 		Name:    "Rule 1",
@@ -256,7 +256,7 @@ func TestEvaluate_MultipleRules_FirstMatch(t *testing.T) {
 }
 
 func TestRemoveRule(t *testing.T) {
-	e := NewEngine()
+	e := NewEngine(nil)
 	rule := &Rule{
 		Name:    "Test Rule",
 		Logic:   "true",
@@ -283,7 +283,7 @@ func TestRemoveRule(t *testing.T) {
 }
 
 func TestRemoveRule_NotFound(t *testing.T) {
-	e := NewEngine()
+	e := NewEngine(nil)
 
 	removed := e.RemoveRule("Nonexistent Rule")
 	if removed {
@@ -292,7 +292,7 @@ func TestRemoveRule_NotFound(t *testing.T) {
 }
 
 func TestGetRules(t *testing.T) {
-	e := NewEngine()
+	e := NewEngine(nil)
 
 	rule1 := &Rule{Name: "Rule 1", Logic: "true", Action: ActionBlock, Enabled: true}
 	rule2 := &Rule{Name: "Rule 2", Logic: "false", Action: ActionAllow, Enabled: true}
@@ -314,7 +314,7 @@ func TestGetRules(t *testing.T) {
 }
 
 func TestClear(t *testing.T) {
-	e := NewEngine()
+	e := NewEngine(nil)
 
 	for i := 0; i < 5; i++ {
 		rule := &Rule{
@@ -470,7 +470,7 @@ func TestIPInCIDR(t *testing.T) {
 }
 
 func TestConcurrentAccess(t *testing.T) {
-	e := NewEngine()
+	e := NewEngine(nil)
 
 	// Add initial rules
 	for i := 0; i < 5; i++ {
@@ -521,7 +521,7 @@ func TestConcurrentAccess(t *testing.T) {
 }
 
 func TestHelperFunctions_InExpressions(t *testing.T) {
-	e := NewEngine()
+	e := NewEngine(nil)
 
 	tests := []struct {
 		name        string
@@ -817,7 +817,7 @@ func TestValidateActionViaAddRule(t *testing.T) {
 		},
 	}
 
-	engine := NewEngine()
+	engine := NewEngine(nil)
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			rule := &Rule{

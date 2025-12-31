@@ -352,7 +352,7 @@ func BenchmarkCache_Mixed(b *testing.B) {
 
 // BenchmarkPolicyEngine benchmarks policy engine rule evaluation
 func BenchmarkPolicyEngine_SingleRule(b *testing.B) {
-	engine := policy.NewEngine()
+	engine := policy.NewEngine(nil)
 
 	rule := &policy.Rule{
 		Name:    "Block Social Media",
@@ -373,7 +373,7 @@ func BenchmarkPolicyEngine_SingleRule(b *testing.B) {
 }
 
 func BenchmarkPolicyEngine_MultipleRules(b *testing.B) {
-	engine := policy.NewEngine()
+	engine := policy.NewEngine(nil)
 
 	// Add 10 rules
 	for i := 0; i < 10; i++ {
@@ -397,7 +397,7 @@ func BenchmarkPolicyEngine_MultipleRules(b *testing.B) {
 }
 
 func BenchmarkPolicyEngine_ComplexRule(b *testing.B) {
-	engine := policy.NewEngine()
+	engine := policy.NewEngine(nil)
 
 	rule := &policy.Rule{
 		Name: "Complex Time-Based Block",
@@ -587,7 +587,7 @@ func setupBenchmarkHandler(b *testing.B, blocklistSize int, enableCache, enableP
 
 	// Setup policy engine
 	if enablePolicy {
-		policyEngine := policy.NewEngine()
+		policyEngine := policy.NewEngine(nil)
 		rule := &policy.Rule{
 			Name:    "Test Rule",
 			Logic:   `DomainMatches(Domain, "blocked.test")`,

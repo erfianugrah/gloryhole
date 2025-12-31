@@ -65,7 +65,7 @@ func TestE2E_FullDNSServer(t *testing.T) {
 	handler.SetLocalRecords(localMgr)
 
 	// Setup policy engine
-	policyEngine := policy.NewEngine()
+	policyEngine := policy.NewEngine(nil)
 	blockRule := &policy.Rule{
 		Name:    "Block Test Domain",
 		Logic:   `Domain == "blocked.test."`,

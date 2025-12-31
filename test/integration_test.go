@@ -122,7 +122,7 @@ func TestIntegration_PolicyEngineRedirect(t *testing.T) {
 	handler.SetForwarder(fwd)
 
 	// Setup policy engine with REDIRECT rule
-	policyEngine := policy.NewEngine()
+	policyEngine := policy.NewEngine(nil)
 	redirectRule := &policy.Rule{
 		Name:       "Redirect ads to blackhole",
 		Logic:      `DomainMatches(Domain, "ads")`,
@@ -282,7 +282,7 @@ func TestIntegration_APIWithDNS(t *testing.T) {
 	fwd := forwarder.NewForwarder(dnsCfg, logger)
 	handler.SetForwarder(fwd)
 
-	policyEngine := policy.NewEngine()
+	policyEngine := policy.NewEngine(nil)
 	handler.SetPolicyEngine(policyEngine)
 
 	// Start DNS server
@@ -478,7 +478,7 @@ func TestIntegration_ComplexPolicyRules(t *testing.T) {
 	handler.SetForwarder(fwd)
 
 	// Setup complex policy rules
-	policyEngine := policy.NewEngine()
+	policyEngine := policy.NewEngine(nil)
 
 	// Rule 1: Block by regex pattern
 	rule1 := &policy.Rule{

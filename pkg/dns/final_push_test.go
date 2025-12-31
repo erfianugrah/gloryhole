@@ -121,7 +121,7 @@ func TestServeDNS_PolicyEngineForwardErrorPath(t *testing.T) {
 	}
 	handler.SetForwarder(forwarder.NewForwarder(cfg, logger))
 
-	engine := policy.NewEngine()
+	engine := policy.NewEngine(nil)
 	rule := &policy.Rule{
 		Name:       "forward-fail",
 		Logic:      `Domain == "fail.example.com"`,
@@ -426,7 +426,7 @@ func TestServeDNS_PolicyEngineAllowWithCache(t *testing.T) {
 	}
 	handler.SetForwarder(forwarder.NewForwarder(cfg, logger))
 
-	engine := policy.NewEngine()
+	engine := policy.NewEngine(nil)
 	rule := &policy.Rule{
 		Name:    "allow-with-cache",
 		Logic:   `Domain == "allowed.example.com"`,

@@ -6,9 +6,14 @@ import (
 	"fmt"
 	"net"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	"glory-hole/pkg/config"
+	"glory-hole/pkg/logging"
+	"glory-hole/pkg/ratelimit"
 
 	"github.com/expr-lang/expr"
 	"github.com/expr-lang/expr/vm"
@@ -16,18 +21,20 @@ import (
 
 // Engine is the policy engine that evaluates filtering rules
 type Engine struct {
-	rules []*Rule
-	mu    sync.RWMutex
+	rules  []*Rule
+	logger *logging.Logger
+	mu     sync.RWMutex
 }
 
 // Rule represents a single policy rule
 type Rule struct {
-	program    *vm.Program
-	Name       string
-	Logic      string
-	Action     string
-	ActionData string
-	Enabled    bool
+	program     *vm.Program
+	RateLimiter *ratelimit.Manager
+	Name        string
+	Logic       string
+	Action      string
+	ActionData  string
+	Enabled     bool
 }
 
 // Action constants
@@ -53,9 +60,10 @@ type Context struct {
 }
 
 // NewEngine creates a new policy engine
-func NewEngine() *Engine {
+func NewEngine(logger *logging.Logger) *Engine {
 	return &Engine{
-		rules: make([]*Rule, 0),
+		rules:  make([]*Rule, 0),
+		logger: logger,
 	}
 }
 
@@ -168,6 +176,19 @@ func (e *Engine) AddRule(rule *Rule) error {
 
 	rule.program = program
 
+	// Initialize per-rule rate limiter if action is RATE_LIMIT
+	if rule.Action == ActionRateLimit {
+		rps, burst := parseRateLimitData(rule.ActionData)
+		rule.RateLimiter = ratelimit.NewManager(&config.RateLimitConfig{
+			Enabled:           true,
+			RequestsPerSecond: rps,
+			Burst:             burst,
+			Action:            config.RateLimitActionNXDOMAIN,
+			CleanupInterval:   10 * time.Minute,
+			MaxTrackedClients: 10000,
+		}, e.logger)
+	}
+
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
@@ -209,6 +230,10 @@ func (e *Engine) RemoveRule(name string) bool {
 
 	for i, rule := range e.rules {
 		if rule.Name == name {
+			// Stop rate limiter before removing rule
+			if rule.RateLimiter != nil {
+				rule.RateLimiter.Stop()
+			}
 			e.rules = append(e.rules[:i], e.rules[i+1:]...)
 			return true
 		}
@@ -287,11 +312,29 @@ func (e *Engine) UpdateRule(index int, rule *Rule) error {
 
 	rule.program = program
 
+	// Initialize per-rule rate limiter if action is RATE_LIMIT
+	if rule.Action == ActionRateLimit {
+		rps, burst := parseRateLimitData(rule.ActionData)
+		rule.RateLimiter = ratelimit.NewManager(&config.RateLimitConfig{
+			Enabled:           true,
+			RequestsPerSecond: rps,
+			Burst:             burst,
+			Action:            config.RateLimitActionNXDOMAIN,
+			CleanupInterval:   10 * time.Minute,
+			MaxTrackedClients: 10000,
+		}, e.logger)
+	}
+
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
 	if index < 0 || index >= len(e.rules) {
 		return fmt.Errorf("index %d out of bounds (have %d rules)", index, len(e.rules))
+	}
+
+	// Stop old rate limiter before replacing rule
+	if e.rules[index].RateLimiter != nil {
+		e.rules[index].RateLimiter.Stop()
 	}
 
 	e.rules[index] = rule
@@ -321,7 +364,26 @@ func (e *Engine) Clear() {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
+	// Stop all rate limiters before clearing
+	for _, rule := range e.rules {
+		if rule.RateLimiter != nil {
+			rule.RateLimiter.Stop()
+		}
+	}
+
 	e.rules = make([]*Rule, 0)
+}
+
+// Stop terminates all background goroutines for rate limiters
+func (e *Engine) Stop() {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	for _, rule := range e.rules {
+		if rule.RateLimiter != nil {
+			rule.RateLimiter.Stop()
+		}
+	}
 }
 
 // Helper functions that can be used in expressions
@@ -486,12 +548,43 @@ func validateAction(rule *Rule) error {
 		return nil
 
 	case ActionRateLimit:
-		// No action_data needed; uses global rate limiter configuration.
+		// Validate action_data format: "req_per_sec,burst"
+		if rule.ActionData == "" {
+			return fmt.Errorf("RATE_LIMIT action requires action_data (format: 'req_per_sec,burst')")
+		}
+		if err := validateRateLimitData(rule.ActionData); err != nil {
+			return fmt.Errorf("invalid RATE_LIMIT action_data: %w", err)
+		}
 		return nil
 
 	default:
 		return fmt.Errorf("unknown action: %s (valid: BLOCK, ALLOW, REDIRECT, FORWARD, RATE_LIMIT)", action)
 	}
+}
+
+// validateRateLimitData validates the format of rate limit action_data
+func validateRateLimitData(actionData string) error {
+	parts := strings.Split(actionData, ",")
+	if len(parts) != 2 {
+		return fmt.Errorf("format must be 'req_per_sec,burst', got: %s", actionData)
+	}
+	rps, err := strconv.ParseFloat(strings.TrimSpace(parts[0]), 64)
+	if err != nil || rps <= 0 {
+		return fmt.Errorf("invalid requests_per_second: %s", parts[0])
+	}
+	burst, err := strconv.Atoi(strings.TrimSpace(parts[1]))
+	if err != nil || burst <= 0 {
+		return fmt.Errorf("invalid burst: %s", parts[1])
+	}
+	return nil
+}
+
+// parseRateLimitData parses rate limit action_data into requests per second and burst
+func parseRateLimitData(actionData string) (float64, int) {
+	parts := strings.Split(actionData, ",")
+	rps, _ := strconv.ParseFloat(strings.TrimSpace(parts[0]), 64)
+	burst, _ := strconv.Atoi(strings.TrimSpace(parts[1]))
+	return rps, burst
 }
 
 // ParseUpstreams parses a comma-separated list of upstream DNS servers

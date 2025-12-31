@@ -403,7 +403,7 @@ func TestCORSMiddleware_Preflight(t *testing.T) {
 func TestHandleUpdatePolicy_NameChange(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 
-	policyEngine := policy.NewEngine()
+	policyEngine := policy.NewEngine(nil)
 
 	// Add initial rule
 	rule := &policy.Rule{

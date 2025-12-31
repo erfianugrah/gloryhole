@@ -534,7 +534,8 @@ func (s *Server) handleTestPolicy(w http.ResponseWriter, r *http.Request) {
 		req.QueryType = "A"
 	}
 
-	engine := policy.NewEngine()
+	// Test handler doesn't need rate limiting, pass nil logger
+	engine := policy.NewEngine(nil)
 	rule := &policy.Rule{
 		Name:    "tester",
 		Logic:   req.Logic,
