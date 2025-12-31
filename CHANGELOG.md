@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Query logging worker pool: Replaced per-query goroutine spawning with fixed worker pool (8 workers, 50K buffer) for 31x performance improvement
+- Storage buffer improvements: Increased buffer from 500 to 50,000 queries with high watermark monitoring at 80% to handle high QPS
+- Circuit breaker for upstream DNS: Added automatic upstream health tracking with CLOSED/OPEN/HALF_OPEN states for improved failover reliability
+
 ### Changed
 - Web UI performance improvements: removed continuous animations (scanning lines, pulsing badges), replaced backdrop blur with solid backgrounds
 - Web UI responsiveness: added horizontal scroll for tables on mobile, improved modal sizing, better form layouts for small screens
