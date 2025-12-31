@@ -28,11 +28,6 @@
                 <h4>Rules Loaded</h4>
                 <p class="status-text">{{len $cfg.Policy.Rules}}</p>
             </div>
-            <div class="status-card">
-                <h4>Rate Limiting</h4>
-                <p class="status-text">{{if $cfg.RateLimit.Enabled}}{{$cfg.RateLimit.RequestsPerSecond}} rps / {{$cfg.RateLimit.Burst}} burst ({{$cfg.RateLimit.Action}}){{else}}Disabled{{end}}</p>
-                <small class="text-muted">Configure in Settings &rarr; Rate Limiting</small>
-            </div>
         </div>
     </div>
 
@@ -109,24 +104,18 @@
                 <select id="policy-action" name="action" required>
                     <option value="BLOCK">BLOCK - Return NXDOMAIN</option>
                     <option value="ALLOW">ALLOW - Bypass blocklist</option>
-                    <option value="REDIRECT">REDIRECT - Forward to specific DNS</option>
+                    <option value="REDIRECT">REDIRECT - Redirect to IP address</option>
                     <option value="FORWARD">FORWARD - Use custom upstreams</option>
-                    <option value="RATE_LIMIT">RATE_LIMIT - Apply rate limiting</option>
                 </select>
             </div>
 
             <div class="form-group">
                 <label for="policy-action-data">Action Data</label>
                 <input type="text" id="policy-action-data" name="action_data"
-                       placeholder="e.g., rps=5,burst=10,bucket=client+domain,action=drop">
+                       placeholder="e.g., 0.0.0.0 or 1.1.1.1:53,8.8.8.8:53">
                 <small class="form-help">
-                    <strong>For RATE_LIMIT:</strong> Configure rate limiting parameters<br>
-                    • <code>rps</code> - Requests per second limit<br>
-                    • <code>burst</code> - Burst allowance<br>
-                    • <code>bucket</code> - Bucket strategy: client, rule, domain, client+domain, client+rule<br>
-                    • <code>action</code> - Action on limit: drop, nxdomain<br>
-                    <strong>For REDIRECT:</strong> Upstream DNS servers (e.g., 1.1.1.1:53,8.8.8.8:53)<br>
-                    <strong>For FORWARD:</strong> Custom upstream addresses
+                    <strong>For REDIRECT:</strong> IP address to redirect to (e.g., 0.0.0.0)<br>
+                    <strong>For FORWARD:</strong> Custom upstream DNS servers (e.g., 1.1.1.1:53,8.8.8.8:53)
                 </small>
             </div>
 
