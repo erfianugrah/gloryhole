@@ -317,7 +317,10 @@ func (s *SQLiteStorage) flushBatch(queries []*QueryLog) error {
 	}
 
 	// Update domain stats asynchronously
-	go s.updateDomainStats(queries)
+	// Make a copy to avoid data race with batch slice reuse
+	queriesCopy := make([]*QueryLog, len(queries))
+	copy(queriesCopy, queries)
+	go s.updateDomainStats(queriesCopy)
 
 	return nil
 }
