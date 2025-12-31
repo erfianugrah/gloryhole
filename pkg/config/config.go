@@ -11,6 +11,7 @@ import (
 
 	"glory-hole/pkg/storage"
 
+	"golang.org/x/crypto/bcrypt"
 	"gopkg.in/yaml.v3"
 )
 
@@ -95,7 +96,7 @@ type AuthConfig struct {
 	APIKey       string `yaml:"api_key"`
 	Header       string `yaml:"header"`
 	Username     string `yaml:"username"`
-	Password     string `yaml:"password"`      // Plaintext password (deprecated, use password_hash)
+	Password     string `yaml:"password"`      // DEPRECATED: Plaintext password (use password_hash instead)
 	PasswordHash string `yaml:"password_hash"` // Bcrypt hash of password (recommended)
 }
 
@@ -106,6 +107,22 @@ func (a *AuthConfig) normalize() {
 	if strings.TrimSpace(a.Header) == "" {
 		a.Header = "Authorization"
 	}
+	// Migrate plaintext password to bcrypt hash
+	if a.Password != "" && a.PasswordHash == "" {
+		a.migratePasswordToHash()
+	}
+}
+
+// migratePasswordToHash automatically converts plaintext password to bcrypt hash
+func (a *AuthConfig) migratePasswordToHash() {
+	// Import is already at package level
+	hash, err := bcrypt.GenerateFromPassword([]byte(a.Password), 12)
+	if err != nil {
+		// Log error but don't fail - keep plaintext for backward compat
+		return
+	}
+	a.PasswordHash = string(hash)
+	a.Password = "" // Clear plaintext
 }
 
 // CacheConfig holds cache settings

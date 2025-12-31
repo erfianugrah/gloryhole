@@ -13,6 +13,7 @@ type sessionManager struct {
 	mu       sync.RWMutex
 	sessions map[string]sessionData
 	ttl      time.Duration
+	stopCh   chan struct{}
 }
 
 type sessionData struct {
@@ -24,10 +25,13 @@ func newSessionManager(ttl time.Duration) *sessionManager {
 	if ttl <= 0 {
 		ttl = 12 * time.Hour
 	}
-	return &sessionManager{
+	m := &sessionManager{
 		sessions: make(map[string]sessionData),
 		ttl:      ttl,
+		stopCh:   make(chan struct{}),
 	}
+	go m.cleanupLoop()
+	return m
 }
 
 func (m *sessionManager) Create(subject string) (string, time.Time, error) {
@@ -75,6 +79,44 @@ func (m *sessionManager) Revoke(token string) {
 	m.mu.Lock()
 	delete(m.sessions, token)
 	m.mu.Unlock()
+}
+
+func (m *sessionManager) Stop() {
+	if m == nil {
+		return
+	}
+	select {
+	case <-m.stopCh:
+		return
+	default:
+		close(m.stopCh)
+	}
+}
+
+func (m *sessionManager) cleanupLoop() {
+	ticker := time.NewTicker(5 * time.Minute)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			m.cleanup()
+		case <-m.stopCh:
+			return
+		}
+	}
+}
+
+func (m *sessionManager) cleanup() {
+	now := time.Now()
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	for token, session := range m.sessions {
+		if now.After(session.expires) {
+			delete(m.sessions, token)
+		}
+	}
 }
 
 func generateSessionToken() (string, error) {

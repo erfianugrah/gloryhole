@@ -243,6 +243,7 @@ func New(cfg *Config) *Server {
 	handler = s.authMiddleware(handler)
 	handler = s.rateLimitMiddleware(handler)
 	handler = s.loggingMiddleware(handler)
+	handler = s.securityHeadersMiddleware(handler)
 	handler = s.corsMiddleware(handler)
 
 	s.handler = handler
