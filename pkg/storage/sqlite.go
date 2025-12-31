@@ -481,7 +481,7 @@ func (s *SQLiteStorage) GetStatistics(ctx context.Context, since time.Time) (*St
 }
 
 // GetTopDomains returns the most queried domains
-func (s *SQLiteStorage) GetTopDomains(ctx context.Context, limit int, blocked bool) ([]*DomainStats, error) {
+func (s *SQLiteStorage) GetTopDomains(ctx context.Context, limit int, blocked bool, since time.Time) ([]*DomainStats, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -494,7 +494,8 @@ func (s *SQLiteStorage) GetTopDomains(ctx context.Context, limit int, blocked bo
 		blockedValue = 1
 	}
 
-	rows, err := s.db.QueryContext(ctx, `
+	// Build query with optional time filter
+	query := `
 		WITH aggregated AS (
 			SELECT
 				domain,
@@ -502,7 +503,17 @@ func (s *SQLiteStorage) GetTopDomains(ctx context.Context, limit int, blocked bo
 				MAX(id) AS last_id,
 				COUNT(*) AS total_queries
 			FROM queries
-			WHERE blocked = ?
+			WHERE blocked = ?`
+
+	args := []interface{}{blockedValue}
+
+	// Add time filter if since is not zero
+	if !since.IsZero() {
+		query += ` AND timestamp >= ?`
+		args = append(args, since)
+	}
+
+	query += `
 			GROUP BY domain
 		)
 		SELECT
@@ -514,8 +525,11 @@ func (s *SQLiteStorage) GetTopDomains(ctx context.Context, limit int, blocked bo
 		LEFT JOIN queries first_q ON first_q.id = a.first_id
 		LEFT JOIN queries last_q ON last_q.id = a.last_id
 		ORDER BY a.total_queries DESC
-		LIMIT ?
-	`, blockedValue, limit)
+		LIMIT ?`
+
+	args = append(args, limit)
+
+	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrQueryFailed, err)
 	}

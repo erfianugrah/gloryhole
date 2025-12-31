@@ -41,7 +41,7 @@ func (m *mockStorageForHealth) GetStatistics(ctx context.Context, since time.Tim
 	return &storage.Statistics{}, nil
 }
 
-func (m *mockStorageForHealth) GetTopDomains(ctx context.Context, limit int, blocked bool) ([]*storage.DomainStats, error) {
+func (m *mockStorageForHealth) GetTopDomains(ctx context.Context, limit int, blocked bool, since time.Time) ([]*storage.DomainStats, error) {
 	return nil, nil
 }
 

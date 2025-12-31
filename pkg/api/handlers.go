@@ -351,11 +351,21 @@ func (s *Server) handleTopDomains(w http.ResponseWriter, r *http.Request) {
 	blockedParam := r.URL.Query().Get("blocked")
 	blocked := blockedParam == "true"
 
+	// Parse since parameter (optional)
+	sinceParam := r.URL.Query().Get("since")
+	var sinceTime time.Time
+	if sinceParam != "" {
+		d := parseDuration(sinceParam, 0)
+		if d > 0 {
+			sinceTime = time.Now().Add(-d)
+		}
+	}
+
 	// Get top domains from storage
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
 
-	domains, err := s.storage.GetTopDomains(ctx, limit, blocked)
+	domains, err := s.storage.GetTopDomains(ctx, limit, blocked, sinceTime)
 	if err != nil {
 		s.logger.Error("Failed to get top domains", "error", err)
 		s.writeError(w, http.StatusInternalServerError, "Failed to retrieve top domains")

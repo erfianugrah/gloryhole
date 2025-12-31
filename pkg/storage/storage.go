@@ -18,7 +18,7 @@ type Storage interface {
 
 	// Statistics
 	GetStatistics(ctx context.Context, since time.Time) (*Statistics, error)
-	GetTopDomains(ctx context.Context, limit int, blocked bool) ([]*DomainStats, error)
+	GetTopDomains(ctx context.Context, limit int, blocked bool, since time.Time) ([]*DomainStats, error)
 	GetBlockedCount(ctx context.Context, since time.Time) (int64, error)
 	GetQueryCount(ctx context.Context, since time.Time) (int64, error)
 	GetTimeSeriesStats(ctx context.Context, bucket time.Duration, points int) ([]*TimeSeriesPoint, error)

@@ -51,7 +51,7 @@ func (m *mockStorage) GetStatistics(ctx context.Context, since time.Time) (*stor
 	return m.stats, nil
 }
 
-func (m *mockStorage) GetTopDomains(ctx context.Context, limit int, blocked bool) ([]*storage.DomainStats, error) {
+func (m *mockStorage) GetTopDomains(ctx context.Context, limit int, blocked bool, since time.Time) ([]*storage.DomainStats, error) {
 	result := make([]*storage.DomainStats, 0)
 	for _, d := range m.domains {
 		if d.Blocked == blocked {

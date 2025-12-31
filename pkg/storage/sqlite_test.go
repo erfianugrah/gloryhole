@@ -608,7 +608,7 @@ func TestSQLiteStorage_GetTopDomains(t *testing.T) {
 	}
 
 	// Get top non-blocked domains
-	topDomains, err := storage.GetTopDomains(ctx, 3, false)
+	topDomains, err := storage.GetTopDomains(ctx, 3, false, time.Time{})
 	if err != nil {
 		t.Fatalf("GetTopDomains() error = %v", err)
 	}
@@ -626,7 +626,7 @@ func TestSQLiteStorage_GetTopDomains(t *testing.T) {
 	}
 
 	// Get top blocked domains
-	topBlocked, err := storage.GetTopDomains(ctx, 2, true)
+	topBlocked, err := storage.GetTopDomains(ctx, 2, true, time.Time{})
 	if err != nil {
 		t.Fatalf("GetTopDomains(blocked) error = %v", err)
 	}

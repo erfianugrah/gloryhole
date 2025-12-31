@@ -115,7 +115,7 @@ func TestNewNoOpStorage(t *testing.T) {
 		t.Errorf("GetStatistics() error = %v", err)
 	}
 
-	if _, err := storage.GetTopDomains(ctx, 10, false); err != nil {
+	if _, err := storage.GetTopDomains(ctx, 10, false, time.Time{}); err != nil {
 		t.Errorf("GetTopDomains() error = %v", err)
 	}
 

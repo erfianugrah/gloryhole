@@ -71,7 +71,7 @@ func (n *NoOpStorage) GetStatistics(ctx context.Context, since time.Time) (*Stat
 }
 
 // GetTopDomains returns an empty slice
-func (n *NoOpStorage) GetTopDomains(ctx context.Context, limit int, blocked bool) ([]*DomainStats, error) {
+func (n *NoOpStorage) GetTopDomains(ctx context.Context, limit int, blocked bool, since time.Time) ([]*DomainStats, error) {
 	return []*DomainStats{}, nil
 }
 

@@ -497,6 +497,16 @@ func (s *Server) handleTopDomainsPartial(w http.ResponseWriter, r *http.Request)
 	blockedParam := r.URL.Query().Get("blocked")
 	blocked := blockedParam == "true"
 
+	// Parse since parameter (optional)
+	sinceParam := r.URL.Query().Get("since")
+	var sinceTime time.Time
+	if sinceParam != "" {
+		d := parseDuration(sinceParam, 0)
+		if d > 0 {
+			sinceTime = time.Now().Add(-d)
+		}
+	}
+
 	// Template-friendly domain data
 	type DomainData struct {
 		Domain     string
@@ -508,7 +518,7 @@ func (s *Server) handleTopDomainsPartial(w http.ResponseWriter, r *http.Request)
 
 	// Get domains from storage
 	if s.storage != nil {
-		dbDomains, err := s.storage.GetTopDomains(r.Context(), limit, blocked)
+		dbDomains, err := s.storage.GetTopDomains(r.Context(), limit, blocked, sinceTime)
 		if err == nil && len(dbDomains) > 0 {
 			maxQueries := dbDomains[0].QueryCount
 			for _, d := range dbDomains {

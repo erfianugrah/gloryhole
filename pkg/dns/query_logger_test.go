@@ -66,7 +66,7 @@ func (m *mockStorage) GetQueriesFiltered(ctx context.Context, filter storage.Que
 func (m *mockStorage) GetStatistics(ctx context.Context, since time.Time) (*storage.Statistics, error) {
 	return nil, nil
 }
-func (m *mockStorage) GetTopDomains(ctx context.Context, limit int, blocked bool) ([]*storage.DomainStats, error) {
+func (m *mockStorage) GetTopDomains(ctx context.Context, limit int, blocked bool, since time.Time) ([]*storage.DomainStats, error) {
 	return nil, nil
 }
 func (m *mockStorage) GetBlockedCount(ctx context.Context, since time.Time) (int64, error) {

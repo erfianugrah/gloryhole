@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Query logging worker pool: Replaced per-query goroutine spawning with fixed worker pool (8 workers, 50K buffer) for 31x performance improvement
 - Storage buffer improvements: Increased buffer from 500 to 50,000 queries with high watermark monitoring at 80% to handle high QPS
 - Circuit breaker for upstream DNS: Added automatic upstream health tracking with CLOSED/OPEN/HALF_OPEN states for improved failover reliability
+- Time range filtering for top domains API: Added `since` parameter to `/api/top-domains` endpoint to support 24h, 7d, 30d, and custom time ranges matching other statistics endpoints
 
 ### Changed
 - Web UI performance improvements: removed continuous animations (scanning lines, pulsing badges), replaced backdrop blur with solid backgrounds
