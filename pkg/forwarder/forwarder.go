@@ -202,7 +202,12 @@ func (f *Forwarder) ForwardTCP(ctx context.Context, r *dns.Msg) (*dns.Msg, error
 	var lastErr error
 
 	for i := 0; i < attempts; i++ {
-		upstream := f.selectUpstream()
+		// Select upstream using round-robin (filters by health)
+		upstream, err := f.selectUpstream()
+		if err != nil {
+			f.logger.Error("No healthy upstreams available for TCP", "error", err)
+			return nil, err
+		}
 
 		// Create TCP client
 		client := &dns.Client{
