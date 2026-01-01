@@ -806,37 +806,6 @@ code, .stat-value, .domain-name, pre {
     gap: 2rem;
 }
 
-.stats-header .global-range-control {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.4rem;
-    font-size: 0.75rem;
-    color: var(--text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-}
-
-.stats-header .global-range-control label {
-    font-weight: 600;
-}
-
-.stats-header .global-range-control select {
-    text-transform: none;
-    letter-spacing: normal;
-    border: 1px solid var(--input-border);
-    border-radius: 0.25rem;
-    padding: 0.2rem 0.6rem;
-    font-size: 0.75rem;
-    background-color: var(--input-bg);
-    color: var(--text);
-    font-family: 'JetBrains Mono', monospace;
-}
-
-.stats-header .global-range-control select:focus {
-    outline: none;
-    border-color: var(--primary);
-    box-shadow: 0 0 0 2px rgba(0, 255, 65, 0.15);
-}
 
 .stats-header h2 {
     font-size: 2rem;

@@ -496,30 +496,19 @@ export function setupGlobalRangeSelector() {
 
                 // For HTMX-enabled selectors, trigger the HTMX request
                 if (selector.hasAttribute('hx-get')) {
-                    // Use htmx.trigger to trigger the HTMX request
                     if (typeof htmx !== 'undefined') {
                         htmx.trigger(selector, 'change');
                     }
                 } else {
-                    // For regular selectors (charts), trigger change event
-                    const changeEvent = new Event('change', { bubbles: true });
-                    selector.dispatchEvent(changeEvent);
+                    // For chart selectors, directly call update functions
+                    if (selector.id === 'query-type-range') {
+                        updateQueryTypeChart();
+                    } else if (selector.id === 'top-allowed-range' || selector.id === 'top-blocked-range') {
+                        updateTopDomainsCharts();
+                    }
                 }
             }
         });
-    });
-
-    // Set up listeners on local selectors to mark them as custom when manually changed
-    const localSelectors = document.querySelectorAll('.local-range-select');
-    localSelectors.forEach(selector => {
-        // Skip if it already has a listener (for chart selectors)
-        const isChartSelector = ['query-type-range', 'top-allowed-range', 'top-blocked-range'].includes(selector.id);
-        if (!isChartSelector) {
-            selector.addEventListener('change', () => {
-                // Mark as custom when manually changed
-                selector.dataset.usesGlobal = 'false';
-            });
-        }
     });
 }
 

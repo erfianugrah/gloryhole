@@ -22,6 +22,8 @@ func (s *SQLiteStorage) GetClientSummaries(ctx context.Context, limit, offset in
 		offset = 0
 	}
 
+	// Aggregate client statistics from recent queries for performance
+	// This ensures the query remains fast even with millions of historical queries
 	const baseQuery = `
 		WITH aggregated AS (
 			SELECT
@@ -32,6 +34,7 @@ func (s *SQLiteStorage) GetClientSummaries(ctx context.Context, limit, offset in
 				SUM(CASE WHEN blocked = 1 THEN 1 ELSE 0 END) AS blocked_queries,
 				SUM(CASE WHEN response_code = 3 THEN 1 ELSE 0 END) AS nxdomain_queries
 			FROM queries
+			WHERE timestamp >= datetime('now', '-30 days')
 			GROUP BY client_ip
 		)
 		SELECT
