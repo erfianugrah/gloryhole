@@ -569,6 +569,99 @@ $ ls -lh glory-hole.db
      enabled: false
    ```
 
+### Problem: Dashboard shows 500 errors after upgrade to v0.11.11+ (Timestamp Format Migration)
+
+**Symptoms:**
+```
+Failed to load time-series data: 500 {"error":"Internal Server Error","message":"Failed to retrieve time-series statistics"}
+```
+- Dashboard charts fail to load
+- Browser console shows API errors
+- Date range selectors have no effect
+
+**Root Cause:**
+Version 0.11.11 changed timestamp storage format from Go's verbose format to RFC3339Nano for SQL compatibility. Existing data with old timestamps causes SQL parsing failures.
+
+**Affected Versions:**
+- **Before v0.11.11**: `2026-01-01 10:00:47.185322115 +0100 CET m=+20.711025655`
+- **From v0.11.11+**: `2026-01-01T10:00:47.185322115+01:00` (RFC3339Nano)
+
+**Solution 1: Reset Database (Recommended)**
+
+Fastest solution for non-critical DNS query logs:
+
+```bash
+# Stop the service
+sudo systemctl stop glory-hole
+
+# Remove the database (adjust path to your installation)
+sudo rm /var/lib/glory-hole/gloryhole.db*
+# OR for Docker:
+docker-compose down
+docker volume rm gloryhole_data  # Adjust volume name
+
+# Restart - service will create new database automatically
+sudo systemctl start glory-hole
+# OR for Docker:
+docker-compose up -d
+```
+
+**Trade-offs:**
+- ✅ Fast (30 seconds)
+- ✅ No migration errors
+- ✅ Guaranteed clean state
+- ❌ Loses historical query data
+
+**Solution 2: Migrate Existing Data**
+
+If you need to preserve historical data:
+
+```bash
+# 1. Stop the service
+sudo systemctl stop glory-hole
+
+# 2. Backup the database
+sudo cp /var/lib/glory-hole/gloryhole.db /var/lib/glory-hole/gloryhole.db.backup
+
+# 3. Dry-run (preview changes)
+go run scripts/migrate-timestamps.go -db /var/lib/glory-hole/gloryhole.db -dry-run
+
+# 4. Run migration (requires "yes" confirmation)
+go run scripts/migrate-timestamps.go -db /var/lib/glory-hole/gloryhole.db
+
+# 5. Restart the service
+sudo systemctl start glory-hole
+```
+
+**Migration Features:**
+- Transaction-safe with automatic rollback on error
+- Progress updates every 10,000 records
+- Verification check after completion
+
+**Trade-offs:**
+- ✅ Preserves historical data
+- ✅ Safe rollback on errors
+- ❌ Slower for large databases
+- ❌ Requires Go runtime on server
+
+**Verification:**
+
+Check timestamps are in correct format:
+```bash
+sqlite3 /var/lib/glory-hole/gloryhole.db "SELECT timestamp FROM queries LIMIT 5"
+```
+
+**Expected (correct):**
+```
+2026-01-01T10:14:25.427216520+01:00
+2026-01-01T10:14:26.532817891+01:00
+```
+
+**Problem (old format):**
+```
+2026-01-01 10:00:47.185322115 +0100 CET m=+20.711025655
+```
+
 ## Container Deployment Issues
 
 ### Problem: Storage initialization fails with "out of memory (14)"
@@ -724,6 +817,29 @@ SERVFAIL is a valid DNS response (indicating DNSSEC validation failure, server m
    curl http://localhost:8080/api/stats
    curl http://localhost:8080/api/queries
    ```
+
+### Problem: Content Security Policy (CSP) warnings in browser console
+
+**Symptoms:**
+```
+Content-Security-Policy: The page's settings blocked the loading of a resource (img-src) at data:image/svg+xml...
+```
+- Browser console shows CSP violation warnings
+- UI elements may not display correctly (e.g., select dropdown arrows missing)
+
+**Root Cause:**
+Inline SVG data URIs used for UI elements (like select dropdown icons) were blocked by the default CSP policy before v0.11.12.
+
+**Solution:**
+
+Upgrade to v0.11.12 or later, which includes `img-src 'self' data:` in the CSP policy.
+
+If you're on v0.11.12+ and still seeing this:
+1. Verify version: `glory-hole --version`
+2. Hard refresh browser: `Ctrl+Shift+R` (Windows/Linux) or `Cmd+Shift+R` (Mac)
+3. Clear browser cache
+
+**Note:** This is a cosmetic issue that doesn't affect DNS functionality.
 
 ## Logs and Debugging
 
