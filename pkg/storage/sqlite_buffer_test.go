@@ -124,10 +124,10 @@ func TestBufferStats(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		query := &QueryLog{
 			Domain:   "example.com",
-			ClientIP: "1.2.3.4",
+			ClientIP:  "1.2.3.4",
 		}
-		if err := sqliteStor.LogQuery(context.Background(), query); err != nil {
-			t.Errorf("Failed to log query: %v", err)
+		if logErr := sqliteStor.LogQuery(context.Background(), query); logErr != nil {
+			t.Errorf("Failed to log query: %v", logErr)
 		}
 	}
 
