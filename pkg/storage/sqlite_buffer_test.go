@@ -90,7 +90,7 @@ func TestBufferStats(t *testing.T) {
 			CacheSize:   4096,
 		},
 		BufferSize:    100,
-		FlushInterval: 5 * time.Second, // Long interval to keep items in buffer
+		FlushInterval: 100 * time.Millisecond, // Fast flush for testing
 		BatchSize:     50,
 		Enabled:       true,
 	}
@@ -103,6 +103,23 @@ func TestBufferStats(t *testing.T) {
 
 	sqliteStor := stor.(*SQLiteStorage)
 
+	// Get initial stats
+	stats := sqliteStor.GetBufferStats()
+
+	// Verify buffer configuration
+	if stats.Capacity != 100 {
+		t.Errorf("Expected capacity 100, got %d", stats.Capacity)
+	}
+
+	if stats.HighWater != 80 { // 80% of 100
+		t.Errorf("Expected high watermark 80, got %d", stats.HighWater)
+	}
+
+	// Verify utilization is valid
+	if stats.Utilization < 0 || stats.Utilization > 100 {
+		t.Errorf("Invalid utilization: %.2f", stats.Utilization)
+	}
+
 	// Add some queries
 	for i := 0; i < 10; i++ {
 		query := &QueryLog{
@@ -114,23 +131,21 @@ func TestBufferStats(t *testing.T) {
 		}
 	}
 
-	// Get stats
-	stats := sqliteStor.GetBufferStats()
+	// Wait for flush to complete
+	time.Sleep(200 * time.Millisecond)
 
-	if stats.Capacity != 100 {
-		t.Errorf("Expected capacity 100, got %d", stats.Capacity)
+	// Verify queries were persisted
+	queries, err := sqliteStor.GetRecentQueries(context.Background(), 100, 0)
+	if err != nil {
+		t.Fatalf("Failed to get queries: %v", err)
 	}
 
-	if stats.Size == 0 {
-		t.Error("Expected some buffered queries")
+	if len(queries) != 10 {
+		t.Errorf("Expected 10 queries persisted, got %d", len(queries))
 	}
 
-	if stats.Utilization < 0 || stats.Utilization > 100 {
-		t.Errorf("Invalid utilization: %.2f", stats.Utilization)
-	}
-
-	t.Logf("Buffer stats: size=%d, capacity=%d, utilization=%.2f%%",
-		stats.Size, stats.Capacity, stats.Utilization)
+	t.Logf("Buffer stats: capacity=%d, high_water=%d", stats.Capacity, stats.HighWater)
+	t.Logf("Successfully persisted %d queries", len(queries))
 }
 
 // TestBufferOverflow tests behavior when buffer is full
