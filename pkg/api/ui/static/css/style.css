@@ -800,6 +800,24 @@ code, .stat-value, .domain-name, pre {
     animation: fadeInUp 0.5s ease-out;
 }
 
+.stats-header .header-controls {
+    display: flex;
+    align-items: center;
+    gap: 2rem;
+}
+
+.stats-header .global-range-control {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.stats-header .global-range-control label {
+    font-weight: 600;
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+}
+
 .stats-header h2 {
     font-size: 2rem;
     font-weight: 700;

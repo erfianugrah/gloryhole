@@ -433,16 +433,6 @@ async function updateTopDomainsChart(baseUrl, chart, range = '') {
 }
 
 /**
- * Set up query type range selector event listener
- */
-export function setupQueryTypeRangeSelector() {
-    const queryTypeRangeSelect = document.getElementById('query-type-range');
-    if (queryTypeRangeSelect) {
-        queryTypeRangeSelect.addEventListener('change', () => updateQueryTypeChart());
-    }
-}
-
-/**
  * Set up top domains range selector event listeners
  */
 export function setupTopDomainsRangeSelectors() {
@@ -450,10 +440,70 @@ export function setupTopDomainsRangeSelectors() {
     const blockedRangeSelect = document.getElementById('top-blocked-range');
 
     if (allowedRangeSelect) {
-        allowedRangeSelect.addEventListener('change', () => updateTopDomainsCharts());
+        allowedRangeSelect.addEventListener('change', () => {
+            // Mark as custom when manually changed
+            allowedRangeSelect.dataset.usesGlobal = 'false';
+            updateTopDomainsCharts();
+        });
     }
 
     if (blockedRangeSelect) {
-        blockedRangeSelect.addEventListener('change', () => updateTopDomainsCharts());
+        blockedRangeSelect.addEventListener('change', () => {
+            // Mark as custom when manually changed
+            blockedRangeSelect.dataset.usesGlobal = 'false';
+            updateTopDomainsCharts();
+        });
+    }
+}
+
+/**
+ * Set up global range selector
+ * When changed, updates all local selectors that are using the global default
+ */
+export function setupGlobalRangeSelector() {
+    const globalRangeSelect = document.getElementById('global-range');
+    if (!globalRangeSelect) return;
+
+    globalRangeSelect.addEventListener('change', () => {
+        const globalValue = globalRangeSelect.value;
+
+        // Update all local selectors that are using global default
+        const localSelectors = document.querySelectorAll('.local-range-select');
+        localSelectors.forEach(selector => {
+            if (selector.dataset.usesGlobal === 'true') {
+                selector.value = globalValue;
+
+                // Trigger change event to update the chart/list
+                const changeEvent = new Event('change', { bubbles: true });
+                selector.dispatchEvent(changeEvent);
+            }
+        });
+    });
+
+    // Set up listeners on local selectors to mark them as custom when manually changed
+    const localSelectors = document.querySelectorAll('.local-range-select');
+    localSelectors.forEach(selector => {
+        // Skip if it already has a listener (for chart selectors)
+        const isChartSelector = ['query-type-range', 'top-allowed-range', 'top-blocked-range'].includes(selector.id);
+        if (!isChartSelector) {
+            selector.addEventListener('change', () => {
+                // Mark as custom when manually changed
+                selector.dataset.usesGlobal = 'false';
+            });
+        }
+    });
+}
+
+/**
+ * Update query type selector to mark as custom when changed
+ */
+export function setupQueryTypeRangeSelector() {
+    const queryTypeRangeSelect = document.getElementById('query-type-range');
+    if (queryTypeRangeSelect) {
+        queryTypeRangeSelect.addEventListener('change', () => {
+            // Mark as custom when manually changed
+            queryTypeRangeSelect.dataset.usesGlobal = 'false';
+            updateQueryTypeChart();
+        });
     }
 }
