@@ -1029,17 +1029,32 @@ code, .stat-value, .domain-name, pre {
     letter-spacing: normal;
     border: 1px solid var(--input-border);
     border-radius: 0.25rem;
-    padding: 0.2rem 0.6rem;
+    padding: 0.2rem 0.6rem 0.2rem 0.4rem;
+    padding-right: 1.5rem;
     font-size: 0.75rem;
     background-color: var(--input-bg);
     color: var(--text);
     font-family: 'JetBrains Mono', monospace;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%2300ff41' d='M6 8L2 4h8z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.3rem center;
+    background-size: 0.75rem;
+}
+
+.chart-controls select:hover {
+    border-color: var(--primary);
+    background-color: rgba(0, 255, 65, 0.05);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
 .chart-controls select:focus {
     outline: none;
     border-color: var(--primary);
     box-shadow: 0 0 0 2px rgba(0, 255, 65, 0.15);
+    background-color: rgba(0, 255, 65, 0.08);
 }
 
 .chart-card > h4 {

@@ -347,6 +347,30 @@ function initializeDomainCharts() {
 }
 
 /**
+ * Intelligently truncate domain names for display
+ * @param {string} domain - Full domain name
+ * @param {number} maxLength - Maximum length before truncation
+ * @returns {string} Truncated domain
+ */
+function truncateDomain(domain, maxLength = 25) {
+    if (!domain || domain.length <= maxLength) {
+        return domain;
+    }
+
+    const parts = domain.split('.');
+
+    if (parts.length > 2) {
+        // For subdomains, show first part + ... + last two parts
+        const first = parts[0].substring(0, 10);
+        const last = parts.slice(-2).join('.');
+        return `${first}...${last}`;
+    }
+
+    // For short domains, just truncate
+    return domain.substring(0, maxLength - 3) + '...';
+}
+
+/**
  * Create config for domain bar chart
  * @param {string} color - Bar color
  * @returns {Object} Chart.js config
@@ -381,14 +405,11 @@ function createDomainBarConfig(color) {
                         autoSkip: false,
                         maxRotation: 45,
                         minRotation: 45,
-                        // Truncate long domain names
+                        font: { size: 11 },
+                        // Intelligently truncate long domain names
                         callback: function(value, index, ticks) {
                             const label = this.getLabelForValue(value);
-                            const maxLength = 20;
-                            if (label.length > maxLength) {
-                                return label.substring(0, maxLength) + '...';
-                            }
-                            return label;
+                            return truncateDomain(label, 35);
                         }
                     }
                 },
@@ -485,30 +506,36 @@ export function setupGlobalRangeSelector() {
     const globalRangeSelect = document.getElementById('global-range');
     if (!globalRangeSelect) return;
 
+    let rangeChangeTimeout;
+
     globalRangeSelect.addEventListener('change', () => {
-        const globalValue = globalRangeSelect.value;
+        // Debounce to prevent excessive API calls
+        clearTimeout(rangeChangeTimeout);
+        rangeChangeTimeout = setTimeout(() => {
+            const globalValue = globalRangeSelect.value;
 
-        // Update all local selectors that are using global default
-        const localSelectors = document.querySelectorAll('.local-range-select');
-        localSelectors.forEach(selector => {
-            if (selector.dataset.usesGlobal === 'true') {
-                selector.value = globalValue;
+            // Update all local selectors that are using global default
+            const localSelectors = document.querySelectorAll('.local-range-select');
+            localSelectors.forEach(selector => {
+                if (selector.dataset.usesGlobal === 'true') {
+                    selector.value = globalValue;
 
-                // For HTMX-enabled selectors, trigger the HTMX request
-                if (selector.hasAttribute('hx-get')) {
-                    if (typeof htmx !== 'undefined') {
-                        htmx.trigger(selector, 'change');
-                    }
-                } else {
-                    // For chart selectors, directly call update functions
-                    if (selector.id === 'query-type-range') {
-                        updateQueryTypeChart();
-                    } else if (selector.id === 'top-allowed-range' || selector.id === 'top-blocked-range') {
-                        updateTopDomainsCharts();
+                    // For HTMX-enabled selectors, trigger the HTMX request
+                    if (selector.hasAttribute('hx-get')) {
+                        if (typeof htmx !== 'undefined') {
+                            htmx.trigger(selector, 'change');
+                        }
+                    } else {
+                        // For chart selectors, directly call update functions
+                        if (selector.id === 'query-type-range') {
+                            updateQueryTypeChart();
+                        } else if (selector.id === 'top-allowed-range' || selector.id === 'top-blocked-range') {
+                            updateTopDomainsCharts();
+                        }
                     }
                 }
-            }
-        });
+            });
+        }, 150); // 150ms debounce
     });
 }
 
