@@ -87,7 +87,7 @@ func TestSQLiteStorage_GetRecentQueries(t *testing.T) {
 			(timestamp, client_ip, domain, query_type, response_code, blocked, cached, response_time_ms)
 			VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 		`,
-			time.Now().Add(-time.Duration(i)*time.Minute),
+			FormatTimestamp(time.Now().Add(-time.Duration(i)*time.Minute)),
 			"192.168.1.1",
 			"example.com",
 			"A",
@@ -133,7 +133,7 @@ func TestSQLiteStorage_BlockTracePersistence(t *testing.T) {
 		(timestamp, client_ip, domain, query_type, response_code, blocked, cached, response_time_ms, upstream, block_trace)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`,
-		time.Now(),
+		FormatTimestamp(time.Now()),
 		"192.168.1.50",
 		"blocked.example.com",
 		"A",
@@ -267,7 +267,7 @@ func TestSQLiteStorage_GetStatistics(t *testing.T) {
 			INSERT INTO queries
 			(timestamp, client_ip, domain, query_type, response_code, blocked, cached, response_time_ms)
 			VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-		`, time.Now(), "192.168.1.1", td.domain, "A", 0, td.blocked, td.cached, td.respTime)
+		`, FormatTimestamp(time.Now()), "192.168.1.1", td.domain, "A", 0, td.blocked, td.cached, td.respTime)
 		if err != nil {
 			t.Fatalf("Failed to insert test data: %v", err)
 		}
@@ -334,7 +334,7 @@ func TestSQLiteStorage_GetTimeSeriesStats(t *testing.T) {
 				INSERT INTO queries
 				(timestamp, client_ip, domain, query_type, response_code, blocked, cached, response_time_ms)
 				VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-			`, bucket.timestamp.Add(time.Duration(i)*time.Minute),
+			`, FormatTimestamp(bucket.timestamp.Add(time.Duration(i)*time.Minute)),
 				"10.0.0.1",
 				fmt.Sprintf("example-%d.com", i),
 				"A",
@@ -456,7 +456,7 @@ func TestSQLiteStorage_GetQueryTypeStatsSince(t *testing.T) {
 			(timestamp, client_ip, domain, query_type, response_code, blocked, cached, response_time_ms)
 			VALUES (?, ?, ?, ?, ?, 0, 0, 5)
 		`,
-			s.at,
+			FormatTimestamp(s.at),
 			"198.51.100.1",
 			fmt.Sprintf("old%d.example", idx),
 			s.qtype,
@@ -655,7 +655,7 @@ func TestSQLiteStorage_GetBlockedCount(t *testing.T) {
 			INSERT INTO queries
 			(timestamp, client_ip, domain, query_type, response_code, blocked, cached, response_time_ms)
 			VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-		`, now, "192.168.1.1", "example.com", "A", 0, blocked, false, 10)
+		`, FormatTimestamp(now), "192.168.1.1", "example.com", "A", 0, blocked, false, 10)
 		if err != nil {
 			t.Fatalf("Failed to insert test data: %v", err)
 		}
@@ -688,7 +688,7 @@ func TestSQLiteStorage_GetQueryCount(t *testing.T) {
 			INSERT INTO queries
 			(timestamp, client_ip, domain, query_type, response_code, blocked, cached, response_time_ms)
 			VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-		`, now, "192.168.1.1", "example.com", "A", 0, false, false, 10)
+		`, FormatTimestamp(now), "192.168.1.1", "example.com", "A", 0, false, false, 10)
 		if err != nil {
 			t.Fatalf("Failed to insert test data: %v", err)
 		}

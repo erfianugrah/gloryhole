@@ -295,7 +295,7 @@ func (s *SQLiteStorage) flushBatch(queries []*QueryLog) error {
 		}
 
 		_, err := stmt.Exec(
-			query.Timestamp,
+			FormatTimestamp(query.Timestamp),
 			query.ClientIP,
 			query.Domain,
 			query.QueryType,
@@ -434,6 +434,11 @@ func (s *SQLiteStorage) GetQueriesByClientIP(ctx context.Context, clientIP strin
 	return scanQueryLogs(rows)
 }
 
+// FormatTimestamp converts a time.Time to RFC3339Nano format for SQLite compatibility
+func FormatTimestamp(t time.Time) string {
+	return t.Format(time.RFC3339Nano)
+}
+
 // GetStatistics returns query statistics since a given time
 func (s *SQLiteStorage) GetStatistics(ctx context.Context, since time.Time) (*Statistics, error) {
 	s.mu.RLock()
@@ -458,7 +463,7 @@ func (s *SQLiteStorage) GetStatistics(ctx context.Context, since time.Time) (*St
 			AVG(response_time_ms) as avg_response_time
 		FROM queries
 		WHERE timestamp >= ?
-	`, since).Scan(
+	`, FormatTimestamp(since)).Scan(
 		&stats.TotalQueries,
 		&stats.BlockedQueries,
 		&stats.CachedQueries,
@@ -510,7 +515,7 @@ func (s *SQLiteStorage) GetTopDomains(ctx context.Context, limit int, blocked bo
 	// Add time filter if since is not zero
 	if !since.IsZero() {
 		query += ` AND timestamp >= ?`
-		args = append(args, since)
+		args = append(args, FormatTimestamp(since))
 	}
 
 	query += `
@@ -567,7 +572,7 @@ func (s *SQLiteStorage) GetBlockedCount(ctx context.Context, since time.Time) (i
 	var count int64
 	err := s.db.QueryRowContext(ctx, `
 		SELECT COUNT(*) FROM queries WHERE blocked = 1 AND timestamp >= ?
-	`, since).Scan(&count)
+	`, FormatTimestamp(since)).Scan(&count)
 
 	if err != nil {
 		return 0, fmt.Errorf("%w: %v", ErrQueryFailed, err)
@@ -588,7 +593,7 @@ func (s *SQLiteStorage) GetQueryCount(ctx context.Context, since time.Time) (int
 	var count int64
 	err := s.db.QueryRowContext(ctx, `
 		SELECT COUNT(*) FROM queries WHERE timestamp >= ?
-	`, since).Scan(&count)
+	`, FormatTimestamp(since)).Scan(&count)
 
 	if err != nil {
 		return 0, fmt.Errorf("%w: %v", ErrQueryFailed, err)
@@ -621,7 +626,7 @@ func (s *SQLiteStorage) GetTimeSeriesStats(ctx context.Context, bucket time.Dura
 	rows, err := s.db.QueryContext(ctx, `
 		WITH bucketed AS (
 			SELECT
-				datetime((strftime('%s', replace(substr(timestamp, 1, 19), 'T', ' ')) / ?) * ?, 'unixepoch') AS bucket_start,
+				strftime('%Y-%m-%d %H:%M:%S', datetime((strftime('%s', timestamp) / ?) * ?, 'unixepoch')) AS bucket_start,
 				blocked,
 				cached,
 				response_time_ms
@@ -637,7 +642,7 @@ func (s *SQLiteStorage) GetTimeSeriesStats(ctx context.Context, bucket time.Dura
 		FROM bucketed
 		GROUP BY bucket_start
 		ORDER BY bucket_start ASC
-	`, bucketSeconds, bucketSeconds, start)
+	`, bucketSeconds, bucketSeconds, FormatTimestamp(start))
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrQueryFailed, err)
 	}
@@ -721,7 +726,7 @@ func (s *SQLiteStorage) GetQueryTypeStats(ctx context.Context, limit int, since 
 	args := make([]any, 0, 2)
 	if !since.IsZero() {
 		query += " WHERE timestamp >= ?"
-		args = append(args, since.UTC())
+		args = append(args, FormatTimestamp(since.UTC()))
 	}
 
 	query += `
@@ -811,12 +816,12 @@ func (s *SQLiteStorage) GetQueriesFiltered(ctx context.Context, filter QueryFilt
 
 	if !filter.Start.IsZero() {
 		conditions = append(conditions, "timestamp >= ?")
-		args = append(args, filter.Start)
+		args = append(args, FormatTimestamp(filter.Start))
 	}
 
 	if !filter.End.IsZero() {
 		conditions = append(conditions, "timestamp <= ?")
-		args = append(args, filter.End)
+		args = append(args, FormatTimestamp(filter.End))
 	}
 
 	if len(conditions) > 0 {
