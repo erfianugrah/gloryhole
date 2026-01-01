@@ -365,11 +365,32 @@ function createDomainBarConfig(color) {
             responsive: true,
             maintainAspectRatio: false,
             plugins: {
-                legend: { display: false }
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        // Show full domain in tooltip
+                        title: function(context) {
+                            return context[0].label;
+                        }
+                    }
+                }
             },
             scales: {
                 x: {
-                    ticks: { autoSkip: false }
+                    ticks: {
+                        autoSkip: false,
+                        maxRotation: 45,
+                        minRotation: 45,
+                        // Truncate long domain names
+                        callback: function(value, index, ticks) {
+                            const label = this.getLabelForValue(value);
+                            const maxLength = 20;
+                            if (label.length > maxLength) {
+                                return label.substring(0, maxLength) + '...';
+                            }
+                            return label;
+                        }
+                    }
                 },
                 y: {
                     beginAtZero: true,
@@ -473,9 +494,17 @@ export function setupGlobalRangeSelector() {
             if (selector.dataset.usesGlobal === 'true') {
                 selector.value = globalValue;
 
-                // Trigger change event to update the chart/list
-                const changeEvent = new Event('change', { bubbles: true });
-                selector.dispatchEvent(changeEvent);
+                // For HTMX-enabled selectors, trigger the HTMX request
+                if (selector.hasAttribute('hx-get')) {
+                    // Use htmx.trigger to trigger the HTMX request
+                    if (typeof htmx !== 'undefined') {
+                        htmx.trigger(selector, 'change');
+                    }
+                } else {
+                    // For regular selectors (charts), trigger change event
+                    const changeEvent = new Event('change', { bubbles: true });
+                    selector.dispatchEvent(changeEvent);
+                }
             }
         });
     });
