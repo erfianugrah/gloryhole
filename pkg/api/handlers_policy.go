@@ -442,8 +442,15 @@ func (s *Server) persistPoliciesConfig(mutator func(cfg *config.Config) error) e
 		return fmt.Errorf("failed to save config: %w", err)
 	}
 
-	// Update in-memory snapshot when watcher is not running
-	if s.configWatcher == nil {
+	// Force reload config from disk to update in-memory cache
+	// (fsnotify may not work reliably in all environments like WSL)
+	if s.configWatcher != nil {
+		if err := s.configWatcher.Reload(); err != nil {
+			s.logger.Warn("Failed to reload config after persist", "error", err)
+			// Don't fail - the file was saved successfully
+		}
+	} else {
+		// Update in-memory snapshot when watcher is not running
 		s.configSnapshot = cloned
 	}
 

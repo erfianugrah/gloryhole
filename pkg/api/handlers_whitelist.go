@@ -394,7 +394,20 @@ func (s *Server) persistWhitelistConfig(mutator func(cfg *config.Config) error) 
 	}
 
 	// Write to disk
-	return config.Save(s.configPath, cloned)
+	if err := config.Save(s.configPath, cloned); err != nil {
+		return err
+	}
+
+	// Force reload config from disk to update in-memory cache
+	// (fsnotify may not work reliably in all environments like WSL)
+	if s.configWatcher != nil {
+		if err := s.configWatcher.Reload(); err != nil {
+			s.logger.Warn("Failed to reload config after persist", "error", err)
+			// Don't fail - the file was saved successfully
+		}
+	}
+
+	return nil
 }
 
 // isPattern checks if a domain string contains pattern characters

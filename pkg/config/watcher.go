@@ -108,6 +108,11 @@ func (w *Watcher) Start(ctx context.Context) error {
 	}
 }
 
+// Reload reloads the configuration from file (exported for use after config persistence)
+func (w *Watcher) Reload() error {
+	return w.reload()
+}
+
 // reload reloads the configuration from file
 func (w *Watcher) reload() error {
 	// Load new config

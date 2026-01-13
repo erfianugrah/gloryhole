@@ -192,9 +192,13 @@ func main() {
 				// Pattern (wildcard or regex)
 				patterns = append(patterns, entry)
 			} else {
-				// Exact match
+				// Exact match - ensure FQDN format with trailing dot
 				exactMatches = append(exactMatches, entry)
-				whitelistMap[entry] = struct{}{}
+				fqdn := entry
+				if !strings.HasSuffix(fqdn, ".") {
+					fqdn = fqdn + "."
+				}
+				whitelistMap[fqdn] = struct{}{}
 			}
 		}
 		// Store whitelist map atomically
@@ -704,9 +708,13 @@ func main() {
 					// Pattern (wildcard or regex)
 					patterns = append(patterns, entry)
 				} else {
-					// Exact match
+					// Exact match - ensure FQDN format with trailing dot
 					exactMatches = append(exactMatches, entry)
-					newWhitelist[entry] = struct{}{}
+					fqdn := entry
+					if !strings.HasSuffix(fqdn, ".") {
+						fqdn = fqdn + "."
+					}
+					newWhitelist[fqdn] = struct{}{}
 				}
 			}
 			// Atomically replace whitelist map (race-free)
