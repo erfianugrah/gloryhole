@@ -33,23 +33,19 @@ func TestServeDNS_BlocklistManagerPath(t *testing.T) {
 	mgr := blocklist.NewManager(cfg, logger, nil, nil)
 	handler.SetBlocklistManager(mgr)
 
-	// Also add to whitelist to test override
-	whitelist := map[string]struct{}{"whitelisted.example.com.": {}}
-	handler.Whitelist.Store(&whitelist)
-
 	w := &mockResponseWriter{
 		remoteAddr: &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 12345},
 	}
 
 	req := new(dns.Msg)
-	req.SetQuestion("whitelisted.example.com.", dns.TypeA)
+	req.SetQuestion("example.com.", dns.TypeA)
 
 	handler.ServeDNS(context.Background(), w, req)
 
 	if w.msg == nil {
 		t.Fatal("Expected response message")
 	}
-	// Should not be blocked since it's whitelisted
+	// Should return NXDOMAIN (no upstream)
 	if w.msg.Rcode != dns.RcodeNameError {
 		t.Errorf("Expected NXDOMAIN (no upstream), got %d", w.msg.Rcode)
 	}

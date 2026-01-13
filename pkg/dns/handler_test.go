@@ -68,31 +68,6 @@ func TestServeDNS_BlockedDomain(t *testing.T) {
 	}
 }
 
-func TestServeDNS_WhitelistedDomain(t *testing.T) {
-	handler := NewHandler()
-	handler.Blocklist["example.com."] = struct{}{}
-	whitelist := map[string]struct{}{"example.com.": {}}
-	handler.Whitelist.Store(&whitelist)
-
-	w := &mockResponseWriter{
-		remoteAddr: &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 12345},
-	}
-
-	r := new(dns.Msg)
-	r.SetQuestion("example.com.", dns.TypeA)
-
-	handler.ServeDNS(context.Background(), w, r)
-
-	if w.msg == nil {
-		t.Fatal("Expected response message")
-	}
-	// Should not be blocked because it's whitelisted
-	// Will return NXDOMAIN because no override is set (no upstream yet)
-	if w.msg.Rcode != dns.RcodeNameError {
-		t.Errorf("Expected RcodeNameError (no upstream), got %d", w.msg.Rcode)
-	}
-}
-
 func TestServeDNS_LocalOverride_A(t *testing.T) {
 	handler := NewHandler()
 	handler.Overrides["nas.local."] = net.ParseIP("192.168.1.100")
@@ -241,9 +216,6 @@ func TestNewHandler(t *testing.T) {
 	}
 	if handler.Blocklist == nil {
 		t.Error("Blocklist not initialized")
-	}
-	if handler.Whitelist.Load() == nil {
-		t.Error("Whitelist not initialized")
 	}
 	if handler.Overrides == nil {
 		t.Error("Overrides not initialized")

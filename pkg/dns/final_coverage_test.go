@@ -128,33 +128,6 @@ func TestServeDNS_CNAMEQueryWithoutCNAME(t *testing.T) {
 	}
 }
 
-// TestServeDNS_LegacyPathWhitelistNotBlocked tests whitelist in legacy path
-func TestServeDNS_LegacyPathWhitelistNotBlocked(t *testing.T) {
-	handler := NewHandler()
-
-	// Use legacy path (no BlocklistManager)
-	handler.Blocklist["blocked.example.com."] = struct{}{}
-	whitelist := map[string]struct{}{"blocked.example.com.": {}} // Also whitelisted
-	handler.Whitelist.Store(&whitelist)
-
-	w := &mockResponseWriter{
-		remoteAddr: &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 12345},
-	}
-
-	req := new(dns.Msg)
-	req.SetQuestion("blocked.example.com.", dns.TypeA)
-
-	handler.ServeDNS(context.Background(), w, req)
-
-	if w.msg == nil {
-		t.Fatal("Expected response message")
-	}
-	// Whitelist should override blocklist
-	if w.msg.Rcode != dns.RcodeNameError {
-		t.Errorf("Expected NXDOMAIN (no forwarder), got %d", w.msg.Rcode)
-	}
-}
-
 // TestServeDNS_LegacyPathIPv4OverrideTypeMismatch tests IPv4 override type mismatch in legacy path
 func TestServeDNS_LegacyPathIPv4OverrideTypeMismatch(t *testing.T) {
 	handler := NewHandler()

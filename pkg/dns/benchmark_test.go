@@ -82,37 +82,6 @@ func BenchmarkHandler_BlocklistBlock(b *testing.B) {
 	}
 }
 
-// BenchmarkHandler_WhitelistBypass benchmarks whitelist bypass
-func BenchmarkHandler_WhitelistBypass(b *testing.B) {
-	handler := NewHandler()
-	handler.Blocklist["test.com."] = struct{}{}
-	whitelist := map[string]struct{}{"test.com.": {}}
-	handler.Whitelist.Store(&whitelist)
-
-	// Create minimal forwarder for bypass
-	cfg := &config.Config{
-		UpstreamDNSServers: []string{"1.1.1.1:53"},
-	}
-	logger, _ := logging.New(&config.LoggingConfig{
-		Level:  "error",
-		Format: "text",
-		Output: "stdout",
-	})
-	fwd := forwarder.NewForwarder(cfg, logger)
-	handler.SetForwarder(fwd)
-
-	msg := new(dns.Msg)
-	msg.SetQuestion("test.com.", dns.TypeA)
-
-	writer := &mockResponseWriter{remoteAddr: &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 12345}}
-	ctx := context.Background()
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		handler.ServeDNS(ctx, writer, msg)
-	}
-}
-
 // BenchmarkHandler_CacheHit benchmarks cache hit performance
 func BenchmarkHandler_CacheHit(b *testing.B) {
 	handler := NewHandler()
@@ -204,83 +173,6 @@ func BenchmarkHandler_FullStack(b *testing.B) {
 	msg.SetQuestion("local.test.", dns.TypeA)
 
 	writer := &mockResponseWriter{remoteAddr: &net.UDPAddr{IP: net.ParseIP("192.168.1.100"), Port: 12345}}
-	ctx := context.Background()
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		handler.ServeDNS(ctx, writer, msg)
-	}
-}
-
-// BenchmarkWhitelistBlocklistLookups measures lookup performance across large blocklists/whitelists.
-func BenchmarkWhitelistBlocklistLookups(b *testing.B) {
-	testCases := []struct {
-		name              string
-		blocklistSize     int
-		whitelistSize     int
-		targetWhitelisted bool
-		targetBlocked     bool
-	}{
-		{
-			name:          "blocklist_hit_100k",
-			blocklistSize: 100_000,
-			targetBlocked: true,
-		},
-		{
-			name:              "whitelist_bypass_100k_10k",
-			blocklistSize:     100_000,
-			whitelistSize:     10_000,
-			targetWhitelisted: true,
-			targetBlocked:     true,
-		},
-		{
-			name:              "whitelist_bypass_500k_50k",
-			blocklistSize:     500_000,
-			whitelistSize:     50_000,
-			targetWhitelisted: true,
-			targetBlocked:     true,
-		},
-	}
-
-	for _, tc := range testCases {
-		b.Run(tc.name, func(b *testing.B) {
-			benchmarkLookupScenario(b, tc)
-		})
-	}
-}
-
-type whitelistBenchCase struct {
-	name              string
-	blocklistSize     int
-	whitelistSize     int
-	targetWhitelisted bool
-	targetBlocked     bool
-}
-
-func benchmarkLookupScenario(b *testing.B, tc whitelistBenchCase) {
-	const targetDomain = "bench-target.test."
-	handler := NewHandler()
-	handler.SetBlocklistManager(newBenchmarkBlocklistManager(tc.blocklistSize, tc.targetBlocked, targetDomain))
-
-	if tc.whitelistSize > 0 || tc.targetWhitelisted {
-		whitelist := make(map[string]struct{}, tc.whitelistSize+1)
-		for i := 0; i < tc.whitelistSize; i++ {
-			domain := fmt.Sprintf("whitelist-bench-%d.test.", i)
-			whitelist[domain] = struct{}{}
-		}
-		if tc.targetWhitelisted {
-			whitelist[targetDomain] = struct{}{}
-		}
-		handler.Whitelist.Store(&whitelist)
-	}
-
-	localMgr := localrecords.NewManager()
-	_ = localMgr.AddRecord(localrecords.NewARecord(targetDomain, net.ParseIP("10.10.10.10")))
-	handler.SetLocalRecords(localMgr)
-
-	msg := new(dns.Msg)
-	msg.SetQuestion(targetDomain, dns.TypeA)
-	writer := &mockResponseWriter{remoteAddr: &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 5353}}
 	ctx := context.Background()
 
 	b.ResetTimer()

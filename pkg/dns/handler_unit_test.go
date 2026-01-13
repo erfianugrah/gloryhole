@@ -326,45 +326,6 @@ func TestServeDNS_PolicyEngineAllow(t *testing.T) {
 	// Just verify it made it past the blocklist check.
 }
 
-func TestServeDNS_WhitelistBypass(t *testing.T) {
-	handler := NewHandler()
-
-	// Add to both blocklist and whitelist
-	handler.Blocklist["whitelisted.test."] = struct{}{}
-	whitelist := map[string]struct{}{"whitelisted.test.": {}}
-	handler.Whitelist.Store(&whitelist)
-
-	// Setup forwarder
-	logger, _ := logging.New(&config.LoggingConfig{
-		Level:  "error",
-		Format: "text",
-		Output: "stdout",
-	})
-	cfg := &config.Config{
-		UpstreamDNSServers: []string{"8.8.8.8:53"},
-	}
-	handler.SetForwarder(forwarder.NewForwarder(cfg, logger))
-
-	req := new(dns.Msg)
-	req.SetQuestion("whitelisted.test.", dns.TypeA)
-
-	w := &mockResponseWriter{
-		remoteAddr: &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 12345},
-	}
-
-	ctx := context.Background()
-	handler.ServeDNS(ctx, w, req)
-
-	// Should forward to upstream, not block
-	// Note: The actual response depends on upstream
-	// The key test is: it attempted to forward rather than blocking immediately
-	if w.msg == nil {
-		t.Fatal("Expected response")
-	}
-
-	// If whitelist is working, it made it past the blocklist check
-}
-
 func TestServeDNS_LocalRecord_AAAA(t *testing.T) {
 	handler := NewHandler()
 	mgr := localrecords.NewManager()
