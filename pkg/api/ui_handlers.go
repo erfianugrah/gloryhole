@@ -24,22 +24,20 @@ var staticFS embed.FS
 
 // UI templates grouped per page/partial to prevent block collisions.
 var (
-	dashboardTemplate                   *template.Template
-	queriesTemplate                     *template.Template
-	policiesTemplate                    *template.Template
-	whitelistTemplate                   *template.Template
-	localrecordsTemplate                *template.Template
+	dashboardTemplate             *template.Template
+	queriesTemplate               *template.Template
+	policiesTemplate              *template.Template
+	localrecordsTemplate          *template.Template
 	conditionalforwardingTemplate       *template.Template
 	settingsTemplate                    *template.Template
 	clientsTemplate                     *template.Template
 	blocklistsTemplate                  *template.Template
 	loginTemplate                       *template.Template
 	statsPartialTemplate                *template.Template
-	queriesPartialTemplate              *template.Template
-	topDomainsTemplate                  *template.Template
-	policiesPartialTemplate             *template.Template
-	whitelistPartialTemplate            *template.Template
-	localRecordsPartialTemplate         *template.Template
+	queriesPartialTemplate      *template.Template
+	topDomainsTemplate          *template.Template
+	policiesPartialTemplate     *template.Template
+	localRecordsPartialTemplate *template.Template
 	conditionalForwardingPartialTemplate *template.Template
 	clientsPartialTemplate              *template.Template
 )
@@ -108,9 +106,6 @@ func initTemplates() error {
 	if policiesTemplate, err = parsePage("policies.html"); err != nil {
 		return err
 	}
-	if whitelistTemplate, err = parsePage("whitelist.html"); err != nil {
-		return err
-	}
 	if localrecordsTemplate, err = parsePage("localrecords.html"); err != nil {
 		return err
 	}
@@ -147,9 +142,6 @@ func initTemplates() error {
 		return err
 	}
 	if policiesPartialTemplate, err = parseStandalone("policies_partial.html"); err != nil {
-		return err
-	}
-	if whitelistPartialTemplate, err = parseStandalone("whitelist_partial.html"); err != nil {
 		return err
 	}
 	if localRecordsPartialTemplate, err = parseStandalone("localrecords_partial.html"); err != nil {
@@ -390,26 +382,6 @@ func (s *Server) handlePoliciesPage(w http.ResponseWriter, r *http.Request) {
 
 	if err := policiesTemplate.ExecuteTemplate(w, "policies.html", data); err != nil {
 		s.logger.Error("Failed to render policies template", "error", err)
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-		return
-	}
-}
-
-// handleWhitelistPage serves the whitelist management page
-func (s *Server) handleWhitelistPage(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	data := struct {
-		Version string
-	}{
-		Version: s.uiVersion(),
-	}
-
-	if err := whitelistTemplate.ExecuteTemplate(w, "whitelist.html", data); err != nil {
-		s.logger.Error("Failed to render whitelist template", "error", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}

@@ -21,7 +21,6 @@ import (
 	"glory-hole/pkg/forwarder"
 	"glory-hole/pkg/localrecords"
 	"glory-hole/pkg/logging"
-	"glory-hole/pkg/pattern"
 	"glory-hole/pkg/policy"
 	"glory-hole/pkg/resolver"
 	"glory-hole/pkg/storage"
@@ -43,6 +42,64 @@ var (
 	buildTime = "unknown" // Set via -ldflags "-X main.buildTime=$(date)"
 	gitCommit = "unknown" // Set via -ldflags "-X main.gitCommit=$(git rev-parse --short HEAD)"
 )
+
+// migrateWhitelistToPolicies converts whitelist entries to ALLOW policies and removes the whitelist.
+// This is a one-time migration that runs on startup if whitelist entries exist.
+func migrateWhitelistToPolicies(cfg *config.Config, configPath string, logger *logging.Logger) bool {
+	if len(cfg.Whitelist) == 0 {
+		return false
+	}
+
+	logger.Info("Migrating whitelist entries to policies", "count", len(cfg.Whitelist))
+
+	for _, entry := range cfg.Whitelist {
+		var logic string
+		var name string
+
+		if strings.HasPrefix(entry, "*.") {
+			// Wildcard pattern: *.example.com
+			// Match the base domain and all subdomains
+			baseDomain := strings.TrimPrefix(entry, "*.")
+			logic = fmt.Sprintf(`Domain == "%s" || DomainEndsWith(Domain, ".%s")`, baseDomain, baseDomain)
+			name = fmt.Sprintf("Allow *.%s (migrated)", baseDomain)
+		} else if strings.ContainsAny(entry, "()[]{}^$|\\+?") {
+			// Regex pattern
+			logic = fmt.Sprintf(`DomainMatches(Domain, "%s")`, entry)
+			name = fmt.Sprintf("Allow pattern %s (migrated)", entry)
+		} else {
+			// Exact match
+			logic = fmt.Sprintf(`Domain == "%s"`, entry)
+			name = fmt.Sprintf("Allow %s (migrated)", entry)
+		}
+
+		// Create the policy rule
+		rule := config.PolicyRuleEntry{
+			Name:    name,
+			Logic:   logic,
+			Action:  "ALLOW",
+			Enabled: true,
+		}
+
+		cfg.Policy.Rules = append(cfg.Policy.Rules, rule)
+		cfg.Policy.Enabled = true
+	}
+
+	// Clear whitelist
+	migratedCount := len(cfg.Whitelist)
+	cfg.Whitelist = nil
+
+	// Save the updated config
+	if err := config.Save(configPath, cfg); err != nil {
+		logger.Error("Failed to save migrated config", "error", err)
+		return false
+	}
+
+	logger.Info("Whitelist migration complete",
+		"migrated", migratedCount,
+		"new_policies", migratedCount)
+
+	return true
+}
 
 func main() {
 	// Check for subcommands before flag parsing
@@ -180,49 +237,10 @@ func main() {
 		}
 	}
 
-	// Load whitelist if configured
-	if len(cfg.Whitelist) > 0 {
-		var exactMatches []string
-		var patterns []string
-
-		// Separate exact matches from patterns
-		whitelistMap := make(map[string]struct{})
-		for _, entry := range cfg.Whitelist {
-			if strings.HasPrefix(entry, "*.") || strings.ContainsAny(entry, "()[]{}^$|\\+?") {
-				// Pattern (wildcard or regex)
-				patterns = append(patterns, entry)
-			} else {
-				// Exact match - ensure FQDN format with trailing dot
-				exactMatches = append(exactMatches, entry)
-				fqdn := entry
-				if !strings.HasSuffix(fqdn, ".") {
-					fqdn = fqdn + "."
-				}
-				whitelistMap[fqdn] = struct{}{}
-			}
-		}
-		// Store whitelist map atomically
-		handler.Whitelist.Store(&whitelistMap)
-
-		// Load whitelist patterns
-		if len(patterns) > 0 {
-			matcher, parseErr := pattern.NewMatcher(patterns)
-			if parseErr != nil {
-				logger.Error("Failed to parse whitelist patterns", "error", parseErr)
-			} else {
-				handler.WhitelistPatterns.Store(matcher)
-				stats := matcher.Stats()
-				logger.Info("Whitelist patterns loaded",
-					"wildcard", stats["wildcard"],
-					"regex", stats["regex"],
-					"total_patterns", len(patterns))
-			}
-		}
-
-		logger.Info("Whitelist loaded",
-			"exact", len(exactMatches),
-			"patterns", len(patterns),
-			"total", len(cfg.Whitelist))
+	// Migrate whitelist entries to policies (one-time migration)
+	if migrateWhitelistToPolicies(cfg, *configPath, logger) {
+		// Migration happened - reload config to get the updated version
+		cfg = cfgWatcher.Config()
 	}
 
 	// Initialize storage (database for query logging)
@@ -692,55 +710,6 @@ func main() {
 				handler.RuleEvaluator = nil
 				logger.Info("Conditional forwarding disabled")
 			}
-		}
-
-		// Hot-reload whitelist if changed
-		if !equalStringSlice(cfg.Whitelist, newCfg.Whitelist) {
-			logger.Info("Whitelist configuration changed")
-
-			var exactMatches []string
-			var patterns []string
-
-			// Separate exact matches from patterns
-			newWhitelist := make(map[string]struct{})
-			for _, entry := range newCfg.Whitelist {
-				if strings.HasPrefix(entry, "*.") || strings.ContainsAny(entry, "()[]{}^$|\\+?") {
-					// Pattern (wildcard or regex)
-					patterns = append(patterns, entry)
-				} else {
-					// Exact match - ensure FQDN format with trailing dot
-					exactMatches = append(exactMatches, entry)
-					fqdn := entry
-					if !strings.HasSuffix(fqdn, ".") {
-						fqdn = fqdn + "."
-					}
-					newWhitelist[fqdn] = struct{}{}
-				}
-			}
-			// Atomically replace whitelist map (race-free)
-			handler.Whitelist.Store(&newWhitelist)
-
-			// Reload whitelist patterns
-			if len(patterns) > 0 {
-				matcher, err := pattern.NewMatcher(patterns)
-				if err != nil {
-					logger.Error("Failed to parse whitelist patterns during hot-reload", "error", err)
-				} else {
-					handler.WhitelistPatterns.Store(matcher)
-					stats := matcher.Stats()
-					logger.Info("Whitelist patterns reloaded",
-						"wildcard", stats["wildcard"],
-						"regex", stats["regex"])
-				}
-			} else {
-				// Clear patterns if none configured
-				handler.WhitelistPatterns.Store(nil)
-			}
-
-			logger.Info("Whitelist reloaded",
-				"exact", len(exactMatches),
-				"patterns", len(patterns),
-				"total", len(newCfg.Whitelist))
 		}
 
 		// Hot-reload local records if changed

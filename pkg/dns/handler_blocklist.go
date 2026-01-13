@@ -21,15 +21,6 @@ func (h *Handler) handleFastBlocklistPath(ctx context.Context, w dns.ResponseWri
 	blockMatch := h.BlocklistManager.Match(domain)
 	blocked := blockMatch.Blocked
 
-	if h.isDomainWhitelisted(domain) {
-		blocked = false
-		blockMatch = blocklist.MatchResult{}
-		// Record whitelisted query metric
-		if h.Metrics != nil && h.Metrics.DNSWhitelistedQueries != nil {
-			h.Metrics.DNSWhitelistedQueries.Add(ctx, 1)
-		}
-	}
-
 	overrideIP, hasOverride, cnameTarget, hasCNAME := h.lookupOverrides(domain, qtype, blocked)
 
 	if blocked {
@@ -57,19 +48,9 @@ func (h *Handler) handleLegacyBlocklistPath(ctx context.Context, w dns.ResponseW
 		return false
 	}
 
-	whitelisted := h.isDomainWhitelisted(domain)
-	blocked := false
-
-	if whitelisted {
-		// Record whitelisted query metric
-		if h.Metrics != nil && h.Metrics.DNSWhitelistedQueries != nil {
-			h.Metrics.DNSWhitelistedQueries.Add(ctx, 1)
-		}
-	} else {
-		h.lookupMu.RLock()
-		_, blocked = h.Blocklist[domain]
-		h.lookupMu.RUnlock()
-	}
+	h.lookupMu.RLock()
+	_, blocked := h.Blocklist[domain]
+	h.lookupMu.RUnlock()
 
 	overrideIP, hasOverride, cnameTarget, hasCNAME := h.lookupOverrides(domain, qtype, blocked)
 
@@ -166,17 +147,3 @@ func (h *Handler) lookupOverrides(domain string, qtype uint16, blocked bool) (ne
 	return overrideIP, hasOverride, cnameTarget, hasCNAME
 }
 
-func (h *Handler) isDomainWhitelisted(domain string) bool {
-	whitelist := h.Whitelist.Load()
-	if whitelist != nil {
-		if _, ok := (*whitelist)[domain]; ok {
-			return true
-		}
-	}
-
-	patterns := h.WhitelistPatterns.Load()
-	if patterns != nil {
-		return patterns.Match(domain)
-	}
-	return false
-}

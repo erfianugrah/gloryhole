@@ -8,7 +8,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"glory-hole/pkg/blocklist"
@@ -17,7 +16,6 @@ import (
 	"glory-hole/pkg/forwarder"
 	"glory-hole/pkg/localrecords"
 	"glory-hole/pkg/logging"
-	"glory-hole/pkg/pattern"
 	"glory-hole/pkg/policy"
 	"glory-hole/pkg/storage"
 	"glory-hole/pkg/telemetry"
@@ -40,38 +38,32 @@ type KillSwitchChecker interface {
 }
 
 type Handler struct {
-	Storage           storage.Storage   // Legacy: kept for backwards compatibility
-	QueryLogger       *QueryLogger      // New: worker pool for async query logging
-	BlocklistManager  *blocklist.Manager
-	Blocklist         map[string]struct{}
-	Whitelist         atomic.Pointer[map[string]struct{}] // Exact-match whitelist (hot-reloadable)
-	WhitelistPatterns atomic.Pointer[pattern.Matcher]     // Pattern-based whitelist (wildcard/regex)
-	Overrides         map[string]net.IP
-	CNAMEOverrides    map[string]string
-	LocalRecords      *localrecords.Manager
-	PolicyEngine      *policy.Engine
-	RuleEvaluator     *forwarder.RuleEvaluator
-	Forwarder         *forwarder.Forwarder
-	Cache             cache.Interface
-	ConfigWatcher     *config.Watcher   // For kill-switch feature (hot-reload config access)
-	KillSwitch        KillSwitchChecker // For duration-based temporary disabling
-	DecisionTrace     bool
-	Metrics           *telemetry.Metrics
-	Logger            *logging.Logger
-	lookupMu          sync.RWMutex
+	Storage          storage.Storage   // Legacy: kept for backwards compatibility
+	QueryLogger      *QueryLogger      // New: worker pool for async query logging
+	BlocklistManager *blocklist.Manager
+	Blocklist        map[string]struct{}
+	Overrides        map[string]net.IP
+	CNAMEOverrides   map[string]string
+	LocalRecords     *localrecords.Manager
+	PolicyEngine     *policy.Engine
+	RuleEvaluator    *forwarder.RuleEvaluator
+	Forwarder        *forwarder.Forwarder
+	Cache            cache.Interface
+	ConfigWatcher    *config.Watcher   // For kill-switch feature (hot-reload config access)
+	KillSwitch       KillSwitchChecker // For duration-based temporary disabling
+	DecisionTrace    bool
+	Metrics          *telemetry.Metrics
+	Logger           *logging.Logger
+	lookupMu         sync.RWMutex
 }
 
 // NewHandler creates a new DNS handler
 func NewHandler() *Handler {
-	h := &Handler{
+	return &Handler{
 		Blocklist:      make(map[string]struct{}),
 		Overrides:      make(map[string]net.IP),
 		CNAMEOverrides: make(map[string]string),
 	}
-	// Initialize Whitelist with empty map
-	emptyWhitelist := make(map[string]struct{})
-	h.Whitelist.Store(&emptyWhitelist)
-	return h
 }
 
 // SetForwarder sets the upstream DNS forwarder

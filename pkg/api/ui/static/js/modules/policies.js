@@ -498,6 +498,65 @@ function quoteValue(value) {
     }
 }
 
+/**
+ * Quick Add - creates a simple domain-based policy
+ */
+export async function submitQuickAdd(event) {
+    event.preventDefault();
+
+    const form = event.target;
+    const domain = form.querySelector('#quick-domain').value.trim();
+    const action = form.querySelector('#quick-action').value;
+    const isWildcard = form.querySelector('#quick-wildcard').checked;
+
+    if (!domain) {
+        alert('Please enter a domain');
+        return;
+    }
+
+    // Build the policy logic based on domain and wildcard setting
+    let logic;
+    let policyName;
+
+    if (isWildcard) {
+        // Wildcard: match domain and all subdomains
+        // e.g., "example.com" becomes DomainEndsWith for ".example.com" OR exact match
+        const safeDomain = domain.replace(/^\*\.?/, ''); // Remove leading *. if present
+        logic = `Domain == "${safeDomain}" || DomainEndsWith(Domain, ".${safeDomain}")`;
+        policyName = `${action === 'ALLOW' ? 'Allow' : 'Block'} *.${safeDomain}`;
+    } else {
+        // Exact match only
+        logic = `Domain == "${domain}"`;
+        policyName = `${action === 'ALLOW' ? 'Allow' : 'Block'} ${domain}`;
+    }
+
+    const policy = {
+        name: policyName,
+        logic: logic,
+        action: action,
+        action_data: '',
+        enabled: true
+    };
+
+    try {
+        const response = await fetch('/api/policies', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(policy)
+        });
+
+        if (response.ok) {
+            form.reset();
+            htmx.trigger(document.body, 'policy-updated');
+        } else {
+            const error = await response.json();
+            alert('Error: ' + (error.message || 'Failed to add policy'));
+        }
+    } catch (error) {
+        alert('Error: ' + error.message);
+    }
+}
+
 // Make functions available globally for HTML onclick handlers (temporary until all handlers are migrated)
 window.showAddPolicyModal = showAddPolicyModal;
 window.showEditPolicyModal = showEditPolicyModal;
@@ -507,3 +566,4 @@ window.deletePolicy = deletePolicy;
 window.togglePolicy = togglePolicy;
 window.testPolicyRule = testPolicyRule;
 window.addPolicyCondition = addPolicyCondition;
+window.submitQuickAdd = submitQuickAdd;

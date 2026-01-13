@@ -31,6 +31,37 @@
         </div>
     </div>
 
+    <!-- Quick Add Section -->
+    <div class="quick-add-section">
+        <h3>Quick Add Domain Rule</h3>
+        <form id="quick-add-form" onsubmit="submitQuickAdd(event)" class="quick-add-form">
+            <div class="quick-add-row">
+                <div class="form-group">
+                    <label for="quick-domain">Domain</label>
+                    <input type="text" id="quick-domain" name="domain" required
+                           placeholder="example.com or *.example.com">
+                </div>
+                <div class="form-group">
+                    <label for="quick-action">Action</label>
+                    <select id="quick-action" name="action">
+                        <option value="ALLOW">Allow (bypass blocklist)</option>
+                        <option value="BLOCK">Block (return NXDOMAIN)</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="quick-wildcard" name="wildcard">
+                        <span>Wildcard (*.domain)</span>
+                    </label>
+                </div>
+                <button type="submit" class="btn btn-primary">Add Rule</button>
+            </div>
+            <small class="form-help">
+                Quick add creates a simple domain-based policy. For advanced rules with time/IP conditions, use "Add Policy" above.
+            </small>
+        </form>
+    </div>
+
     <!-- Policies List -->
     <div id="policies-container"
          hx-get="/api/policies"

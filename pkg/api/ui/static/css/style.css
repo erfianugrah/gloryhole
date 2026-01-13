@@ -1911,6 +1911,51 @@ code, .stat-value, .domain-name, pre {
     color: var(--text);
 }
 
+.quick-add-section {
+    background: var(--surface-card-gradient);
+    border-radius: 0.75rem;
+    padding: 1.5rem;
+    margin-top: 1.5rem;
+    box-shadow: var(--shadow);
+}
+
+.quick-add-section h3 {
+    font-size: 1rem;
+    font-weight: 600;
+    margin: 0 0 1rem 0;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--primary);
+}
+
+.quick-add-form .quick-add-row {
+    display: flex;
+    gap: 1rem;
+    align-items: flex-end;
+    flex-wrap: wrap;
+}
+
+.quick-add-form .form-group {
+    margin-bottom: 0;
+    flex: 1 1 200px;
+}
+
+.quick-add-form .form-group:last-of-type {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    padding-bottom: 0.25rem;
+}
+
+.quick-add-form .btn {
+    flex-shrink: 0;
+}
+
+.quick-add-form .form-help {
+    margin-top: 0.75rem;
+    display: block;
+}
+
 .policy-tester {
     display: flex;
     gap: 0.5rem;
