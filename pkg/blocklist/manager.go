@@ -30,6 +30,7 @@ type BlockEntry struct {
 // Manager manages blocklist downloads and automatic updates
 type Manager struct {
 	cfg        *config.Config
+	cfgMu      sync.RWMutex // Protects cfg access
 	downloader *Downloader
 	logger     *logging.Logger
 	metrics    *telemetry.Metrics
@@ -81,10 +82,16 @@ func (m *Manager) Start(ctx context.Context) error {
 	// Re-create stopChan if this is a restart
 	m.stopChan = make(chan struct{})
 
+	m.cfgMu.RLock()
+	blocklists := m.cfg.Blocklists
+	autoUpdate := m.cfg.AutoUpdateBlocklists
+	updateInterval := m.cfg.UpdateInterval
+	m.cfgMu.RUnlock()
+
 	m.logger.Info("Starting blocklist manager",
-		"sources", len(m.cfg.Blocklists),
-		"auto_update", m.cfg.AutoUpdateBlocklists,
-		"interval", m.cfg.UpdateInterval)
+		"sources", len(blocklists),
+		"auto_update", autoUpdate,
+		"interval", updateInterval)
 
 	// Initial download
 	if err := m.Update(ctx); err != nil {
@@ -93,8 +100,8 @@ func (m *Manager) Start(ctx context.Context) error {
 	}
 
 	// Start auto-update goroutine if enabled
-	if m.cfg.AutoUpdateBlocklists && m.cfg.UpdateInterval > 0 {
-		m.updateTicker = time.NewTicker(m.cfg.UpdateInterval)
+	if autoUpdate && updateInterval > 0 {
+		m.updateTicker = time.NewTicker(updateInterval)
 		m.wg.Add(1)
 		go m.updateLoop(ctx)
 	}
@@ -126,12 +133,16 @@ func (m *Manager) Stop() {
 
 // Update downloads all blocklists and updates the current blocklist
 func (m *Manager) Update(ctx context.Context) error {
-	if len(m.cfg.Blocklists) == 0 {
+	m.cfgMu.RLock()
+	blocklists := m.cfg.Blocklists
+	m.cfgMu.RUnlock()
+
+	if len(blocklists) == 0 {
 		m.logger.Debug("No blocklists configured")
 		return nil
 	}
 
-	m.logger.Info("Updating blocklists", "sources", len(m.cfg.Blocklists))
+	m.logger.Info("Updating blocklists", "sources", len(blocklists))
 	startTime := time.Now()
 
 	// Get old size for metrics delta
@@ -153,8 +164,12 @@ func (m *Manager) Update(ctx context.Context) error {
 	// Atomically update current blocklist (zero-copy read for all DNS queries)
 	m.current.Store(&blocklist)
 	m.lastUpdated.Store(time.Now())
+
+	m.cfgMu.RLock()
 	sourceCopy := make([]string, len(m.cfg.Blocklists))
 	copy(sourceCopy, m.cfg.Blocklists)
+	m.cfgMu.RUnlock()
+
 	if len(sourceCopy) > maxTrackedSources {
 		sourceCopy = sourceCopy[:maxTrackedSources]
 	}
@@ -191,7 +206,10 @@ func (m *Manager) Update(ctx context.Context) error {
 }
 
 func (m *Manager) downloadWithSources(ctx context.Context) (map[string]BlockEntry, error) {
+	m.cfgMu.RLock()
 	urls := m.cfg.Blocklists
+	m.cfgMu.RUnlock()
+
 	if len(urls) == 0 {
 		return make(map[string]BlockEntry), nil
 	}
@@ -244,7 +262,9 @@ func (m *Manager) SetHTTPClient(client *http.Client) {
 
 // UpdateConfig swaps the configuration reference used for future operations.
 func (m *Manager) UpdateConfig(cfg *config.Config) {
+	m.cfgMu.Lock()
 	m.cfg = cfg
+	m.cfgMu.Unlock()
 }
 
 // SetLogger updates the logger used by the manager and downloader.
@@ -405,7 +425,11 @@ func (m *Manager) sourcesFromMask(mask uint64, overflow bool) []string {
 func (m *Manager) updateLoop(ctx context.Context) {
 	defer m.wg.Done()
 
-	m.logger.Info("Blocklist auto-update loop started", "interval", m.cfg.UpdateInterval)
+	m.cfgMu.RLock()
+	updateInterval := m.cfg.UpdateInterval
+	m.cfgMu.RUnlock()
+
+	m.logger.Info("Blocklist auto-update loop started", "interval", updateInterval)
 
 	for {
 		select {

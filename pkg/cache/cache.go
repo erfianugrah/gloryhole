@@ -196,8 +196,6 @@ func (c *Cache) Set(ctx context.Context, r *dns.Msg, resp *dns.Msg) {
 	}
 
 	c.mu.Lock()
-	defer c.mu.Unlock()
-
 	// Check if we need to evict entries (LRU)
 	if len(c.entries) >= c.maxEntries {
 		c.evictLRU()
@@ -215,14 +213,13 @@ func (c *Cache) Set(ctx context.Context, r *dns.Msg, resp *dns.Msg) {
 	if c.metrics != nil && !exists {
 		c.metrics.CacheSize.Add(ctx, 1)
 	}
-
 	c.mu.Unlock()
+
 	c.logger.Debug("Cached DNS response",
 		"domain", question.Name,
 		"qtype", dns.TypeToString[question.Qtype],
 		"ttl", ttl,
 		"size", entry.size)
-	c.mu.Lock()
 }
 
 // SetBlocked stores a blocked domain response in the cache with BlockedTTL
@@ -257,8 +254,6 @@ func (c *Cache) SetBlocked(ctx context.Context, r *dns.Msg, resp *dns.Msg, trace
 	}
 
 	c.mu.Lock()
-	defer c.mu.Unlock()
-
 	// Check if we need to evict entries (LRU)
 	if len(c.entries) >= c.maxEntries {
 		c.evictLRU()
@@ -276,14 +271,13 @@ func (c *Cache) SetBlocked(ctx context.Context, r *dns.Msg, resp *dns.Msg, trace
 	if c.metrics != nil && !exists {
 		c.metrics.CacheSize.Add(ctx, 1)
 	}
-
 	c.mu.Unlock()
+
 	c.logger.Debug("Cached blocked domain response",
 		"domain", question.Name,
 		"qtype", dns.TypeToString[question.Qtype],
 		"ttl", ttl,
 		"size", entry.size)
-	c.mu.Lock()
 }
 
 // makeKey creates a cache key from domain and query type
