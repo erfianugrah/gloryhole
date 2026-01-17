@@ -36,10 +36,10 @@ type Rule struct {
 
 // Action constants
 const (
-	ActionBlock    = "BLOCK"
-	ActionAllow    = "ALLOW"
-	ActionRedirect = "REDIRECT"
-	ActionForward  = "FORWARD"
+	ActionBlock     = "BLOCK"
+	ActionAllow     = "ALLOW"
+	ActionRedirect  = "REDIRECT"
+	ActionForward   = "FORWARD"
 	ActionRateLimit = "RATE_LIMIT"
 )
 
@@ -284,6 +284,34 @@ func (e *Engine) UpdateRule(index int, rule *Rule) error {
 				return IPEquals(params[0].(string), params[1].(string)), nil
 			},
 			new(func(string, string) bool),
+		),
+		// Query type functions
+		expr.Function("QueryTypeIn",
+			func(params ...any) (any, error) {
+				queryType := params[0].(string)
+				types := make([]string, len(params)-1)
+				for i := 1; i < len(params); i++ {
+					types[i-1] = params[i].(string)
+				}
+				return QueryTypeIn(queryType, types...), nil
+			},
+		),
+		// Time functions
+		expr.Function("IsWeekend",
+			func(params ...any) (any, error) {
+				return IsWeekend(params[0].(int)), nil
+			},
+			new(func(int) bool),
+		),
+		expr.Function("InTimeRange",
+			func(params ...any) (any, error) {
+				return InTimeRange(
+					params[0].(int), params[1].(int),
+					params[2].(int), params[3].(int),
+					params[4].(int), params[5].(int),
+				), nil
+			},
+			new(func(int, int, int, int, int, int) bool),
 		),
 	)
 	if err != nil {
