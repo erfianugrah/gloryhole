@@ -327,23 +327,26 @@ func (s *SQLiteStorage) flushBatch(queries []*QueryLog) error {
 	queriesCopy := make([]*QueryLog, len(queries))
 	copy(queriesCopy, queries)
 
-	// Check if closed before sending to avoid panic on closed channel
+	// Check if closed before sending to avoid panic on closed channel.
+	// Hold the RLock during the non-blocking send to prevent Close() from
+	// closing the channel between our check and send (fixes data race).
 	s.mu.RLock()
-	closed := s.closed
-	s.mu.RUnlock()
-
-	if closed {
+	if s.closed {
+		s.mu.RUnlock()
 		// Storage closing, update synchronously if needed
 		s.updateDomainStats(queriesCopy)
 	} else {
-		// Non-blocking send to worker
+		// Non-blocking send to worker (safe: RLock held, channel can't be closed)
 		select {
 		case s.domainStatsCh <- queriesCopy:
 			// Sent to worker
 		default:
 			// Channel full, update synchronously (rare)
+			s.mu.RUnlock()
 			s.updateDomainStats(queriesCopy)
+			return nil
 		}
+		s.mu.RUnlock()
 	}
 
 	return nil
@@ -1056,6 +1059,9 @@ func (s *SQLiteStorage) Close() error {
 		return nil
 	}
 	s.closed = true
+	// Close domainStatsCh while holding the lock to prevent race with flushBatch
+	// which checks s.closed and sends to the channel under RLock
+	close(s.domainStatsCh)
 	s.mu.Unlock()
 
 	// Log buffer stats before closing
@@ -1065,9 +1071,8 @@ func (s *SQLiteStorage) Close() error {
 		"buffer_capacity", stats.Capacity,
 		"buffer_utilization_pct", fmt.Sprintf("%.1f", stats.Utilization))
 
-	// Close buffer channel and domain stats channel
+	// Close buffer channel (flush worker will drain and exit)
 	close(s.buffer)
-	close(s.domainStatsCh)
 
 	// Wait for workers to complete
 	s.wg.Wait()
