@@ -27,27 +27,27 @@ var (
 // Each shard operates independently with its own mutex, allowing concurrent access to different shards.
 // Fields ordered for optimal memory alignment
 type ShardedCache struct {
-	shards      []*CacheShard    // Slice of cache shards (24 bytes)
-	logger      *logging.Logger  // Logger instance (8 bytes)
-	stopCleanup chan struct{}    // Channel to stop cleanup (8 bytes)
-	cleanupDone chan struct{}    // Channel signaling cleanup done (8 bytes)
-	shardCount  int              // Number of shards (8 bytes)
+	shards      []*CacheShard   // Slice of cache shards (24 bytes)
+	logger      *logging.Logger // Logger instance (8 bytes)
+	stopCleanup chan struct{}   // Channel to stop cleanup (8 bytes)
+	cleanupDone chan struct{}   // Channel signaling cleanup done (8 bytes)
+	shardCount  int             // Number of shards (8 bytes)
 }
 
 // CacheShard represents a single shard of the cache with its own lock and entries.
 // Stats are tracked using atomic operations to avoid lock contention on hot paths.
 // Fields ordered for optimal memory alignment (reduces padding from 56 to 32 bytes)
 type CacheShard struct {
-	mu          sync.RWMutex              // Lock for entries map (largest field first)
-	entries     map[string]*cacheEntry    // Cache entries map
-	cfg         *config.CacheConfig       // Cache configuration
-	logger      *logging.Logger           // Logger instance
-	metrics     *telemetry.Metrics        // Metrics recorder
-	statsHits   atomic.Uint64             // Atomic counter for cache hits
-	statsMisses atomic.Uint64             // Atomic counter for cache misses
-	statsEvicts atomic.Uint64             // Atomic counter for evictions
-	statsSets   atomic.Uint64             // Atomic counter for sets
-	maxEntries  int                       // Maximum entries per shard
+	mu          sync.RWMutex           // Lock for entries map (largest field first)
+	entries     map[string]*cacheEntry // Cache entries map
+	cfg         *config.CacheConfig    // Cache configuration
+	logger      *logging.Logger        // Logger instance
+	metrics     *telemetry.Metrics     // Metrics recorder
+	statsHits   atomic.Uint64          // Atomic counter for cache hits
+	statsMisses atomic.Uint64          // Atomic counter for cache misses
+	statsEvicts atomic.Uint64          // Atomic counter for evictions
+	statsSets   atomic.Uint64          // Atomic counter for sets
+	maxEntries  int                    // Maximum entries per shard
 }
 
 // NewSharded creates a new sharded DNS cache with the specified number of shards.
@@ -160,14 +160,8 @@ func (sc *ShardedCache) GetWithTrace(ctx context.Context, r *dns.Msg) (*dns.Msg,
 		return nil, nil
 	}
 
-	// Update last access time (for LRU)
-	// Note: We keep the write lock cost here as it's less frequent than hits
-	// and ensures correct LRU behavior. Optimization: Could use atomic int64
-	// with a separate lastAccessNano field in future if profiling shows this
-	// as a bottleneck.
-	shard.mu.Lock()
-	entry.lastAccess = now
-	shard.mu.Unlock()
+	// Update last access time (for LRU) using atomic operation - no lock needed
+	atomic.StoreInt64(&entry.lastAccessNano, now.UnixNano())
 
 	sc.recordHit(shard)
 
@@ -193,10 +187,10 @@ func (sc *ShardedCache) Set(ctx context.Context, r *dns.Msg, resp *dns.Msg) {
 
 	now := time.Now()
 	entry := &cacheEntry{
-		msg:        resp.Copy(), // Deep copy to prevent mutations
-		expiresAt:  now.Add(ttl),
-		lastAccess: now,
-		size:       resp.Len(),
+		msg:            resp.Copy(), // Deep copy to prevent mutations
+		expiresAt:      now.Add(ttl),
+		lastAccessNano: now.UnixNano(),
+		size:           resp.Len(),
 	}
 
 	// Get the appropriate shard
@@ -242,11 +236,11 @@ func (sc *ShardedCache) SetBlocked(ctx context.Context, r *dns.Msg, resp *dns.Ms
 
 	now := time.Now()
 	entry := &cacheEntry{
-		msg:        resp.Copy(),
-		expiresAt:  now.Add(ttl),
-		lastAccess: now,
-		size:       resp.Len(),
-		blockTrace: cloneBlockTrace(trace),
+		msg:            resp.Copy(),
+		expiresAt:      now.Add(ttl),
+		lastAccessNano: now.UnixNano(),
+		size:           resp.Len(),
+		blockTrace:     cloneBlockTrace(trace),
 	}
 
 	// Get the appropriate shard
@@ -278,13 +272,14 @@ func (sc *ShardedCache) SetBlocked(ctx context.Context, r *dns.Msg, resp *dns.Ms
 // Must be called with write lock held.
 func (sc *ShardedCache) evictLRU(shard *CacheShard) {
 	var oldestKey string
-	var oldestTime time.Time
+	var oldestNano int64 = 0
 
 	// Find the entry with the oldest last access time
 	for key, entry := range shard.entries {
-		if oldestKey == "" || entry.lastAccess.Before(oldestTime) {
+		lastAccess := atomic.LoadInt64(&entry.lastAccessNano)
+		if oldestKey == "" || lastAccess < oldestNano {
 			oldestKey = key
-			oldestTime = entry.lastAccess
+			oldestNano = lastAccess
 		}
 	}
 

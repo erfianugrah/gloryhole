@@ -38,8 +38,8 @@ type KillSwitchChecker interface {
 }
 
 type Handler struct {
-	Storage          storage.Storage   // Legacy: kept for backwards compatibility
-	QueryLogger      *QueryLogger      // New: worker pool for async query logging
+	Storage          storage.Storage // Legacy: kept for backwards compatibility
+	QueryLogger      *QueryLogger    // New: worker pool for async query logging
 	BlocklistManager *blocklist.Manager
 	Blocklist        map[string]struct{}
 	Overrides        map[string]net.IP
@@ -163,11 +163,15 @@ func (h *Handler) serveFromCache(ctx context.Context, w dns.ResponseWriter, r, m
 // ServeDNS implements the dns.Handler interface
 func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) {
 	startTime := time.Now()
-	outcome := &serveDNSOutcome{}
+	outcome := getOutcome()
 	trace := newBlockTraceRecorder(h.DecisionTrace)
 	clientIP := getClientIP(w)
 
-	defer h.asyncLogQuery(startTime, r, clientIP, trace, outcome)
+	defer func() {
+		h.asyncLogQuery(startTime, r, clientIP, trace, outcome)
+		releaseOutcome(outcome)
+		trace.Release()
+	}()
 
 	msg := msgPool.Get().(*dns.Msg)
 	defer msgPool.Put(msg)
