@@ -321,31 +321,52 @@ func (c *Cache) determineTTL(resp *dns.Msg) time.Duration {
 	return ttl
 }
 
-// evictLRU removes the least recently used entry
-// Must be called with write lock held
+// evictLRU removes the least recently used entry using probabilistic sampling.
+// Instead of scanning all entries O(n), we sample a small number of entries
+// and evict the oldest from the sample. This provides O(1) eviction with
+// good-enough LRU approximation (similar to Redis's approach).
+// Must be called with write lock held.
 func (c *Cache) evictLRU() {
-	var oldestKey string
-	var oldestTime time.Time
+	const sampleSize = 5 // Sample 5 random entries
 
-	// Find the entry with the oldest last access time
+	type candidate struct {
+		key        string
+		lastAccess time.Time
+	}
+
+	// Sample entries from the map (Go map iteration is random)
+	var candidates [sampleSize]candidate
+	i := 0
 	for key, entry := range c.entries {
-		if oldestKey == "" || entry.lastAccess.Before(oldestTime) {
-			oldestKey = key
-			oldestTime = entry.lastAccess
+		if i >= sampleSize {
+			break
+		}
+		candidates[i] = candidate{key: key, lastAccess: entry.lastAccess}
+		i++
+	}
+
+	if i == 0 {
+		return
+	}
+
+	// Find the oldest among the samples
+	oldest := 0
+	for j := 1; j < i; j++ {
+		if candidates[j].lastAccess.Before(candidates[oldest].lastAccess) {
+			oldest = j
 		}
 	}
 
-	if oldestKey != "" {
-		delete(c.entries, oldestKey)
-		c.stats.evictions++
+	key := candidates[oldest].key
+	delete(c.entries, key)
+	c.stats.evictions++
 
-		// Record cache size decrease to Prometheus metrics if available
-		if c.metrics != nil {
-			c.metrics.CacheSize.Add(context.Background(), -1)
-		}
-
-		c.logger.Debug("Evicted LRU cache entry", "key", oldestKey)
+	// Record cache size decrease to Prometheus metrics if available
+	if c.metrics != nil {
+		c.metrics.CacheSize.Add(context.Background(), -1)
 	}
+
+	c.logger.Debug("Evicted LRU cache entry (sampled)", "key", key)
 }
 
 // cleanupLoop runs in the background to remove expired entries
