@@ -172,14 +172,8 @@ func (sc *ShardedCache) GetWithTrace(ctx context.Context, r *dns.Msg) (*dns.Msg,
 		return nil, nil
 	}
 
-	// Update last access time (for LRU)
-	// Note: We keep the write lock cost here as it's less frequent than hits
-	// and ensures correct LRU behavior. Optimization: Could use atomic int64
-	// with a separate lastAccessNano field in future if profiling shows this
-	// as a bottleneck.
-	shard.mu.Lock()
-	entry.lastAccess = now
-	shard.mu.Unlock()
+	// Update last access time (for LRU) using atomic operation - no lock needed
+	atomic.StoreInt64(&entry.lastAccessNano, now.UnixNano())
 
 	sc.recordHit(shard)
 
@@ -205,10 +199,10 @@ func (sc *ShardedCache) Set(ctx context.Context, r *dns.Msg, resp *dns.Msg) {
 
 	now := time.Now()
 	entry := &cacheEntry{
-		msg:        resp.Copy(), // Deep copy to prevent mutations
-		expiresAt:  now.Add(ttl),
-		lastAccess: now,
-		size:       resp.Len(),
+		msg:            resp.Copy(), // Deep copy to prevent mutations
+		expiresAt:      now.Add(ttl),
+		lastAccessNano: now.UnixNano(),
+		size:           resp.Len(),
 	}
 
 	// Get the appropriate shard
@@ -254,11 +248,11 @@ func (sc *ShardedCache) SetBlocked(ctx context.Context, r *dns.Msg, resp *dns.Ms
 
 	now := time.Now()
 	entry := &cacheEntry{
-		msg:        resp.Copy(),
-		expiresAt:  now.Add(ttl),
-		lastAccess: now,
-		size:       resp.Len(),
-		blockTrace: cloneBlockTrace(trace),
+		msg:            resp.Copy(),
+		expiresAt:      now.Add(ttl),
+		lastAccessNano: now.UnixNano(),
+		size:           resp.Len(),
+		blockTrace:     cloneBlockTrace(trace),
 	}
 
 	// Get the appropriate shard
@@ -290,13 +284,14 @@ func (sc *ShardedCache) SetBlocked(ctx context.Context, r *dns.Msg, resp *dns.Ms
 // Must be called with write lock held.
 func (sc *ShardedCache) evictLRU(shard *CacheShard) {
 	var oldestKey string
-	var oldestTime time.Time
+	var oldestNano int64 = 0
 
 	// Find the entry with the oldest last access time
 	for key, entry := range shard.entries {
-		if oldestKey == "" || entry.lastAccess.Before(oldestTime) {
+		lastAccess := atomic.LoadInt64(&entry.lastAccessNano)
+		if oldestKey == "" || lastAccess < oldestNano {
 			oldestKey = key
-			oldestTime = entry.lastAccess
+			oldestNano = lastAccess
 		}
 	}
 

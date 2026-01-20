@@ -31,7 +31,7 @@ type Cache struct {
 }
 
 // cacheEntry holds a cached DNS response with metadata
-// Fields ordered for optimal memory alignment (reduces padding from 72 to 64 bytes)
+// Fields ordered for optimal memory alignment
 type cacheEntry struct {
 	// Block trace metadata (for blocked responses) - 24 bytes
 	blockTrace []storage.BlockTraceEntry
@@ -39,14 +39,15 @@ type cacheEntry struct {
 	// When this entry expires (based on DNS TTL) - 16 bytes
 	expiresAt time.Time
 
-	// When this entry was last accessed (for LRU eviction) - 16 bytes
-	lastAccess time.Time
-
 	// The cached DNS response (deep copy to avoid mutations) - 8 bytes
 	msg *dns.Msg
 
 	// Size in bytes (for memory tracking) - 8 bytes
 	size int
+
+	// When this entry was last accessed (for LRU eviction) - 8 bytes
+	// Stored as UnixNano for atomic operations without lock contention on cache hits
+	lastAccessNano int64
 }
 
 // cacheStats tracks cache performance metrics using atomic operations.
@@ -158,10 +159,8 @@ func (c *Cache) GetWithTrace(ctx context.Context, r *dns.Msg) (*dns.Msg, []stora
 		return nil, nil
 	}
 
-	// Update last access time (for LRU)
-	c.mu.Lock()
-	entry.lastAccess = now
-	c.mu.Unlock()
+	// Update last access time (for LRU) using atomic operation - no lock needed
+	atomic.StoreInt64(&entry.lastAccessNano, now.UnixNano())
 
 	c.recordHit()
 
@@ -191,10 +190,10 @@ func (c *Cache) Set(ctx context.Context, r *dns.Msg, resp *dns.Msg) {
 
 	now := time.Now()
 	entry := &cacheEntry{
-		msg:        resp.Copy(), // Deep copy to prevent mutations
-		expiresAt:  now.Add(ttl),
-		lastAccess: now,
-		size:       resp.Len(),
+		msg:            resp.Copy(), // Deep copy to prevent mutations
+		expiresAt:      now.Add(ttl),
+		lastAccessNano: now.UnixNano(),
+		size:           resp.Len(),
 	}
 
 	c.mu.Lock()
@@ -250,11 +249,11 @@ func (c *Cache) SetBlocked(ctx context.Context, r *dns.Msg, resp *dns.Msg, trace
 
 	now := time.Now()
 	entry := &cacheEntry{
-		msg:        resp.Copy(), // Deep copy to prevent mutations
-		expiresAt:  now.Add(ttl),
-		lastAccess: now,
-		size:       resp.Len(),
-		blockTrace: cloneBlockTrace(trace),
+		msg:            resp.Copy(), // Deep copy to prevent mutations
+		expiresAt:      now.Add(ttl),
+		lastAccessNano: now.UnixNano(),
+		size:           resp.Len(),
+		blockTrace:     cloneBlockTrace(trace),
 	}
 
 	c.mu.Lock()
@@ -344,13 +343,14 @@ func (c *Cache) determineTTL(resp *dns.Msg) time.Duration {
 // Must be called with write lock held
 func (c *Cache) evictLRU() {
 	var oldestKey string
-	var oldestTime time.Time
+	var oldestNano int64 = 0
 
 	// Find the entry with the oldest last access time
 	for key, entry := range c.entries {
-		if oldestKey == "" || entry.lastAccess.Before(oldestTime) {
+		lastAccess := atomic.LoadInt64(&entry.lastAccessNano)
+		if oldestKey == "" || lastAccess < oldestNano {
 			oldestKey = key
-			oldestTime = entry.lastAccess
+			oldestNano = lastAccess
 		}
 	}
 

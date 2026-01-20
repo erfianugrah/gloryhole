@@ -1,229 +1,239 @@
-# High Priority Performance Optimizations
+# Medium Priority Performance Optimizations
 
-These are easy wins with high impact on the hot path.
+These optimizations reduce allocations and lock contention on hot paths.
 
 ## Status: COMPLETED
 
 ## Changes Made
 
-1. **Regex caching** - `pkg/policy/engine.go`: Added `sync.Map` cache for compiled regexes
-2. **Inline FNV hash** - `pkg/cache/sharded_cache.go`: Replaced `hash/fnv` with allocation-free inline FNV-1a
-3. **Atomic cache stats** - `pkg/cache/cache.go`: Changed stats from mutex-protected to atomic operations
-4. **Optimized makeKey** - `pkg/cache/cache.go`: Replaced `fmt.Sprintf` with manual integer conversion
-5. **Legacy log worker pool** - `pkg/dns/handler.go`: Replaced per-query goroutine spawn with channel+worker pool
+1. **Atomic lastAccess for LRU** - `pkg/cache/cache.go`, `pkg/cache/sharded_cache.go`: Replaced time.Time with int64 (UnixNano) for atomic operations, eliminating write lock on cache hits
+2. **sync.Pool for serveDNSOutcome** - `pkg/dns/handler_state.go`: Added object pool to avoid per-query allocation
+3. **sync.Pool for blockTraceRecorder** - `pkg/dns/trace.go`: Added object pool with pre-allocated slice capacity
+4. **Updated handler.go** - Uses pooled objects with proper defer cleanup
 
 ## Issues to Fix
 
-### 1. Regex Recompilation in DomainRegex (CRITICAL)
-**File:** `pkg/policy/engine.go:398-404`
+### 1. Cache Hit Write Lock for LRU Update
+**File:** `pkg/cache/sharded_cache.go:163-170`
 
-**Problem:** `regexp.MatchString` compiles the regex on EVERY call. This is extremely expensive.
+**Problem:** Every cache HIT requires a write lock just to update `lastAccess` timestamp.
 
 **Current Code:**
 ```go
-func DomainRegex(domain, pattern string) (bool, error) {
-    matched, err := regexp.MatchString(pattern, strings.ToLower(domain))
-    if err != nil {
-        return false, fmt.Errorf("invalid regex pattern: %w", err)
+// Update last access time (for LRU)
+shard.mu.Lock()
+entry.lastAccess = now
+shard.mu.Unlock()
+```
+
+**Solution:** Use atomic int64 for lastAccess:
+```go
+type cacheEntry struct {
+    // ... other fields
+    lastAccessNano int64  // Atomic, store as UnixNano
+}
+
+// On hit (lock-free):
+atomic.StoreInt64(&entry.lastAccessNano, now.UnixNano())
+
+// In evictLRU, read with:
+lastAccess := time.Unix(0, atomic.LoadInt64(&entry.lastAccessNano))
+```
+
+**Impact:** HIGH - every cache hit currently contends for write lock
+
+---
+
+### 2. Policy Engine RWMutex on Every Query
+**File:** `pkg/policy/engine.go:185-188`
+
+**Problem:** Every policy evaluation takes a read lock, even though rules rarely change.
+
+**Current Code:**
+```go
+func (e *Engine) Evaluate(ctx Context) (bool, *Rule) {
+    e.mu.RLock()
+    defer e.mu.RUnlock()
+
+    for _, rule := range e.rules {
+        // ...
     }
-    return matched, nil
 }
 ```
 
-**Solution:** Cache compiled regexes using sync.Map:
+**Solution:** Use atomic pointer swap for rules (like blocklist manager):
 ```go
-var regexCache sync.Map
+type Engine struct {
+    rules  atomic.Pointer[[]*Rule]  // Atomic pointer to rules slice
+    logger *logging.Logger
+}
 
-func DomainRegex(domain, pattern string) (bool, error) {
-    cached, ok := regexCache.Load(pattern)
-    if !ok {
-        re, err := regexp.Compile(pattern)
-        if err != nil {
-            return false, fmt.Errorf("invalid regex pattern: %w", err)
+func (e *Engine) Evaluate(ctx Context) (bool, *Rule) {
+    rulesPtr := e.rules.Load()
+    if rulesPtr == nil {
+        return false, nil
+    }
+    rules := *rulesPtr
+    for _, rule := range rules {
+        // ...
+    }
+}
+
+func (e *Engine) SetRules(newRules []*Rule) {
+    e.rules.Store(&newRules)
+}
+```
+
+**Impact:** MEDIUM - removes lock contention on policy evaluation
+
+---
+
+### 3. Missing sync.Pool for serveDNSOutcome
+**File:** `pkg/dns/handler.go:166`
+
+**Problem:** `serveDNSOutcome` allocated on every DNS query.
+
+**Current Code:**
+```go
+outcome := &serveDNSOutcome{}
+```
+
+**Solution:** Use sync.Pool:
+```go
+var outcomePool = sync.Pool{
+    New: func() interface{} {
+        return &serveDNSOutcome{}
+    },
+}
+
+// In ServeDNS:
+outcome := outcomePool.Get().(*serveDNSOutcome)
+*outcome = serveDNSOutcome{} // Zero out
+defer outcomePool.Put(outcome)
+```
+
+**Impact:** MEDIUM - reduces allocation per query
+
+---
+
+### 4. Missing sync.Pool for blockTraceRecorder
+**File:** `pkg/dns/trace.go:18-19`
+
+**Problem:** `blockTraceRecorder` allocated on every DNS query.
+
+**Current Code:**
+```go
+func newBlockTraceRecorder(enabled bool) *blockTraceRecorder {
+    return &blockTraceRecorder{enabled: enabled}
+}
+```
+
+**Solution:** Use sync.Pool:
+```go
+var traceRecorderPool = sync.Pool{
+    New: func() interface{} {
+        return &blockTraceRecorder{
+            entries: make([]storage.BlockTraceEntry, 0, 4),
         }
-        regexCache.Store(pattern, re)
-        cached = re
-    }
-    
-    re := cached.(*regexp.Regexp)
-    return re.MatchString(strings.ToLower(domain)), nil
+    },
+}
+
+func newBlockTraceRecorder(enabled bool) *blockTraceRecorder {
+    r := traceRecorderPool.Get().(*blockTraceRecorder)
+    r.enabled = enabled
+    r.entries = r.entries[:0]
+    return r
+}
+
+func (r *blockTraceRecorder) Release() {
+    traceRecorderPool.Put(r)
 }
 ```
 
-**Impact:** HIGH - regex compilation is very expensive
+Then in handler.go:
+```go
+trace := newBlockTraceRecorder(h.DecisionTrace)
+defer trace.Release()
+```
+
+**Impact:** MEDIUM - reduces allocation per query
 
 ---
 
-### 2. FNV Hash Allocation in Sharded Cache
-**File:** `pkg/cache/sharded_cache.go:111-116`
+### 5. Pattern Allocation on Every Exact Match
+**File:** `pkg/pattern/pattern.go:180-184` (if exists)
 
-**Problem:** `fnv.New32a()` allocates a new hash object AND `[]byte(key)` allocates on every cache operation.
+**Problem:** New `Pattern` struct allocated on every exact match return.
 
-**Current Code:**
+**Solution:** Store pre-created patterns in the exact map:
 ```go
-func (sc *ShardedCache) getShard(key string) *CacheShard {
-    h := fnv.New32a()
-    _, _ = h.Write([]byte(key))
-    shardIdx := h.Sum32() % uint32(sc.shardCount)
-    return sc.shards[shardIdx]
+type Matcher struct {
+    exact    map[string]*Pattern  // Store pointers to pre-created patterns
+    wildcard []*Pattern
+    regex    []*Pattern
 }
 ```
 
-**Solution:** Inline FNV-1a hash without allocations:
-```go
-func fnv1aHashString(s string) uint32 {
-    const offset32 = 2166136261
-    const prime32 = 16777619
-    
-    hash := uint32(offset32)
-    for i := 0; i < len(s); i++ {
-        hash ^= uint32(s[i])
-        hash *= prime32
-    }
-    return hash
-}
-
-func (sc *ShardedCache) getShard(key string) *CacheShard {
-    shardIdx := fnv1aHashString(key) % uint32(sc.shardCount)
-    return sc.shards[shardIdx]
-}
-```
-
-**Impact:** HIGH - cache shard selection on every cache operation
+**Impact:** MEDIUM - allocation on every blocklist exact match
 
 ---
 
-### 3. Cache Stats Under Mutex (Non-Sharded Cache)
-**File:** `pkg/cache/cache.go:443-458`
+### 6. Repeated ToLower in Blocklist Manager
+**File:** `pkg/blocklist/manager.go:298-305`
 
-**Problem:** Non-sharded cache uses mutex for stats updates. Sharded cache already uses atomics.
+**Problem:** `strings.ToLower()` allocates a new string on every call.
 
 **Current Code:**
 ```go
-func (c *Cache) recordHit() {
-    c.mu.Lock()
-    c.stats.hits++
-    c.mu.Unlock()
-    // ...
-}
-
-func (c *Cache) recordMiss() {
-    c.mu.Lock()
-    c.stats.misses++
-    c.mu.Unlock()
+func (m *Manager) Match(domain string) MatchResult {
+    normalized := strings.ToLower(domain)
     // ...
 }
 ```
 
-**Solution:** Use atomic operations (matching sharded cache pattern):
+**Solution:** Check if lowercase is needed first:
 ```go
-type cacheStats struct {
-    hits      atomic.Uint64
-    misses    atomic.Uint64
-    entries   atomic.Int32
-    evictions atomic.Uint64
-    sets      atomic.Uint64
-}
-
-func (c *Cache) recordHit() {
-    c.stats.hits.Add(1)
-    if c.metrics != nil {
-        c.metrics.DNSCacheHits.Add(context.Background(), 1)
-    }
-}
-```
-
-**Impact:** HIGH - contention on every cache hit/miss
-
----
-
-### 4. Cache Key fmt.Sprintf (Non-Sharded Cache)
-**File:** `pkg/cache/cache.go:284-288`
-
-**Problem:** Non-sharded cache uses `fmt.Sprintf` for key generation. Sharded cache has the optimized version.
-
-**Current Code:**
-```go
-func (c *Cache) makeKey(domain string, qtype uint16) string {
-    return fmt.Sprintf("%s:%d", domain, qtype)
-}
-```
-
-**Solution:** Use the same optimized version from sharded_cache.go:
-```go
-func (c *Cache) makeKey(domain string, qtype uint16) string {
-    var buf [5]byte
-    i := len(buf)
-    q := qtype
-    for {
-        i--
-        buf[i] = byte('0' + q%10)
-        q /= 10
-        if q == 0 {
+func (m *Manager) Match(domain string) MatchResult {
+    // Fast path: check if already lowercase
+    needsLower := false
+    for i := 0; i < len(domain); i++ {
+        if domain[i] >= 'A' && domain[i] <= 'Z' {
+            needsLower = true
             break
         }
     }
-    return domain + ":" + string(buf[i:])
+    
+    var normalized string
+    if needsLower {
+        normalized = strings.ToLower(domain)
+    } else {
+        normalized = domain
+    }
+    // ...
 }
 ```
 
-**Impact:** HIGH - cache key generation on every lookup
+Better approach: normalize domain ONCE in handler.go before any lookups.
 
----
-
-### 5. Legacy Goroutine Spawn Per Query
-**File:** `pkg/dns/handler.go:272-284`
-
-**Problem:** Legacy logging path spawns a new goroutine for every single DNS query.
-
-**Current Code:**
-```go
-// Legacy path: spawn goroutine (backwards compatibility)
-go func() {
-    logCtx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-    defer cancel()
-
-    if err := h.Storage.LogQuery(logCtx, queryLog); err != nil && h.Logger != nil {
-        // ...
-    }
-}()
-```
-
-**Solution:** Remove legacy path or make it use a worker pool. Since QueryLogger exists, we can make the legacy storage auto-wrap:
-```go
-// In asyncLogQuery, if QueryLogger is nil but Storage exists, 
-// create a simple channel-based worker instead of spawning goroutines
-```
-
-Or simpler: deprecate the legacy path and require QueryLogger to be set.
-
-**Impact:** HIGH for legacy path users - goroutine overhead per query
+**Impact:** MEDIUM - allocation on every non-cached blocklist check
 
 ---
 
 ## Testing Strategy
 
-1. Run existing unit tests: `go test ./pkg/cache/... ./pkg/policy/... ./pkg/dns/...`
+1. Run unit tests: `go test ./pkg/...`
 2. Run integration tests: `go test ./test/...`
 3. Build: `go build ./cmd/glory-hole`
 4. Lint: `golangci-lint run`
 
 ## Verification
 
-After implementing, verify with a simple benchmark:
+Benchmark the improvements:
 ```go
-// In engine_test.go
-func BenchmarkDomainRegex(b *testing.B) {
-    for i := 0; i < b.N; i++ {
-        DomainRegex("example.com", "^.*\\.example\\.com$")
-    }
-}
-
-// In sharded_cache_test.go
-func BenchmarkGetShard(b *testing.B) {
-    sc, _ := NewSharded(cfg, logger, nil, 64)
-    for i := 0; i < b.N; i++ {
-        sc.getShard("example.com.:1")
-    }
+func BenchmarkServeDNS(b *testing.B) {
+    // Setup handler with all components
+    // Run b.N queries and measure allocations
 }
 ```
+
+Use `-benchmem` flag to verify allocation reductions.

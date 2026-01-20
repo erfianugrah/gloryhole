@@ -1,6 +1,10 @@
 package dns
 
-import "glory-hole/pkg/storage"
+import (
+	"sync"
+
+	"glory-hole/pkg/storage"
+)
 
 const (
 	traceStagePolicy    = "policy"
@@ -15,8 +19,36 @@ type blockTraceRecorder struct {
 	entries []storage.BlockTraceEntry
 }
 
+// traceRecorderPool provides object pooling for blockTraceRecorder to reduce allocations.
+// Pre-allocates slice capacity to avoid reallocations for typical trace sizes.
+var traceRecorderPool = sync.Pool{
+	New: func() interface{} {
+		return &blockTraceRecorder{
+			entries: make([]storage.BlockTraceEntry, 0, 4),
+		}
+	},
+}
+
 func newBlockTraceRecorder(enabled bool) *blockTraceRecorder {
-	return &blockTraceRecorder{enabled: enabled}
+	r := traceRecorderPool.Get().(*blockTraceRecorder)
+	r.enabled = enabled
+	r.entries = r.entries[:0] // Reset slice but keep capacity
+	return r
+}
+
+// Release returns the recorder to the pool for reuse.
+// Must be called when the recorder is no longer needed.
+func (r *blockTraceRecorder) Release() {
+	if r == nil {
+		return
+	}
+	// Clear entries to avoid holding references
+	for i := range r.entries {
+		r.entries[i] = storage.BlockTraceEntry{}
+	}
+	r.entries = r.entries[:0]
+	r.enabled = false
+	traceRecorderPool.Put(r)
 }
 
 func (r *blockTraceRecorder) Record(stage, action string, mutate func(*storage.BlockTraceEntry)) {
