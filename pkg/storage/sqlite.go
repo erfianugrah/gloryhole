@@ -31,6 +31,7 @@ type SQLiteStorage struct {
 	cfg                 *Config
 	metrics             MetricsRecorder
 	buffer              chan *QueryLog
+	domainStatsCh       chan []*QueryLog // Channel for domain stats updates (avoids goroutine per batch)
 	stmtInsertQuery     *sql.Stmt
 	wg                  sync.WaitGroup
 	mu                  sync.RWMutex
@@ -107,6 +108,7 @@ func NewSQLiteStorage(cfg *Config, metrics MetricsRecorder) (Storage, error) {
 		cfg:                 cfg,
 		metrics:             metrics,
 		buffer:              make(chan *QueryLog, cfg.BufferSize),
+		domainStatsCh:       make(chan []*QueryLog, 100), // Buffer for domain stats batches
 		stmtInsertQuery:     stmtInsert,
 		bufferHighWatermark: int(float64(cfg.BufferSize) * 0.8), // 80% threshold
 	}
@@ -114,6 +116,10 @@ func NewSQLiteStorage(cfg *Config, metrics MetricsRecorder) (Storage, error) {
 	// Start background flush worker
 	storage.wg.Add(1)
 	go storage.flushWorker()
+
+	// Start domain stats worker (avoids spawning goroutine per batch)
+	storage.wg.Add(1)
+	go storage.domainStatsWorker()
 
 	return storage, nil
 }
@@ -316,13 +322,48 @@ func (s *SQLiteStorage) flushBatch(queries []*QueryLog) error {
 		return fmt.Errorf("%w: %v", ErrQueryFailed, err)
 	}
 
-	// Update domain stats asynchronously
+	// Send to domain stats worker instead of spawning goroutine
 	// Make a copy to avoid data race with batch slice reuse
 	queriesCopy := make([]*QueryLog, len(queries))
 	copy(queriesCopy, queries)
-	go s.updateDomainStats(queriesCopy)
+
+	// Check if closed before sending to avoid panic on closed channel
+	s.mu.RLock()
+	closed := s.closed
+	s.mu.RUnlock()
+
+	if closed {
+		// Storage closing, update synchronously if needed
+		s.updateDomainStats(queriesCopy)
+	} else {
+		// Non-blocking send to worker
+		select {
+		case s.domainStatsCh <- queriesCopy:
+			// Sent to worker
+		default:
+			// Channel full, update synchronously (rare)
+			s.updateDomainStats(queriesCopy)
+		}
+	}
 
 	return nil
+}
+
+// domainStatsWorker processes domain stats updates from a channel.
+// This avoids spawning a goroutine per batch and provides controlled concurrency.
+func (s *SQLiteStorage) domainStatsWorker() {
+	defer s.wg.Done()
+
+	for batch := range s.domainStatsCh {
+		s.updateDomainStats(batch)
+	}
+}
+
+// domainStatUpdate tracks aggregated stats for a single domain in a batch.
+type domainStatUpdate struct {
+	count       int
+	lastQueried time.Time
+	blocked     bool
 }
 
 // updateDomainStats updates the domain_stats table with aggregated statistics.
@@ -335,28 +376,64 @@ func (s *SQLiteStorage) flushBatch(queries []*QueryLog) error {
 // - last_queried: Timestamp of most recent query
 // - blocked: Whether domain is in blocklist
 //
-// Uses UPSERT (INSERT ... ON CONFLICT) for efficient updates:
-// - New domains: INSERT with initial values
-// - Existing domains: Increment counter and update last_queried
-//
+// Optimization: Groups queries by domain first to reduce SQL statements.
+// Uses UPSERT (INSERT ... ON CONFLICT) for efficient updates.
 // Errors are logged but don't propagate (non-critical data).
 func (s *SQLiteStorage) updateDomainStats(queries []*QueryLog) {
-	for _, query := range queries {
-		_, err := s.db.Exec(`
-			INSERT INTO domain_stats (domain, query_count, last_queried, first_queried, blocked)
-			VALUES (?, 1, ?, ?, ?)
-			ON CONFLICT(domain) DO UPDATE SET
-				query_count = query_count + 1,
-				last_queried = excluded.last_queried
-		`, query.Domain, query.Timestamp, query.Timestamp, query.Blocked)
+	if len(queries) == 0 {
+		return
+	}
 
+	// Group queries by domain to reduce SQL statements
+	updates := make(map[string]*domainStatUpdate)
+	for _, query := range queries {
+		if existing, ok := updates[query.Domain]; ok {
+			existing.count++
+			if query.Timestamp.After(existing.lastQueried) {
+				existing.lastQueried = query.Timestamp
+			}
+		} else {
+			updates[query.Domain] = &domainStatUpdate{
+				count:       1,
+				lastQueried: query.Timestamp,
+				blocked:     query.Blocked,
+			}
+		}
+	}
+
+	// Execute grouped updates in a transaction for efficiency
+	tx, err := s.db.Begin()
+	if err != nil {
+		slog.Default().Error("Failed to begin domain stats transaction", "error", err)
+		return
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	stmt, err := tx.Prepare(`
+		INSERT INTO domain_stats (domain, query_count, last_queried, first_queried, blocked)
+		VALUES (?, ?, ?, ?, ?)
+		ON CONFLICT(domain) DO UPDATE SET
+			query_count = query_count + excluded.query_count,
+			last_queried = MAX(last_queried, excluded.last_queried)
+	`)
+	if err != nil {
+		slog.Default().Error("Failed to prepare domain stats statement", "error", err)
+		return
+	}
+	defer func() { _ = stmt.Close() }()
+
+	for domain, update := range updates {
+		_, err = stmt.Exec(domain, update.count, update.lastQueried, update.lastQueried, update.blocked)
 		if err != nil {
-			// Log but don't fail
 			slog.Default().Error("Failed to update domain statistics",
 				"error", err,
-				"domain", query.Domain,
+				"domain", domain,
 			)
 		}
+	}
+
+	if err = tx.Commit(); err != nil {
+		slog.Default().Error("Failed to commit domain stats transaction", "error", err)
 	}
 }
 
@@ -945,10 +1022,10 @@ func truncateToBucket(t time.Time, bucket time.Duration) time.Time {
 
 // BufferStats represents storage buffer statistics
 type BufferStats struct {
-	Size        int     `json:"size"`         // Current buffer size
-	Capacity    int     `json:"capacity"`     // Maximum capacity
-	Utilization float64 `json:"utilization"`  // Percentage (0-100)
-	HighWater   int     `json:"high_water"`   // High watermark threshold
+	Size        int     `json:"size"`        // Current buffer size
+	Capacity    int     `json:"capacity"`    // Maximum capacity
+	Utilization float64 `json:"utilization"` // Percentage (0-100)
+	HighWater   int     `json:"high_water"`  // High watermark threshold
 }
 
 // GetBufferStats returns current buffer statistics
@@ -988,10 +1065,11 @@ func (s *SQLiteStorage) Close() error {
 		"buffer_capacity", stats.Capacity,
 		"buffer_utilization_pct", fmt.Sprintf("%.1f", stats.Utilization))
 
-	// Close buffer channel
+	// Close buffer channel and domain stats channel
 	close(s.buffer)
+	close(s.domainStatsCh)
 
-	// Wait for flush worker to complete
+	// Wait for workers to complete
 	s.wg.Wait()
 
 	// Close prepared statements

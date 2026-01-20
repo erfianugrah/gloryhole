@@ -280,31 +280,54 @@ func (sc *ShardedCache) SetBlocked(ctx context.Context, r *dns.Msg, resp *dns.Ms
 	}
 }
 
-// evictLRU removes the least recently used entry from the given shard.
+// evictLRU removes the least recently used entry from the given shard using
+// probabilistic sampling. Instead of scanning all entries O(n), we sample a
+// small number of entries and evict the oldest from the sample. This provides
+// O(1) eviction with good-enough LRU approximation (similar to Redis's approach).
 // Must be called with write lock held.
 func (sc *ShardedCache) evictLRU(shard *CacheShard) {
-	var oldestKey string
-	var oldestNano int64 = 0
+	const sampleSize = 5 // Sample 5 random entries
 
-	// Find the entry with the oldest last access time
+	type candidate struct {
+		key            string
+		lastAccessNano int64
+	}
+
+	// Sample entries from the map (Go map iteration is random)
+	var candidates [sampleSize]candidate
+	i := 0
 	for key, entry := range shard.entries {
-		lastAccess := atomic.LoadInt64(&entry.lastAccessNano)
-		if oldestKey == "" || lastAccess < oldestNano {
-			oldestKey = key
-			oldestNano = lastAccess
+		if i >= sampleSize {
+			break
+		}
+		candidates[i] = candidate{
+			key:            key,
+			lastAccessNano: atomic.LoadInt64(&entry.lastAccessNano),
+		}
+		i++
+	}
+
+	if i == 0 {
+		return
+	}
+
+	// Find the oldest among the samples
+	oldest := 0
+	for j := 1; j < i; j++ {
+		if candidates[j].lastAccessNano < candidates[oldest].lastAccessNano {
+			oldest = j
 		}
 	}
 
-	if oldestKey != "" {
-		delete(shard.entries, oldestKey)
+	key := candidates[oldest].key
+	delete(shard.entries, key)
 
-		// Use atomic increment for evictions counter (lock-free)
-		shard.statsEvicts.Add(1)
+	// Use atomic increment for evictions counter (lock-free)
+	shard.statsEvicts.Add(1)
 
-		// Record cache size decrease
-		if shard.metrics != nil {
-			shard.metrics.CacheSize.Add(context.Background(), -1)
-		}
+	// Record cache size decrease
+	if shard.metrics != nil {
+		shard.metrics.CacheSize.Add(context.Background(), -1)
 	}
 }
 
