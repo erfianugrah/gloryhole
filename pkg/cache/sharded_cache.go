@@ -3,7 +3,6 @@ package cache
 import (
 	"context"
 	"errors"
-	"hash/fnv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -16,6 +15,20 @@ import (
 	"github.com/miekg/dns"
 )
 
+// fnv1aHashString computes FNV-1a hash of a string without allocations.
+// This is significantly faster than using hash/fnv which requires []byte conversion.
+func fnv1aHashString(s string) uint32 {
+	const offset32 = 2166136261
+	const prime32 = 16777619
+
+	hash := uint32(offset32)
+	for i := 0; i < len(s); i++ {
+		hash ^= uint32(s[i])
+		hash *= prime32
+	}
+	return hash
+}
+
 var (
 	// ErrCacheNotEnabled is returned when cache operations are attempted on a disabled cache
 	ErrCacheNotEnabled = errors.New("cache is not enabled")
@@ -27,27 +40,27 @@ var (
 // Each shard operates independently with its own mutex, allowing concurrent access to different shards.
 // Fields ordered for optimal memory alignment
 type ShardedCache struct {
-	shards      []*CacheShard    // Slice of cache shards (24 bytes)
-	logger      *logging.Logger  // Logger instance (8 bytes)
-	stopCleanup chan struct{}    // Channel to stop cleanup (8 bytes)
-	cleanupDone chan struct{}    // Channel signaling cleanup done (8 bytes)
-	shardCount  int              // Number of shards (8 bytes)
+	shards      []*CacheShard   // Slice of cache shards (24 bytes)
+	logger      *logging.Logger // Logger instance (8 bytes)
+	stopCleanup chan struct{}   // Channel to stop cleanup (8 bytes)
+	cleanupDone chan struct{}   // Channel signaling cleanup done (8 bytes)
+	shardCount  int             // Number of shards (8 bytes)
 }
 
 // CacheShard represents a single shard of the cache with its own lock and entries.
 // Stats are tracked using atomic operations to avoid lock contention on hot paths.
 // Fields ordered for optimal memory alignment (reduces padding from 56 to 32 bytes)
 type CacheShard struct {
-	mu          sync.RWMutex              // Lock for entries map (largest field first)
-	entries     map[string]*cacheEntry    // Cache entries map
-	cfg         *config.CacheConfig       // Cache configuration
-	logger      *logging.Logger           // Logger instance
-	metrics     *telemetry.Metrics        // Metrics recorder
-	statsHits   atomic.Uint64             // Atomic counter for cache hits
-	statsMisses atomic.Uint64             // Atomic counter for cache misses
-	statsEvicts atomic.Uint64             // Atomic counter for evictions
-	statsSets   atomic.Uint64             // Atomic counter for sets
-	maxEntries  int                       // Maximum entries per shard
+	mu          sync.RWMutex           // Lock for entries map (largest field first)
+	entries     map[string]*cacheEntry // Cache entries map
+	cfg         *config.CacheConfig    // Cache configuration
+	logger      *logging.Logger        // Logger instance
+	metrics     *telemetry.Metrics     // Metrics recorder
+	statsHits   atomic.Uint64          // Atomic counter for cache hits
+	statsMisses atomic.Uint64          // Atomic counter for cache misses
+	statsEvicts atomic.Uint64          // Atomic counter for evictions
+	statsSets   atomic.Uint64          // Atomic counter for sets
+	maxEntries  int                    // Maximum entries per shard
 }
 
 // NewSharded creates a new sharded DNS cache with the specified number of shards.
@@ -108,10 +121,9 @@ func NewSharded(cfg *config.CacheConfig, logger *logging.Logger, metrics *teleme
 
 // getShard returns the shard for the given key using FNV-1a hash.
 // FNV-1a is chosen for its speed and good distribution properties.
+// Uses inline hash function to avoid allocations from hash.Hash interface.
 func (sc *ShardedCache) getShard(key string) *CacheShard {
-	h := fnv.New32a()
-	_, _ = h.Write([]byte(key))
-	shardIdx := h.Sum32() % uint32(sc.shardCount)
+	shardIdx := fnv1aHashString(key) % uint32(sc.shardCount)
 	return sc.shards[shardIdx]
 }
 

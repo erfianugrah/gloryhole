@@ -30,6 +30,36 @@ var msgPool = sync.Pool{
 	},
 }
 
+// legacyLogRequest holds a query log request for the legacy storage path.
+type legacyLogRequest struct {
+	storage storage.Storage
+	log     *storage.QueryLog
+	logger  *logging.Logger
+}
+
+// legacyLogCh is a buffered channel for legacy query logging.
+// Using a channel with workers avoids spawning a goroutine per query.
+var legacyLogCh = make(chan legacyLogRequest, 10000)
+
+func init() {
+	// Start legacy log workers (4 workers to handle concurrent writes)
+	for i := 0; i < 4; i++ {
+		go legacyLogWorker()
+	}
+}
+
+func legacyLogWorker() {
+	for req := range legacyLogCh {
+		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+		if err := req.storage.LogQuery(ctx, req.log); err != nil && req.logger != nil {
+			req.logger.Error("Failed to log query to storage",
+				"domain", req.log.Domain,
+				"error", err)
+		}
+		cancel()
+	}
+}
+
 // Handler is a DNS handler
 // KillSwitchChecker defines the interface for checking temporary disable state
 type KillSwitchChecker interface {
@@ -38,8 +68,8 @@ type KillSwitchChecker interface {
 }
 
 type Handler struct {
-	Storage          storage.Storage   // Legacy: kept for backwards compatibility
-	QueryLogger      *QueryLogger      // New: worker pool for async query logging
+	Storage          storage.Storage // Legacy: kept for backwards compatibility
+	QueryLogger      *QueryLogger    // New: worker pool for async query logging
 	BlocklistManager *blocklist.Manager
 	Blocklist        map[string]struct{}
 	Overrides        map[string]net.IP
@@ -269,18 +299,19 @@ func (h *Handler) asyncLogQuery(startTime time.Time, r *dns.Msg, clientIP string
 		return
 	}
 
-	// Legacy path: spawn goroutine (backwards compatibility)
-	go func() {
-		logCtx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-		defer cancel()
-
-		if err := h.Storage.LogQuery(logCtx, queryLog); err != nil && h.Logger != nil {
-			h.Logger.Error("Failed to log query to storage",
-				"domain", domain,
-				"client_ip", clientIP,
-				"error", err)
+	// Legacy path: use select with buffered channel to avoid blocking
+	// This is more efficient than spawning a goroutine per query.
+	// Note: For best performance, use QueryLogger instead of legacy Storage.
+	select {
+	case legacyLogCh <- legacyLogRequest{storage: h.Storage, log: queryLog, logger: h.Logger}:
+		// Sent to worker
+	default:
+		// Buffer full, log warning (rare under normal load)
+		if h.Logger != nil {
+			h.Logger.Warn("Legacy log buffer full, query log dropped",
+				"domain", domain)
 		}
-	}()
+	}
 }
 
 func (h *Handler) resolveFeatureToggles() (enablePolicies, enableBlocklist bool) {

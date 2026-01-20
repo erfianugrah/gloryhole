@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"glory-hole/pkg/config"
@@ -48,13 +49,14 @@ type cacheEntry struct {
 	size int
 }
 
-// cacheStats tracks cache performance metrics
+// cacheStats tracks cache performance metrics using atomic operations.
+// This allows lock-free updates on hot paths (hits/misses).
 type cacheStats struct {
-	hits      uint64 // Cache hits
-	misses    uint64 // Cache misses
-	entries   int    // Current number of entries
-	evictions uint64 // Number of evictions (LRU or TTL)
-	sets      uint64 // Number of cache sets
+	hits      atomic.Uint64 // Cache hits (atomic for lock-free updates)
+	misses    atomic.Uint64 // Cache misses (atomic for lock-free updates)
+	evictions atomic.Uint64 // Number of evictions (LRU or TTL)
+	sets      atomic.Uint64 // Number of cache sets
+	entries   int           // Current number of entries (updated under lock)
 }
 
 // Stats returns a copy of the current cache statistics
@@ -206,14 +208,16 @@ func (c *Cache) Set(ctx context.Context, r *dns.Msg, resp *dns.Msg) {
 
 	c.entries[key] = entry
 	c.stats.entries = len(c.entries)
-	c.stats.sets++
+	c.mu.Unlock()
+
+	// Use atomic increment for sets counter (lock-free)
+	c.stats.sets.Add(1)
 
 	// Record cache size change to Prometheus metrics if available
 	// Only increment if this is a new entry (not a replacement)
 	if c.metrics != nil && !exists {
 		c.metrics.CacheSize.Add(ctx, 1)
 	}
-	c.mu.Unlock()
 
 	c.logger.Debug("Cached DNS response",
 		"domain", question.Name,
@@ -264,14 +268,16 @@ func (c *Cache) SetBlocked(ctx context.Context, r *dns.Msg, resp *dns.Msg, trace
 
 	c.entries[key] = entry
 	c.stats.entries = len(c.entries)
-	c.stats.sets++
+	c.mu.Unlock()
+
+	// Use atomic increment for sets counter (lock-free)
+	c.stats.sets.Add(1)
 
 	// Record cache size change to Prometheus metrics if available
 	// Only increment if this is a new entry (not a replacement)
 	if c.metrics != nil && !exists {
 		c.metrics.CacheSize.Add(ctx, 1)
 	}
-	c.mu.Unlock()
 
 	c.logger.Debug("Cached blocked domain response",
 		"domain", question.Name,
@@ -280,11 +286,24 @@ func (c *Cache) SetBlocked(ctx context.Context, r *dns.Msg, resp *dns.Msg, trace
 		"size", entry.size)
 }
 
-// makeKey creates a cache key from domain and query type
+// makeKey creates a cache key from domain and query type.
+// Uses manual integer conversion to avoid fmt.Sprintf allocation overhead.
 func (c *Cache) makeKey(domain string, qtype uint16) string {
-	// Format: domain:qtype
-	// Example: "example.com.:A"
-	return fmt.Sprintf("%s:%d", domain, qtype)
+	// Format: domain:qtype (using numeric type for consistency)
+	// Example: "example.com.:1" (A record)
+	// Simple conversion for uint16 range (0-65535)
+	var buf [5]byte
+	i := len(buf)
+	q := qtype
+	for {
+		i--
+		buf[i] = byte('0' + q%10)
+		q /= 10
+		if q == 0 {
+			break
+		}
+	}
+	return domain + ":" + string(buf[i:])
 }
 
 // determineTTL extracts TTL from DNS response and applies min/max limits
@@ -337,7 +356,9 @@ func (c *Cache) evictLRU() {
 
 	if oldestKey != "" {
 		delete(c.entries, oldestKey)
-		c.stats.evictions++
+
+		// Use atomic increment for evictions counter (lock-free)
+		c.stats.evictions.Add(1)
 
 		// Record cache size decrease to Prometheus metrics if available
 		if c.metrics != nil {
@@ -381,7 +402,7 @@ func (c *Cache) cleanup() {
 	}
 
 	if removed > 0 {
-		c.stats.evictions += uint64(removed)
+		c.stats.evictions.Add(uint64(removed))
 		c.stats.entries = len(c.entries)
 		c.logger.Debug("Cleaned up expired cache entries", "removed", removed, "remaining", c.stats.entries)
 	}
@@ -389,21 +410,29 @@ func (c *Cache) cleanup() {
 
 // Stats returns current cache statistics
 func (c *Cache) Stats() Stats {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
+	// Load atomic counters (lock-free)
+	hits := c.stats.hits.Load()
+	misses := c.stats.misses.Load()
+	evictions := c.stats.evictions.Load()
+	sets := c.stats.sets.Load()
 
-	total := c.stats.hits + c.stats.misses
+	// Entry count still needs lock (non-atomic field)
+	c.mu.RLock()
+	entries := c.stats.entries
+	c.mu.RUnlock()
+
+	total := hits + misses
 	hitRate := 0.0
 	if total > 0 {
-		hitRate = float64(c.stats.hits) / float64(total)
+		hitRate = float64(hits) / float64(total)
 	}
 
 	return Stats{
-		Hits:      c.stats.hits,
-		Misses:    c.stats.misses,
-		Entries:   c.stats.entries,
-		Evictions: c.stats.evictions,
-		Sets:      c.stats.sets,
+		Hits:      hits,
+		Misses:    misses,
+		Entries:   entries,
+		Evictions: evictions,
+		Sets:      sets,
 		HitRate:   hitRate,
 	}
 }
@@ -432,18 +461,16 @@ func (c *Cache) Close() error {
 	<-c.cleanupDone
 
 	c.logger.Info("Cache closed",
-		"final_hits", c.stats.hits,
-		"final_misses", c.stats.misses,
+		"final_hits", c.stats.hits.Load(),
+		"final_misses", c.stats.misses.Load(),
 		"final_entries", c.stats.entries)
 
 	return nil
 }
 
-// recordHit atomically increments the hit counter
+// recordHit atomically increments the hit counter using lock-free operations.
 func (c *Cache) recordHit() {
-	c.mu.Lock()
-	c.stats.hits++
-	c.mu.Unlock()
+	c.stats.hits.Add(1)
 
 	// Record to Prometheus metrics if available
 	if c.metrics != nil {
@@ -451,11 +478,9 @@ func (c *Cache) recordHit() {
 	}
 }
 
-// recordMiss atomically increments the miss counter
+// recordMiss atomically increments the miss counter using lock-free operations.
 func (c *Cache) recordMiss() {
-	c.mu.Lock()
-	c.stats.misses++
-	c.mu.Unlock()
+	c.stats.misses.Add(1)
 
 	// Record to Prometheus metrics if available
 	if c.metrics != nil {

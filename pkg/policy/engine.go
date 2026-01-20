@@ -394,13 +394,29 @@ func DomainStartsWith(domain, prefix string) bool {
 	return strings.HasPrefix(strings.ToLower(domain), strings.ToLower(prefix))
 }
 
-// DomainRegex checks if domain matches a regular expression pattern
+// regexCache stores compiled regular expressions to avoid recompilation on every call.
+// Using sync.Map for concurrent read/write safety with minimal contention.
+var regexCache sync.Map
+
+// DomainRegex checks if domain matches a regular expression pattern.
+// Compiled regexes are cached for performance - regex compilation is expensive
+// and patterns are typically reused across many queries.
 func DomainRegex(domain, pattern string) (bool, error) {
-	matched, err := regexp.MatchString(pattern, strings.ToLower(domain))
-	if err != nil {
-		return false, fmt.Errorf("invalid regex pattern: %w", err)
+	// Try to get cached compiled regex
+	cached, ok := regexCache.Load(pattern)
+	if !ok {
+		// Compile and cache the regex
+		re, err := regexp.Compile(pattern)
+		if err != nil {
+			return false, fmt.Errorf("invalid regex pattern: %w", err)
+		}
+		// Store returns the existing value if another goroutine stored first
+		actual, _ := regexCache.LoadOrStore(pattern, re)
+		cached = actual
 	}
-	return matched, nil
+
+	re := cached.(*regexp.Regexp)
+	return re.MatchString(strings.ToLower(domain)), nil
 }
 
 // DomainLevelCount returns the number of levels in a domain (e.g., "www.example.com" = 3)
