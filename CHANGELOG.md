@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.13.1] - 2026-02-04
+
+### Changed
+- Database: Optimized `GetTopDomains` query to avoid expensive self-joins on large tables
+- Database: Replaced full `VACUUM` with `PRAGMA incremental_vacuum(1000)` for non-blocking space reclaim
+- Database: Added `PRAGMA auto_vacuum = INCREMENTAL` at database initialization
+- Database: Changed cleanup query from `NOT IN` to `EXISTS` for early termination capability
+- Database: `GetTraceStatistics` now uses cursor-based batch processing (1000 rows) instead of loading all rows
+
+### Fixed
+- Database: Added `LIMIT 10000` to `GetQueriesWithTraceFilter` to prevent unbounded memory usage at scale
+- Database: Added 30-second query timeout wrapper for expensive analytical queries (`GetStatistics`, `GetTopDomains`, `GetTimeSeriesStats`, `GetClientSummaries`)
+- Database: Added migration v9 with index for timestamp-based aggregation queries
+
+## [0.13.0] - 2026-01-20
+
 ### Added
 - Query logging worker pool: Replaced per-query goroutine spawning with fixed worker pool (8 workers, 50K buffer) for 31x performance improvement
 - Storage buffer improvements: Increased buffer from 500 to 50,000 queries with high watermark monitoring at 80% to handle high QPS
@@ -23,6 +39,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Database performance: Added missing indexes on `query_type` and composite index on `(blocked, domain)` to prevent 5+ second query timeouts on `/api/stats/query-types` and `/api/top-domains` endpoints
 - Clients page performance: Added composite indexes on `(client_ip, id)` and `(client_ip, timestamp, id)` to speed up client summaries GROUP BY operations and eliminate slow page loads
+- Storage: Fixed data race in domainStatsCh close during shutdown
 
 ## [0.9.5] - 2025-12-08
 
