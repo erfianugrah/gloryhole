@@ -161,6 +161,16 @@ var migrations = []Migration{
 			CREATE INDEX IF NOT EXISTS idx_queries_client_ip_timestamp_id ON queries(client_ip, timestamp, id);
 		`,
 	},
+	{
+		Version:     9,
+		Description: "Add index for statistics aggregation queries at scale",
+		SQL: `
+			-- Index for GetStatistics aggregation queries with timestamp filtering
+			-- Speeds up: COUNT(*), COUNT(DISTINCT domain), COUNT(DISTINCT client_ip) with timestamp filter
+			-- Note: SQLite will use this index for timestamp range scans and can use it for DISTINCT operations
+			CREATE INDEX IF NOT EXISTS idx_queries_timestamp_agg ON queries(timestamp, blocked, cached);
+		`,
+	},
 }
 
 // getMigrations returns all migrations sorted by version

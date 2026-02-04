@@ -25,6 +25,9 @@ type MetricsRecorder interface {
 //go:embed migrations/001_initial.sql
 var initialSchema string
 
+// Default timeout for expensive analytical queries to prevent indefinite blocking
+const defaultQueryTimeout = 30 * time.Second
+
 // SQLiteStorage implements the Storage interface using SQLite
 type SQLiteStorage struct {
 	db                  *sql.DB
@@ -38,6 +41,16 @@ type SQLiteStorage struct {
 	closed              bool
 	bufferHighWatermark int  // 80% of buffer capacity
 	warningLogged       bool // Track if high watermark warning has been logged
+}
+
+// withQueryTimeout returns a context with a timeout if one isn't already set.
+// This prevents expensive queries from blocking the connection indefinitely.
+func withQueryTimeout(ctx context.Context, timeout time.Duration) (context.Context, context.CancelFunc) {
+	if _, ok := ctx.Deadline(); ok {
+		// Context already has a deadline, respect it
+		return ctx, func() {}
+	}
+	return context.WithTimeout(ctx, timeout)
 }
 
 // NewSQLiteStorage creates a new SQLite storage backend
@@ -69,6 +82,7 @@ func NewSQLiteStorage(cfg *Config, metrics MetricsRecorder) (Storage, error) {
 		fmt.Sprintf("PRAGMA cache_size = %d", -cfg.SQLite.CacheSize), // Negative means KB
 		"PRAGMA synchronous = NORMAL",                                // Balance between safety and performance
 		"PRAGMA temp_store = MEMORY",                                 // Use memory for temp tables
+		"PRAGMA auto_vacuum = INCREMENTAL",                           // Enable incremental auto-vacuum for non-blocking space reclaim
 	}
 
 	if cfg.SQLite.MMapSize > 0 {
@@ -528,6 +542,10 @@ func (s *SQLiteStorage) GetStatistics(ctx context.Context, since time.Time) (*St
 		return nil, ErrClosed
 	}
 
+	// Apply timeout for this expensive aggregation query
+	ctx, cancel := withQueryTimeout(ctx, defaultQueryTimeout)
+	defer cancel()
+
 	stats := &Statistics{
 		Since: since,
 		Until: time.Now(),
@@ -574,19 +592,21 @@ func (s *SQLiteStorage) GetTopDomains(ctx context.Context, limit int, blocked bo
 		return nil, ErrClosed
 	}
 
+	// Apply timeout for this expensive aggregation query
+	ctx, cancel := withQueryTimeout(ctx, defaultQueryTimeout)
+	defer cancel()
+
 	blockedValue := 0
 	if blocked {
 		blockedValue = 1
 	}
 
-	// Build query with optional time filter
+	// Optimized query: First get top domains by count (fast with index),
+	// then get timestamps only for those top domains (reduces self-joins from N to limit).
+	// This avoids computing MIN/MAX id for ALL domains, only the top ones.
 	query := `
-		WITH aggregated AS (
-			SELECT
-				domain,
-				MIN(id) AS first_id,
-				MAX(id) AS last_id,
-				COUNT(*) AS total_queries
+		WITH top_domains AS (
+			SELECT domain, COUNT(*) AS total_queries
 			FROM queries
 			WHERE blocked = ?`
 
@@ -600,19 +620,28 @@ func (s *SQLiteStorage) GetTopDomains(ctx context.Context, limit int, blocked bo
 
 	query += `
 			GROUP BY domain
+			ORDER BY total_queries DESC
+			LIMIT ?
 		)
 		SELECT
-			a.domain,
-			a.total_queries,
-			first_q.timestamp AS first_seen_raw,
-			last_q.timestamp AS last_seen_raw
-		FROM aggregated a
-		LEFT JOIN queries first_q ON first_q.id = a.first_id
-		LEFT JOIN queries last_q ON last_q.id = a.last_id
-		ORDER BY a.total_queries DESC
-		LIMIT ?`
+			td.domain,
+			td.total_queries,
+			MIN(q.timestamp) AS first_seen_raw,
+			MAX(q.timestamp) AS last_seen_raw
+		FROM top_domains td
+		LEFT JOIN queries q ON q.domain = td.domain AND q.blocked = ?`
 
-	args = append(args, limit)
+	args = append(args, limit, blockedValue)
+
+	// Reapply time filter to the join
+	if !since.IsZero() {
+		query += ` AND q.timestamp >= ?`
+		args = append(args, FormatTimestamp(since))
+	}
+
+	query += `
+		GROUP BY td.domain, td.total_queries
+		ORDER BY td.total_queries DESC`
 
 	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
@@ -690,6 +719,10 @@ func (s *SQLiteStorage) GetTimeSeriesStats(ctx context.Context, bucket time.Dura
 	if s.closed {
 		return nil, ErrClosed
 	}
+
+	// Apply timeout for this expensive aggregation query
+	ctx, cancel := withQueryTimeout(ctx, defaultQueryTimeout)
+	defer cancel()
 
 	if points <= 0 {
 		return nil, fmt.Errorf("points must be greater than zero")
@@ -942,20 +975,25 @@ func (s *SQLiteStorage) Cleanup(ctx context.Context, olderThan time.Time) error 
 
 	rows, _ := result.RowsAffected()
 
-	// Clean up domain stats for domains that no longer have queries
+	// Clean up domain stats for domains that no longer have queries.
+	// Using EXISTS with LIMIT 1 allows early termination instead of full table scan.
 	_, err = s.db.ExecContext(ctx, `
 		DELETE FROM domain_stats
-		WHERE domain NOT IN (SELECT DISTINCT domain FROM queries)
+		WHERE NOT EXISTS (
+			SELECT 1 FROM queries WHERE queries.domain = domain_stats.domain LIMIT 1
+		)
 	`)
 	if err != nil {
 		return fmt.Errorf("%w: %v", ErrQueryFailed, err)
 	}
 
-	// VACUUM to reclaim space (only if significant deletions)
+	// Use incremental vacuum to reclaim space without blocking all operations.
+	// Full VACUUM would create a complete database copy and block everything.
+	// Incremental vacuum removes freed pages in small chunks (1000 pages at a time).
 	if rows > 10000 {
-		if _, err := s.db.ExecContext(ctx, "VACUUM"); err != nil {
-			// Log but don't fail
-			slog.Default().Error("VACUUM operation failed",
+		if _, err := s.db.ExecContext(ctx, "PRAGMA incremental_vacuum(1000)"); err != nil {
+			// Log but don't fail - incremental vacuum is best-effort
+			slog.Default().Error("Incremental vacuum operation failed",
 				"error", err,
 				"deleted_rows", rows,
 			)

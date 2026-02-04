@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
+	"time"
 )
 
 const defaultClientPageSize = 50
@@ -14,6 +15,10 @@ func (s *SQLiteStorage) GetClientSummaries(ctx context.Context, limit, offset in
 	if s == nil || s.db == nil {
 		return nil, ErrClosed
 	}
+
+	// Apply timeout for this expensive aggregation query
+	ctx, cancel := withQueryTimeout(ctx, 30*time.Second)
+	defer cancel()
 
 	if limit <= 0 {
 		limit = defaultClientPageSize
