@@ -13,8 +13,8 @@ const POLICY_BUILDER_FIELDS = [
             { key: 'equals', label: 'equals', inputType: 'text', build: (value) => `Domain == ${quoteValue(value)}` },
             { key: 'starts_with', label: 'starts with', inputType: 'text', build: (value) => `DomainStartsWith(Domain, ${quoteValue(value)})` },
             { key: 'ends_with', label: 'ends with', inputType: 'text', build: (value) => `DomainEndsWith(Domain, ${quoteValue(value)})` },
-            { key: 'contains', label: 'contains', inputType: 'text', build: (value) => `DomainMatches(Domain, ${quoteValue('.*' + escapeRegex(value) + '.*')})` },
-            { key: 'matches_regex', label: 'matches regex', inputType: 'text', build: (value) => `DomainMatches(Domain, ${quoteValue(value)})` },
+            { key: 'contains', label: 'contains', inputType: 'text', build: (value) => `DomainMatches(Domain, ${quoteValue(value)})` },
+            { key: 'matches_regex', label: 'matches regex', inputType: 'text', build: (value) => `DomainRegex(Domain, ${quoteValue(value)})` },
         ],
     },
     {
@@ -423,6 +423,94 @@ function resetPolicyBuilder() {
     updateLogicFromBuilder();
 }
 
+/**
+ * Parse a single expression and return field/operator/value info for the builder
+ */
+function parseExpression(expr) {
+    expr = expr.trim();
+
+    // Domain == "value"
+    let match = expr.match(/^Domain\s*==\s*"([^"]*)"$/);
+    if (match) {
+        return { field: 'domain', operator: 'equals', value: match[1], label: `Domain equals ${match[1]}` };
+    }
+
+    // DomainStartsWith(Domain, "value")
+    match = expr.match(/^DomainStartsWith\(Domain,\s*"([^"]*)"\)$/);
+    if (match) {
+        return { field: 'domain', operator: 'starts_with', value: match[1], label: `Domain starts with ${match[1]}` };
+    }
+
+    // DomainEndsWith(Domain, "value")
+    match = expr.match(/^DomainEndsWith\(Domain,\s*"([^"]*)"\)$/);
+    if (match) {
+        return { field: 'domain', operator: 'ends_with', value: match[1], label: `Domain ends with ${match[1]}` };
+    }
+
+    // DomainMatches(Domain, "value") - contains
+    match = expr.match(/^DomainMatches\(Domain,\s*"([^"]*)"\)$/);
+    if (match) {
+        return { field: 'domain', operator: 'contains', value: match[1], label: `Domain contains ${match[1]}` };
+    }
+
+    // DomainRegex(Domain, "value") - matches regex
+    match = expr.match(/^DomainRegex\(Domain,\s*"([^"]*)"\)$/);
+    if (match) {
+        return { field: 'domain', operator: 'matches_regex', value: match[1], label: `Domain matches regex ${match[1]}` };
+    }
+
+    // ClientIP == "value"
+    match = expr.match(/^ClientIP\s*==\s*"([^"]*)"$/);
+    if (match) {
+        return { field: 'client_ip', operator: 'equals', value: match[1], label: `Client IP equals ${match[1]}` };
+    }
+
+    // IPInCIDR(ClientIP, "value")
+    match = expr.match(/^IPInCIDR\(ClientIP,\s*"([^"]*)"\)$/);
+    if (match) {
+        return { field: 'client_ip', operator: 'in_cidr', value: match[1], label: `Client IP in CIDR ${match[1]}` };
+    }
+
+    // QueryType == "value"
+    match = expr.match(/^QueryType\s*==\s*"([^"]*)"$/);
+    if (match) {
+        return { field: 'query_type', operator: 'equals', value: match[1], label: `Query Type equals ${match[1]}` };
+    }
+
+    // Hour == value
+    match = expr.match(/^Hour\s*==\s*(\d+)$/);
+    if (match) {
+        return { field: 'hour', operator: 'equals', value: match[1], label: `Hour equals ${match[1]}` };
+    }
+
+    // Hour >= value
+    match = expr.match(/^Hour\s*>=\s*(\d+)$/);
+    if (match) {
+        return { field: 'hour', operator: 'after', value: match[1], label: `Hour after or equal ${match[1]}` };
+    }
+
+    // Hour <= value
+    match = expr.match(/^Hour\s*<=\s*(\d+)$/);
+    if (match) {
+        return { field: 'hour', operator: 'before', value: match[1], label: `Hour before or equal ${match[1]}` };
+    }
+
+    // ResponseTimeMs >= value
+    match = expr.match(/^ResponseTimeMs\s*>=\s*(\d+)$/);
+    if (match) {
+        return { field: 'response_time', operator: 'greater', value: match[1], label: `Response Time greater than ${match[1]}ms` };
+    }
+
+    // ResponseTimeMs <= value
+    match = expr.match(/^ResponseTimeMs\s*<=\s*(\d+)$/);
+    if (match) {
+        return { field: 'response_time', operator: 'less', value: match[1], label: `Response Time less than ${match[1]}ms` };
+    }
+
+    // Unknown expression - return as-is
+    return null;
+}
+
 function restoreBuilderFromLogic(logic) {
     if (!logic || typeof logic !== 'string') {
         return false;
@@ -448,10 +536,31 @@ function restoreBuilderFromLogic(logic) {
         return false;
     }
 
-    builderState.conditions = expressions.map((expr) => ({
-        expression: expr,
-        label: expr,
-    }));
+    // Try to parse all expressions
+    const parsedConditions = [];
+    let allParsed = true;
+
+    for (const expr of expressions) {
+        const parsed = parseExpression(expr);
+        if (parsed) {
+            parsedConditions.push({
+                expression: expr,
+                label: parsed.label,
+                field: parsed.field,
+                operator: parsed.operator,
+                value: parsed.value,
+            });
+        } else {
+            // Expression couldn't be parsed - fall back to raw expression
+            parsedConditions.push({
+                expression: expr,
+                label: expr,
+            });
+            allParsed = false;
+        }
+    }
+
+    builderState.conditions = parsedConditions;
 
     if (joiners.length) {
         builderState.combinator = joiners.some((j) => j === '||') ? '||' : '&&';
@@ -461,7 +570,7 @@ function restoreBuilderFromLogic(logic) {
 
     renderPolicyConditions();
     updateLogicFromBuilder();
-    return true;
+    return allParsed;
 }
 
 function setLogicMode(mode) {
@@ -484,10 +593,6 @@ function setLogicMode(mode) {
         textarea.classList.remove('readonly');
         document.querySelector('input[name="logic-mode"][value="expression"]').checked = true;
     }
-}
-
-function escapeRegex(value) {
-    return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 function quoteValue(value) {
