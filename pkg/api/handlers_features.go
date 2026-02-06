@@ -96,16 +96,16 @@ func (s *Server) handleUpdateFeatures(w http.ResponseWriter, r *http.Request) {
 	}
 
 	modified := false
-	blocklistBeingEnabled := false
+	blocklistToggled := false
 
 	// Update blocklist if specified
 	if req.BlocklistEnabled != nil {
 		wasEnabled := cfg.Server.EnableBlocklist
 		cfg.Server.EnableBlocklist = *req.BlocklistEnabled
 		modified = true
-		// Track if blocklist is being enabled (need to clear blocklist cache)
-		if !wasEnabled && *req.BlocklistEnabled {
-			blocklistBeingEnabled = true
+		// Track if blocklist state changed (need to clear blocklist cache on ANY toggle)
+		if wasEnabled != *req.BlocklistEnabled {
+			blocklistToggled = true
 		}
 		s.logger.Info("Blocklist kill-switch toggled",
 			"enabled", *req.BlocklistEnabled,
@@ -136,16 +136,21 @@ func (s *Server) handleUpdateFeatures(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Trigger config reload (updates all components)
-	// This will call the OnChange callback registered in main.go
-	// which updates the config reference used by DNS handler
-	s.logger.Info("Configuration saved, changes will take effect immediately")
+	// Trigger config reload to apply changes immediately
+	if s.configWatcher != nil {
+		if err := s.configWatcher.Reload(); err != nil {
+			s.logger.Error("Failed to reload config", "error", err)
+			// Continue anyway - file is saved, watcher will pick it up eventually
+		}
+	}
+	s.logger.Info("Configuration saved and reloaded")
 
-	// Clear cached blocklist decisions if blocklist was enabled.
+	// Clear cached blocklist decisions if blocklist state changed.
+	// This prevents stale blocked/allowed responses after toggle.
 	// Policy decisions are NOT cached, so no clearing needed for policies.
-	if blocklistBeingEnabled && s.cache != nil {
+	if blocklistToggled && s.cache != nil {
 		s.cache.ClearBlocklistDecisions()
-		s.logger.Info("Blocklist cache cleared due to re-enable")
+		s.logger.Info("Blocklist cache cleared due to toggle")
 	}
 
 	// Return updated state
@@ -191,6 +196,13 @@ func (s *Server) handleDisableBlocklist(w http.ResponseWriter, r *http.Request) 
 		until = s.killSwitch.DisableBlocklistFor(365 * 24 * time.Hour)
 	} else {
 		until = s.killSwitch.DisableBlocklistFor(time.Duration(req.Duration) * time.Second)
+	}
+
+	// Clear cached blocklist decisions to prevent stale NXDOMAIN responses
+	// while blocklist is disabled.
+	if s.cache != nil {
+		s.cache.ClearBlocklistDecisions()
+		s.logger.Info("Blocklist cache cleared on disable")
 	}
 
 	resp := map[string]interface{}{

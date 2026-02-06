@@ -262,7 +262,8 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 		}
 	}
 
-	// Cache check - only contains upstream responses, not policy/blocklist decisions
+	// Cache check - contains upstream responses and blocklist decisions (with traces).
+	// Policy BLOCK/REDIRECT decisions are NOT cached.
 	if h.serveFromCache(ctx, w, r, msg, trace, outcome) {
 		return
 	}
