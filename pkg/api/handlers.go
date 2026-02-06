@@ -409,6 +409,12 @@ func (s *Server) handleBlocklistReload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Clear cached blocklist decisions so new blocklist takes effect immediately
+	if s.cache != nil {
+		s.cache.ClearBlocklistDecisions()
+		s.logger.Info("Cleared blocklist cache entries after reload")
+	}
+
 	domains := s.blocklistManager.Size()
 
 	response := BlocklistReloadResponse{

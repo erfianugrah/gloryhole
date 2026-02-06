@@ -230,6 +230,50 @@ func (sc *ShardedCache) Set(ctx context.Context, r *dns.Msg, resp *dns.Msg) {
 	}
 }
 
+// SetWithTrace stores a DNS response with trace metadata using normal TTL.
+// Use this for policy decisions like REDIRECT that need traces but aren't "blocked".
+func (sc *ShardedCache) SetWithTrace(ctx context.Context, r *dns.Msg, resp *dns.Msg, trace []storage.BlockTraceEntry) {
+	if len(r.Question) == 0 {
+		return
+	}
+
+	question := r.Question[0]
+	key := makeKey(question.Name, question.Qtype)
+
+	// Determine TTL from response (normal TTL, not BlockedTTL)
+	ttl := determineTTL(sc.shards[0].cfg, resp)
+	if ttl <= 0 {
+		return
+	}
+
+	now := time.Now()
+	entry := &cacheEntry{
+		msg:            resp.Copy(),
+		expiresAt:      now.Add(ttl),
+		lastAccessNano: now.UnixNano(),
+		size:           resp.Len(),
+		blockTrace:     cloneBlockTrace(trace),
+	}
+
+	shard := sc.getShard(key)
+
+	shard.mu.Lock()
+	defer shard.mu.Unlock()
+
+	if len(shard.entries) >= shard.maxEntries {
+		sc.evictLRU(shard)
+	}
+
+	_, exists := shard.entries[key]
+	shard.entries[key] = entry
+
+	shard.statsSets.Add(1)
+
+	if shard.metrics != nil && !exists {
+		shard.metrics.CacheSize.Add(ctx, 1)
+	}
+}
+
 // SetBlocked stores a blocked domain response in the cache with BlockedTTL.
 func (sc *ShardedCache) SetBlocked(ctx context.Context, r *dns.Msg, resp *dns.Msg, trace []storage.BlockTraceEntry) {
 	if len(r.Question) == 0 {
@@ -371,6 +415,44 @@ func (sc *ShardedCache) Clear() {
 	}
 
 	sc.logger.Info("Sharded cache cleared")
+}
+
+// ClearBlocklistDecisions removes cache entries that have blocklist traces.
+// Call this when the blocklist is reloaded to ensure fresh evaluation.
+func (sc *ShardedCache) ClearBlocklistDecisions() {
+	var totalRemoved int
+
+	for _, shard := range sc.shards {
+		shard.mu.Lock()
+		removed := 0
+		for key, entry := range shard.entries {
+			if shardHasBlocklistTrace(entry.blockTrace) {
+				delete(shard.entries, key)
+				removed++
+			}
+		}
+
+		if shard.metrics != nil && removed > 0 {
+			shard.metrics.CacheSize.Add(context.Background(), int64(-removed))
+		}
+		shard.mu.Unlock()
+
+		totalRemoved += removed
+	}
+
+	if totalRemoved > 0 {
+		sc.logger.Info("Cleared blocklist cache entries", "removed", totalRemoved)
+	}
+}
+
+// shardHasBlocklistTrace checks if any trace entry is from the blocklist stage
+func shardHasBlocklistTrace(traces []storage.BlockTraceEntry) bool {
+	for _, t := range traces {
+		if t.Stage == "blocklist" {
+			return true
+		}
+	}
+	return false
 }
 
 // Close stops the cache and cleanup goroutine.

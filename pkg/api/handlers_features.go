@@ -16,13 +16,13 @@ type FeaturesRequest struct {
 
 // FeaturesResponse represents the current state of feature kill-switches
 type FeaturesResponse struct {
-	BlocklistDisabledUntil   *time.Time `json:"blocklist_disabled_until,omitempty"` // When it will auto-re-enable
-	PoliciesDisabledUntil    *time.Time `json:"policies_disabled_until,omitempty"`  // When it will auto-re-enable
-	UpdatedAt                time.Time  `json:"updated_at"`
-	BlocklistEnabled         bool       `json:"blocklist_enabled"`          // Permanent setting from config
-	PoliciesEnabled          bool       `json:"policies_enabled"`           // Permanent setting from config
-	BlocklistTemporarilyDisabled bool   `json:"blocklist_temp_disabled"`    // Temporary disable state
-	PoliciesTemporarilyDisabled  bool   `json:"policies_temp_disabled"`     // Temporary disable state
+	BlocklistDisabledUntil       *time.Time `json:"blocklist_disabled_until,omitempty"` // When it will auto-re-enable
+	PoliciesDisabledUntil        *time.Time `json:"policies_disabled_until,omitempty"`  // When it will auto-re-enable
+	UpdatedAt                    time.Time  `json:"updated_at"`
+	BlocklistEnabled             bool       `json:"blocklist_enabled"`       // Permanent setting from config
+	PoliciesEnabled              bool       `json:"policies_enabled"`        // Permanent setting from config
+	BlocklistTemporarilyDisabled bool       `json:"blocklist_temp_disabled"` // Temporary disable state
+	PoliciesTemporarilyDisabled  bool       `json:"policies_temp_disabled"`  // Temporary disable state
 }
 
 // DisableRequest represents a request to temporarily disable a feature
@@ -96,17 +96,24 @@ func (s *Server) handleUpdateFeatures(w http.ResponseWriter, r *http.Request) {
 	}
 
 	modified := false
+	blocklistBeingEnabled := false
 
 	// Update blocklist if specified
 	if req.BlocklistEnabled != nil {
+		wasEnabled := cfg.Server.EnableBlocklist
 		cfg.Server.EnableBlocklist = *req.BlocklistEnabled
 		modified = true
+		// Track if blocklist is being enabled (need to clear blocklist cache)
+		if !wasEnabled && *req.BlocklistEnabled {
+			blocklistBeingEnabled = true
+		}
 		s.logger.Info("Blocklist kill-switch toggled",
 			"enabled", *req.BlocklistEnabled,
 			"client", r.RemoteAddr)
 	}
 
 	// Update policies if specified
+	// Note: Policy decisions are NOT cached, so no cache clearing needed
 	if req.PoliciesEnabled != nil {
 		cfg.Server.EnablePolicies = *req.PoliciesEnabled
 		modified = true
@@ -133,6 +140,13 @@ func (s *Server) handleUpdateFeatures(w http.ResponseWriter, r *http.Request) {
 	// This will call the OnChange callback registered in main.go
 	// which updates the config reference used by DNS handler
 	s.logger.Info("Configuration saved, changes will take effect immediately")
+
+	// Clear cached blocklist decisions if blocklist was enabled.
+	// Policy decisions are NOT cached, so no clearing needed for policies.
+	if blocklistBeingEnabled && s.cache != nil {
+		s.cache.ClearBlocklistDecisions()
+		s.logger.Info("Blocklist cache cleared due to re-enable")
+	}
 
 	// Return updated state
 	resp := FeaturesResponse{
@@ -200,6 +214,13 @@ func (s *Server) handleEnableBlocklist(w http.ResponseWriter, r *http.Request) {
 
 	s.killSwitch.EnableBlocklist()
 
+	// Clear cached blocklist decisions to ensure fresh evaluation.
+	// Policy decisions are NOT cached, only blocklist decisions.
+	if s.cache != nil {
+		s.cache.ClearBlocklistDecisions()
+		s.logger.Info("Blocklist cache cleared on re-enable")
+	}
+
 	resp := map[string]interface{}{
 		"message": "Blocklist re-enabled",
 	}
@@ -262,6 +283,9 @@ func (s *Server) handleEnablePolicies(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.killSwitch.EnablePolicies()
+
+	// Note: Policy decisions are NOT cached, so no cache clearing needed.
+	// Policies are always evaluated fresh to handle ordering and multiple matches correctly.
 
 	resp := map[string]interface{}{
 		"message": "Policies re-enabled",

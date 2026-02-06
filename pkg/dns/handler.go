@@ -162,7 +162,9 @@ func (h *Handler) writeMsg(w dns.ResponseWriter, msg *dns.Msg) {
 	}
 }
 
-// serveFromCache attempts to serve a cached DNS response
+// serveFromCache attempts to serve a cached DNS response.
+// With policy-first evaluation, cache only contains upstream responses.
+// Policy and blocklist decisions are NOT cached - they are evaluated fresh every time.
 func (h *Handler) serveFromCache(ctx context.Context, w dns.ResponseWriter, r, msg *dns.Msg, trace *blockTraceRecorder, outcome *serveDNSOutcome) bool {
 	if h.Cache == nil {
 		return false
@@ -178,13 +180,15 @@ func (h *Handler) serveFromCache(ctx context.Context, w dns.ResponseWriter, r, m
 
 	outcome.cached = true
 	outcome.responseCode = cachedResp.Rcode
+
+	// Append any trace from cache (e.g., ALLOW/FORWARD policy that led to upstream lookup)
 	trace.Append(cachedTrace)
-	if cachedResp.Rcode == dns.RcodeNameError {
-		outcome.blocked = true
-		trace.Record(traceStageCache, "blocked_hit", func(entry *storage.BlockTraceEntry) {
-			entry.Source = "response_cache"
-		})
-	}
+
+	// Record cache hit - this is always an upstream response
+	trace.Record(traceStageCache, "upstream_hit", func(entry *storage.BlockTraceEntry) {
+		entry.Source = "response_cache"
+		entry.Detail = "cached upstream response"
+	})
 
 	h.writeMsg(w, cachedResp)
 	return true
@@ -224,13 +228,12 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 	qtype := question.Qtype
 	qtypeLabel := dnsTypeLabel(qtype)
 
-	if h.serveFromCache(ctx, w, r, msg, trace, outcome) {
-		return
-	}
+	// Local records always take precedence
 	if h.serveFromLocalRecords(w, msg, domain, qtype, outcome) {
 		return
 	}
 
+	// Resolve feature toggles (permanent config + temporary kill-switches)
 	enablePolicies, enableBlocklist := h.resolveFeatureToggles()
 	if h.KillSwitch != nil {
 		if disabled, _ := h.KillSwitch.IsBlocklistDisabled(); disabled {
@@ -241,16 +244,27 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 		}
 	}
 
+	// POLICY-FIRST: Policies are always evaluated fresh (decisions NOT cached).
+	// This ensures correct behavior with policy ordering, multiple matches, and toggles.
+	// ALLOW/FORWARD actions forward to upstream and cache the upstream response.
+	// BLOCK/REDIRECT return immediately without caching.
 	if enablePolicies && h.PolicyEngine != nil && h.PolicyEngine.Count() > 0 {
 		if h.handlePolicies(ctx, w, r, msg, domain, clientIP, qtype, qtypeLabel, trace, outcome) {
 			return
 		}
 	}
 
+	// BLOCKLIST-FIRST: Blocklist is always evaluated fresh (blocked NOT cached).
+	// This ensures blocklist changes take immediate effect.
 	if enableBlocklist {
 		if h.handleBlocklistAndOverrides(ctx, w, r, msg, domain, qtype, qtypeLabel, trace, outcome) {
 			return
 		}
+	}
+
+	// Cache check - only contains upstream responses, not policy/blocklist decisions
+	if h.serveFromCache(ctx, w, r, msg, trace, outcome) {
+		return
 	}
 
 	if h.handleConditionalForwarding(ctx, w, r, msg, domain, clientIP, qtypeLabel, outcome) {

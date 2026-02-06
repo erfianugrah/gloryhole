@@ -54,10 +54,11 @@ func (h *Handler) handlePolicyBlock(ctx context.Context, w dns.ResponseWriter, r
 	outcome.responseCode = dns.RcodeNameError
 	msg.SetRcode(r, dns.RcodeNameError)
 
+	// Record trace BEFORE response - this appears in query logs
 	trace.Record(traceStagePolicy, string(rule.Action), func(entry *storage.BlockTraceEntry) {
 		entry.Rule = rule.Name
 		entry.Source = "policy_engine"
-		entry.Detail = "rule matched"
+		entry.Detail = "policy rule matched: " + rule.Logic
 	})
 
 	h.recordBlockedQuery(ctx, blockMetadata{
@@ -75,20 +76,23 @@ func (h *Handler) handlePolicyBlock(ctx context.Context, w dns.ResponseWriter, r
 			"client_ip", clientIP)
 	}
 
-	if h.Cache != nil {
-		h.Cache.SetBlocked(ctx, r, msg, trace.Entries())
-	}
+	// Policy BLOCK decisions are NOT cached.
+	// Policies are always evaluated fresh to handle ordering, multiple matches, and toggles correctly.
 
 	h.writeMsg(w, msg)
 	return true
 }
 
 func (h *Handler) handlePolicyAllow(ctx context.Context, w dns.ResponseWriter, r, msg *dns.Msg, rule *policy.Rule, domain, clientIP, qtypeLabel string, trace *blockTraceRecorder, outcome *serveDNSOutcome) bool {
-	// Record trace for the ALLOW action
+	// Record trace BEFORE response - this appears in query logs
+	// ALLOW bypasses blocklist and forwards directly to upstream
 	trace.Record(traceStagePolicy, string(rule.Action), func(entry *storage.BlockTraceEntry) {
 		entry.Rule = rule.Name
 		entry.Source = "policy_engine"
-		entry.Detail = "bypassing blocklist"
+		entry.Detail = "policy rule matched: " + rule.Logic + " (bypassing blocklist)"
+		entry.Metadata = map[string]string{
+			"bypasses_blocklist": "true",
+		}
 	})
 
 	if h.Forwarder == nil {
@@ -161,6 +165,18 @@ func (h *Handler) handlePolicyRedirect(ctx context.Context, w dns.ResponseWriter
 		return true
 	}
 
+	// Record trace BEFORE response - this appears in query logs
+	// Includes the rule name, logic expression, and redirect target
+	trace.Record(traceStagePolicy, string(rule.Action), func(entry *storage.BlockTraceEntry) {
+		entry.Rule = rule.Name
+		entry.Source = "policy_engine"
+		entry.Detail = "policy rule matched: " + rule.Logic
+		entry.Metadata = map[string]string{
+			"target":     rule.ActionData,
+			"query_type": qtypeLabel,
+		}
+	})
+
 	if h.Logger != nil {
 		h.Logger.Debug("Policy redirecting query",
 			"rule", rule.Name,
@@ -181,20 +197,10 @@ func (h *Handler) handlePolicyRedirect(ctx context.Context, w dns.ResponseWriter
 		outcome.responseCode = dns.RcodeSuccess
 	}
 
-	if h.Cache != nil {
-		h.Cache.Set(ctx, r, msg)
-	}
+	// Policy REDIRECT decisions are NOT cached.
+	// Policies are always evaluated fresh to handle ordering, multiple matches, and toggles correctly.
 
 	h.writeMsg(w, msg)
-
-	trace.Record(traceStagePolicy, string(rule.Action), func(entry *storage.BlockTraceEntry) {
-		entry.Rule = rule.Name
-		entry.Source = "policy_engine"
-		entry.Detail = "redirect"
-		if rule.ActionData != "" {
-			entry.Metadata = map[string]string{"target": rule.ActionData}
-		}
-	})
 	return true
 }
 
@@ -213,12 +219,15 @@ func (h *Handler) handlePolicyForward(ctx context.Context, w dns.ResponseWriter,
 		return true
 	}
 
-	// Record trace for the FORWARD action
+	// Record trace BEFORE response - this appears in query logs
+	// FORWARD uses custom upstream servers specified in the policy
 	trace.Record(traceStagePolicy, string(rule.Action), func(entry *storage.BlockTraceEntry) {
 		entry.Rule = rule.Name
 		entry.Source = "policy_engine"
-		entry.Detail = "forwarding to custom upstreams"
-		entry.Metadata = map[string]string{"upstreams": rule.ActionData}
+		entry.Detail = "policy rule matched: " + rule.Logic + " (custom upstream)"
+		entry.Metadata = map[string]string{
+			"upstreams": rule.ActionData,
+		}
 	})
 
 	if h.Logger != nil {

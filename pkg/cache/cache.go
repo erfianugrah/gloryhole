@@ -225,6 +225,59 @@ func (c *Cache) Set(ctx context.Context, r *dns.Msg, resp *dns.Msg) {
 		"size", entry.size)
 }
 
+// SetWithTrace stores a DNS response with trace metadata using normal TTL.
+// Use this for policy decisions like REDIRECT that need traces but aren't "blocked".
+func (c *Cache) SetWithTrace(ctx context.Context, r *dns.Msg, resp *dns.Msg, trace []storage.BlockTraceEntry) {
+	if !c.cfg.Enabled {
+		return
+	}
+
+	if len(r.Question) == 0 {
+		return
+	}
+
+	question := r.Question[0]
+	key := c.makeKey(question.Name, question.Qtype)
+
+	// Determine TTL from response (normal TTL, not BlockedTTL)
+	ttl := c.determineTTL(resp)
+	if ttl <= 0 {
+		return
+	}
+
+	now := time.Now()
+	entry := &cacheEntry{
+		msg:            resp.Copy(),
+		expiresAt:      now.Add(ttl),
+		lastAccessNano: now.UnixNano(),
+		size:           resp.Len(),
+		blockTrace:     cloneBlockTrace(trace),
+	}
+
+	c.mu.Lock()
+	if len(c.entries) >= c.maxEntries {
+		c.evictLRU()
+	}
+
+	_, exists := c.entries[key]
+	c.entries[key] = entry
+	c.stats.entries = len(c.entries)
+	c.mu.Unlock()
+
+	c.stats.sets.Add(1)
+
+	if c.metrics != nil && !exists {
+		c.metrics.CacheSize.Add(ctx, 1)
+	}
+
+	c.logger.Debug("Cached DNS response with trace",
+		"domain", question.Name,
+		"qtype", dns.TypeToString[question.Qtype],
+		"ttl", ttl,
+		"size", entry.size,
+		"trace_entries", len(trace))
+}
+
 // SetBlocked stores a blocked domain response in the cache with BlockedTTL
 // This is used for domains blocked by policy engine or blocklist to avoid
 // repeating the blocking logic on every query
@@ -476,6 +529,41 @@ func (c *Cache) Clear() {
 	}
 
 	c.logger.Info("Cache cleared")
+}
+
+// ClearBlocklistDecisions removes cache entries that have blocklist traces.
+// Call this when the blocklist is reloaded to ensure fresh evaluation.
+func (c *Cache) ClearBlocklistDecisions() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	removed := 0
+	for key, entry := range c.entries {
+		if hasBlocklistTrace(entry.blockTrace) {
+			delete(c.entries, key)
+			removed++
+		}
+	}
+
+	c.stats.entries = len(c.entries)
+
+	if c.metrics != nil && removed > 0 {
+		c.metrics.CacheSize.Add(context.Background(), int64(-removed))
+	}
+
+	if removed > 0 {
+		c.logger.Info("Cleared blocklist cache entries", "removed", removed, "kept", c.stats.entries)
+	}
+}
+
+// hasBlocklistTrace checks if any trace entry is from the blocklist stage
+func hasBlocklistTrace(traces []storage.BlockTraceEntry) bool {
+	for _, t := range traces {
+		if t.Stage == "blocklist" {
+			return true
+		}
+	}
+	return false
 }
 
 // Close stops the cache and cleanup goroutine

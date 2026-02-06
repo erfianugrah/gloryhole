@@ -55,6 +55,7 @@ func (h *Handler) handleLegacyBlocklistPath(ctx context.Context, w dns.ResponseW
 	overrideIP, hasOverride, cnameTarget, hasCNAME := h.lookupOverrides(domain, qtype, blocked)
 
 	if blocked {
+		// Record trace BEFORE response - this appears in query logs
 		trace.Record(traceStageBlocklist, "block", func(entry *storage.BlockTraceEntry) {
 			entry.Source = "legacy"
 			entry.Detail = "Matched legacy blocklist entry"
@@ -71,6 +72,8 @@ func (h *Handler) handleLegacyBlocklistPath(ctx context.Context, w dns.ResponseW
 		outcome.responseCode = dns.RcodeNameError
 		msg.SetRcode(r, dns.RcodeNameError)
 
+		// Cache blocked response WITH trace so subsequent cache hits show WHY it was blocked.
+		// Cached decisions are cleared when blocklist is toggled ON to prevent stale decisions.
 		if h.Cache != nil {
 			h.Cache.SetBlocked(ctx, r, msg, trace.Entries())
 		}
@@ -105,6 +108,7 @@ func (h *Handler) handleBlockedDomain(ctx context.Context, w dns.ResponseWriter,
 		sourceLabel = "blocklist"
 	}
 
+	// Record trace BEFORE response - this appears in query logs
 	trace.Record(traceStageBlocklist, "block", func(entry *storage.BlockTraceEntry) {
 		entry.Source = sourceLabel
 		if detail := describeBlockMatch(match); detail != "" {
@@ -120,6 +124,8 @@ func (h *Handler) handleBlockedDomain(ctx context.Context, w dns.ResponseWriter,
 		source:     sourceLabel,
 	})
 
+	// Cache blocked response WITH trace so subsequent cache hits show WHY it was blocked.
+	// Cached decisions are cleared when blocklist is toggled ON to prevent stale decisions.
 	if h.Cache != nil {
 		h.Cache.SetBlocked(ctx, r, msg, trace.Entries())
 	}
@@ -146,4 +152,3 @@ func (h *Handler) lookupOverrides(domain string, qtype uint16, blocked bool) (ne
 
 	return overrideIP, hasOverride, cnameTarget, hasCNAME
 }
-

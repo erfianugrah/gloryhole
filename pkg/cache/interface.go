@@ -20,6 +20,10 @@ type Interface interface {
 	// Set stores a DNS response in the cache with appropriate TTL
 	Set(ctx context.Context, r *dns.Msg, resp *dns.Msg)
 
+	// SetWithTrace stores a DNS response with trace metadata using normal TTL.
+	// Use this for policy decisions like REDIRECT that need traces but aren't "blocked".
+	SetWithTrace(ctx context.Context, r *dns.Msg, resp *dns.Msg, trace []storage.BlockTraceEntry)
+
 	// SetBlocked stores a blocked domain response in the cache with BlockedTTL
 	SetBlocked(ctx context.Context, r *dns.Msg, resp *dns.Msg, trace []storage.BlockTraceEntry)
 
@@ -28,6 +32,10 @@ type Interface interface {
 
 	// Clear removes all entries from the cache
 	Clear()
+
+	// ClearBlocklistDecisions removes cache entries that have blocklist traces.
+	// Call this when the blocklist is reloaded to ensure fresh evaluation.
+	ClearBlocklistDecisions()
 
 	// Close stops the cache and cleanup goroutine
 	Close() error
