@@ -184,19 +184,40 @@ export async function deletePolicy(id) {
 
 export async function togglePolicy(id, enabled) {
     try {
+        // Fetch current policy data first
+        const getResponse = await fetch(`/api/policies/${id}`);
+        if (!getResponse.ok) {
+            const errorData = await getResponse.json().catch(() => ({}));
+            alert('Failed to fetch policy: ' + (errorData.message || 'Unknown error'));
+            htmx.trigger(document.body, 'policy-updated'); // Refresh to reset toggle state
+            return;
+        }
+
+        const policy = await getResponse.json();
+
+        // Update with full policy data including the new enabled state
         const response = await fetch(`/api/policies/${id}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ enabled: enabled })
+            body: JSON.stringify({
+                name: policy.name,
+                logic: policy.logic,
+                action: policy.action,
+                action_data: policy.action_data || '',
+                enabled: enabled
+            })
         });
 
         if (response.ok) {
             htmx.trigger(document.body, 'policy-updated');
         } else {
-            alert('Failed to toggle policy');
+            const errorData = await response.json().catch(() => ({}));
+            alert('Failed to toggle policy: ' + (errorData.message || 'Unknown error'));
+            htmx.trigger(document.body, 'policy-updated'); // Refresh to reset toggle state
         }
     } catch (error) {
         alert('Error: ' + error.message);
+        htmx.trigger(document.body, 'policy-updated'); // Refresh to reset toggle state
     }
 }
 
