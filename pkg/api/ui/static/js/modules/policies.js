@@ -9,50 +9,77 @@ const POLICY_BUILDER_FIELDS = [
     {
         key: 'domain',
         label: 'Domain',
+        tooltip: 'Match queries by domain name. Use "ends with" for wildcard matching (e.g., ".example.com" matches all subdomains).',
         operators: [
-            { key: 'equals', label: 'equals', inputType: 'text', build: (value) => `Domain == ${quoteValue(value)}` },
-            { key: 'starts_with', label: 'starts with', inputType: 'text', build: (value) => `DomainStartsWith(Domain, ${quoteValue(value)})` },
-            { key: 'ends_with', label: 'ends with', inputType: 'text', build: (value) => `DomainEndsWith(Domain, ${quoteValue(value)})` },
-            { key: 'contains', label: 'contains', inputType: 'text', build: (value) => `DomainMatches(Domain, ${quoteValue(value)})` },
-            { key: 'matches_regex', label: 'matches regex', inputType: 'text', build: (value) => `DomainRegex(Domain, ${quoteValue(value)})` },
+            { key: 'equals', label: 'equals', inputType: 'text', placeholder: 'example.com', tooltip: 'Exact domain match', build: (value) => `Domain == ${quoteValue(value)}` },
+            { key: 'starts_with', label: 'starts with', inputType: 'text', placeholder: 'ads.', tooltip: 'Matches domains starting with this prefix', build: (value) => `DomainStartsWith(Domain, ${quoteValue(value)})` },
+            { key: 'ends_with', label: 'ends with', inputType: 'text', placeholder: '.example.com', tooltip: 'Wildcard: matches domain and all subdomains (include leading dot)', build: (value) => `DomainEndsWith(Domain, ${quoteValue(value)})` },
+            { key: 'contains', label: 'contains', inputType: 'text', placeholder: 'facebook', tooltip: 'Matches if domain contains this substring', build: (value) => `DomainMatches(Domain, ${quoteValue(value)})` },
+            { key: 'matches_regex', label: 'matches regex', inputType: 'text', placeholder: '.*\\.ads\\..*', tooltip: 'Advanced: match using regular expression', build: (value) => `DomainRegex(Domain, ${quoteValue(value)})` },
         ],
     },
     {
         key: 'client_ip',
         label: 'Client IP',
+        tooltip: 'Match queries by the client IP address making the request.',
         operators: [
-            { key: 'equals', label: 'equals', inputType: 'text', build: (value) => `ClientIP == ${quoteValue(value)}` },
-            { key: 'in_cidr', label: 'in CIDR', inputType: 'text', placeholder: '10.0.0.0/8', build: (value) => `IPInCIDR(ClientIP, ${quoteValue(value)})` },
+            { key: 'equals', label: 'equals', inputType: 'text', placeholder: '192.168.1.100', tooltip: 'Exact IP address match', build: (value) => `ClientIP == ${quoteValue(value)}` },
+            { key: 'in_cidr', label: 'in CIDR', inputType: 'text', placeholder: '192.168.1.0/24', tooltip: 'Match IP addresses in a subnet range', build: (value) => `IPInCIDR(ClientIP, ${quoteValue(value)})` },
         ],
     },
     {
         key: 'query_type',
         label: 'Query Type',
+        tooltip: 'Match by DNS query type (A, AAAA, CNAME, etc.).',
         operators: [
             {
                 key: 'equals',
                 label: 'equals',
                 inputType: 'select',
                 options: ['A', 'AAAA', 'CNAME', 'MX', 'TXT', 'PTR', 'ANY'],
+                tooltip: 'Match specific DNS record type',
                 build: (value) => `QueryType == ${quoteValue(value.toUpperCase())}`,
             },
         ],
     },
     {
         key: 'hour',
-        label: 'Hour',
+        label: 'Hour (0-23)',
+        tooltip: 'Match by hour of day (24-hour format). Useful for time-based rules.',
         operators: [
-            { key: 'equals', label: 'equals', inputType: 'number', min: 0, max: 23, build: (value) => `Hour == ${value}` },
-            { key: 'after', label: 'after or equal', inputType: 'number', min: 0, max: 23, build: (value) => `Hour >= ${value}` },
-            { key: 'before', label: 'before or equal', inputType: 'number', min: 0, max: 23, build: (value) => `Hour <= ${value}` },
+            { key: 'equals', label: 'equals', inputType: 'number', min: 0, max: 23, placeholder: '9', tooltip: 'Match exact hour', build: (value) => `Hour == ${value}` },
+            { key: 'after', label: 'after or equal', inputType: 'number', min: 0, max: 23, placeholder: '22', tooltip: 'Match this hour and later (e.g., 22 = 10pm onwards)', build: (value) => `Hour >= ${value}` },
+            { key: 'before', label: 'before or equal', inputType: 'number', min: 0, max: 23, placeholder: '6', tooltip: 'Match this hour and earlier (e.g., 6 = up to 6am)', build: (value) => `Hour <= ${value}` },
         ],
     },
     {
-        key: 'response_time',
-        label: 'Response Time (ms)',
+        key: 'weekday',
+        label: 'Day of Week',
+        tooltip: 'Match by day of the week (0=Sunday, 6=Saturday).',
         operators: [
-            { key: 'greater', label: 'greater than', inputType: 'number', min: 0, build: (value) => `ResponseTimeMs >= ${value}` },
-            { key: 'less', label: 'less than', inputType: 'number', min: 0, build: (value) => `ResponseTimeMs <= ${value}` },
+            {
+                key: 'equals',
+                label: 'equals',
+                inputType: 'select',
+                options: [
+                    { value: '0', label: 'Sunday' },
+                    { value: '1', label: 'Monday' },
+                    { value: '2', label: 'Tuesday' },
+                    { value: '3', label: 'Wednesday' },
+                    { value: '4', label: 'Thursday' },
+                    { value: '5', label: 'Friday' },
+                    { value: '6', label: 'Saturday' },
+                ],
+                tooltip: 'Match specific day of week',
+                build: (value) => `Weekday == ${value}`,
+            },
+            {
+                key: 'weekend',
+                label: 'is weekend',
+                inputType: 'none',
+                tooltip: 'Match Saturday and Sunday',
+                build: () => `IsWeekend(Weekday)`,
+            },
         ],
     },
 ];
@@ -295,7 +322,14 @@ function updateValueInput() {
     const previousText = valueInput.value;
     const previousSelect = valueSelect.value;
 
-    if (operator.inputType === 'select') {
+    // Update tooltip display
+    updateBuilderTooltip(field, operator);
+
+    if (operator.inputType === 'none') {
+        // No value needed (e.g., IsWeekend)
+        valueInput.style.display = 'none';
+        valueSelect.style.display = 'none';
+    } else if (operator.inputType === 'select') {
         // Clear existing options safely
         while (valueSelect.firstChild) {
             valueSelect.removeChild(valueSelect.firstChild);
@@ -303,13 +337,22 @@ function updateValueInput() {
 
         operator.options.forEach((opt) => {
             const option = document.createElement('option');
-            option.value = opt;
-            option.textContent = opt;
+            // Support both string options and {value, label} objects
+            if (typeof opt === 'object') {
+                option.value = opt.value;
+                option.textContent = opt.label;
+            } else {
+                option.value = opt;
+                option.textContent = opt;
+            }
             valueSelect.appendChild(option);
         });
         valueInput.style.display = 'none';
         valueSelect.style.display = 'inline-flex';
-        if (previousSelect && operator.options.includes(previousSelect)) {
+        
+        // Try to restore previous selection
+        const optionValues = operator.options.map(o => typeof o === 'object' ? o.value : o);
+        if (previousSelect && optionValues.includes(previousSelect)) {
             valueSelect.value = previousSelect;
         }
     } else {
@@ -325,6 +368,19 @@ function updateValueInput() {
     }
 }
 
+function updateBuilderTooltip(field, operator) {
+    const tooltipEl = document.getElementById('builder-tooltip');
+    if (!tooltipEl) return;
+    
+    const tooltip = operator.tooltip || field.tooltip || '';
+    if (tooltip) {
+        tooltipEl.textContent = tooltip;
+        tooltipEl.style.display = 'block';
+    } else {
+        tooltipEl.style.display = 'none';
+    }
+}
+
 export function addPolicyCondition() {
     const field = getSelectedField();
     const operator = getSelectedOperator(field);
@@ -335,8 +391,26 @@ export function addPolicyCondition() {
         return;
     }
 
-    let rawValue = operator.inputType === 'select' ? valueSelect.value : valueInput.value.trim();
-    if (rawValue === '') {
+    let rawValue;
+    let displayValue;
+    
+    if (operator.inputType === 'none') {
+        // No value needed (e.g., IsWeekend)
+        rawValue = null;
+        displayValue = '';
+    } else if (operator.inputType === 'select') {
+        rawValue = valueSelect.value;
+        // Get display label for object-style options
+        const selectedOpt = operator.options.find(o => 
+            (typeof o === 'object' ? o.value : o) === rawValue
+        );
+        displayValue = typeof selectedOpt === 'object' ? selectedOpt.label : rawValue;
+    } else {
+        rawValue = valueInput.value.trim();
+        displayValue = rawValue;
+    }
+
+    if (operator.inputType !== 'none' && rawValue === '') {
         alert('Enter a value for this condition.');
         return;
     }
@@ -356,13 +430,17 @@ export function addPolicyCondition() {
         return;
     }
 
+    const label = displayValue 
+        ? `${field.label} ${operator.label} ${displayValue}`
+        : `${field.label} ${operator.label}`;
+
     builderState.conditions.push({
         expression,
-        label: `${field.label} ${operator.label} ${rawValue}`,
+        label,
     });
     renderPolicyConditions();
     updateLogicFromBuilder();
-    valueInput.value = '';
+    if (valueInput) valueInput.value = '';
 }
 
 function renderPolicyConditions() {
@@ -603,65 +681,6 @@ function quoteValue(value) {
     }
 }
 
-/**
- * Quick Add - creates a simple domain-based policy
- */
-export async function submitQuickAdd(event) {
-    event.preventDefault();
-
-    const form = event.target;
-    const domain = form.querySelector('#quick-domain').value.trim();
-    const action = form.querySelector('#quick-action').value;
-    const isWildcard = form.querySelector('#quick-wildcard').checked;
-
-    if (!domain) {
-        alert('Please enter a domain');
-        return;
-    }
-
-    // Build the policy logic based on domain and wildcard setting
-    let logic;
-    let policyName;
-
-    if (isWildcard) {
-        // Wildcard: match domain and all subdomains
-        // e.g., "example.com" becomes DomainEndsWith for ".example.com" OR exact match
-        const safeDomain = domain.replace(/^\*\.?/, ''); // Remove leading *. if present
-        logic = `Domain == "${safeDomain}" || DomainEndsWith(Domain, ".${safeDomain}")`;
-        policyName = `${action === 'ALLOW' ? 'Allow' : 'Block'} *.${safeDomain}`;
-    } else {
-        // Exact match only
-        logic = `Domain == "${domain}"`;
-        policyName = `${action === 'ALLOW' ? 'Allow' : 'Block'} ${domain}`;
-    }
-
-    const policy = {
-        name: policyName,
-        logic: logic,
-        action: action,
-        action_data: '',
-        enabled: true
-    };
-
-    try {
-        const response = await fetch('/api/policies', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(policy)
-        });
-
-        if (response.ok) {
-            form.reset();
-            htmx.trigger(document.body, 'policy-updated');
-        } else {
-            const error = await response.json();
-            alert('Error: ' + (error.message || 'Failed to add policy'));
-        }
-    } catch (error) {
-        alert('Error: ' + error.message);
-    }
-}
-
 // Make functions available globally for HTML onclick handlers (temporary until all handlers are migrated)
 window.showAddPolicyModal = showAddPolicyModal;
 window.showEditPolicyModal = showEditPolicyModal;
@@ -671,4 +690,3 @@ window.deletePolicy = deletePolicy;
 window.togglePolicy = togglePolicy;
 window.testPolicyRule = testPolicyRule;
 window.addPolicyCondition = addPolicyCondition;
-window.submitQuickAdd = submitQuickAdd;
