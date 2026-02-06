@@ -31,37 +31,6 @@
         </div>
     </div>
 
-    <!-- Quick Add Section -->
-    <div class="quick-add-section">
-        <h3>Quick Add Domain Rule</h3>
-        <form id="quick-add-form" onsubmit="submitQuickAdd(event)" class="quick-add-form">
-            <div class="quick-add-row">
-                <div class="form-group">
-                    <label for="quick-domain">Domain</label>
-                    <input type="text" id="quick-domain" name="domain" required
-                           placeholder="example.com or *.example.com">
-                </div>
-                <div class="form-group">
-                    <label for="quick-action">Action</label>
-                    <select id="quick-action" name="action">
-                        <option value="ALLOW">Allow (bypass blocklist)</option>
-                        <option value="BLOCK">Block (return NXDOMAIN)</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label class="checkbox-label">
-                        <input type="checkbox" id="quick-wildcard" name="wildcard">
-                        <span>Wildcard (*.domain)</span>
-                    </label>
-                </div>
-                <button type="submit" class="btn btn-primary">Add Rule</button>
-            </div>
-            <small class="form-help">
-                Quick add creates a simple domain-based policy. For advanced rules with time/IP conditions, use "Add Policy" above.
-            </small>
-        </form>
-    </div>
-
     <!-- Policies List -->
     <div id="policies-container"
          hx-get="/api/policies"
@@ -99,23 +68,25 @@
             </div>
 
             <div id="builder-panel" class="builder-panel">
+                <p class="builder-help">Build rules by adding conditions. For simple domain allow/block, select "Domain" and use "equals" for exact match or "ends with" for wildcards.</p>
                 <div class="builder-row">
-                    <select id="builder-field" class="filter-select"></select>
-                    <select id="builder-operator" class="filter-select"></select>
+                    <select id="builder-field" class="filter-select" title="Select what to match"></select>
+                    <select id="builder-operator" class="filter-select" title="Select how to match"></select>
                     <input type="text" id="builder-value" class="filter-input" placeholder="Value">
                     <select id="builder-value-select" class="filter-select" style="display:none;"></select>
                     <button type="button" class="btn btn-secondary btn-sm" onclick="addPolicyCondition()">Add</button>
                 </div>
+                <p id="builder-tooltip" class="builder-tooltip" style="display:none;"></p>
                 <div class="builder-row">
                     <label>Match
-                        <select id="builder-combinator" class="filter-select builder-combinator">
-                            <option value="&&">ALL conditions</option>
-                            <option value="||">ANY condition</option>
+                        <select id="builder-combinator" class="filter-select builder-combinator" title="How to combine multiple conditions">
+                            <option value="&&">ALL conditions (AND)</option>
+                            <option value="||">ANY condition (OR)</option>
                         </select>
                     </label>
                 </div>
                 <div id="builder-conditions" class="builder-conditions empty">
-                    No conditions yet. Select a field above to begin.
+                    No conditions added yet. Select a field and operator above, then click "Add".
                 </div>
             </div>
 

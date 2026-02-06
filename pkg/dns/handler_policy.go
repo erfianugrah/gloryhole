@@ -37,11 +37,11 @@ func (h *Handler) handlePolicies(ctx context.Context, w dns.ResponseWriter, r, m
 	case policy.ActionBlock:
 		return h.handlePolicyBlock(ctx, w, r, msg, rule, domain, clientIP, qtypeLabel, trace, outcome)
 	case policy.ActionAllow:
-		return h.handlePolicyAllow(ctx, w, r, msg, rule, domain, clientIP, qtypeLabel, outcome)
+		return h.handlePolicyAllow(ctx, w, r, msg, rule, domain, clientIP, qtypeLabel, trace, outcome)
 	case policy.ActionRedirect:
 		return h.handlePolicyRedirect(ctx, w, r, msg, rule, domain, clientIP, qtype, qtypeLabel, trace, outcome)
 	case policy.ActionForward:
-		return h.handlePolicyForward(ctx, w, r, msg, rule, domain, clientIP, qtypeLabel, outcome)
+		return h.handlePolicyForward(ctx, w, r, msg, rule, domain, clientIP, qtypeLabel, trace, outcome)
 	case policy.ActionRateLimit:
 		return h.handlePolicyRateLimit(ctx, w, r, msg, rule, domain, clientIP, qtypeLabel, trace, outcome)
 	default:
@@ -83,7 +83,14 @@ func (h *Handler) handlePolicyBlock(ctx context.Context, w dns.ResponseWriter, r
 	return true
 }
 
-func (h *Handler) handlePolicyAllow(ctx context.Context, w dns.ResponseWriter, r, msg *dns.Msg, rule *policy.Rule, domain, clientIP, qtypeLabel string, outcome *serveDNSOutcome) bool {
+func (h *Handler) handlePolicyAllow(ctx context.Context, w dns.ResponseWriter, r, msg *dns.Msg, rule *policy.Rule, domain, clientIP, qtypeLabel string, trace *blockTraceRecorder, outcome *serveDNSOutcome) bool {
+	// Record trace for the ALLOW action
+	trace.Record(traceStagePolicy, string(rule.Action), func(entry *storage.BlockTraceEntry) {
+		entry.Rule = rule.Name
+		entry.Source = "policy_engine"
+		entry.Detail = "bypassing blocklist"
+	})
+
 	if h.Forwarder == nil {
 		if h.Logger != nil {
 			h.Logger.Warn("Policy allow action but no forwarder configured",
@@ -191,7 +198,7 @@ func (h *Handler) handlePolicyRedirect(ctx context.Context, w dns.ResponseWriter
 	return true
 }
 
-func (h *Handler) handlePolicyForward(ctx context.Context, w dns.ResponseWriter, r, msg *dns.Msg, rule *policy.Rule, domain, clientIP, qtypeLabel string, outcome *serveDNSOutcome) bool {
+func (h *Handler) handlePolicyForward(ctx context.Context, w dns.ResponseWriter, r, msg *dns.Msg, rule *policy.Rule, domain, clientIP, qtypeLabel string, trace *blockTraceRecorder, outcome *serveDNSOutcome) bool {
 	upstreams := rule.GetUpstreams()
 	if len(upstreams) == 0 || h.Forwarder == nil {
 		if h.Logger != nil {
@@ -205,6 +212,14 @@ func (h *Handler) handlePolicyForward(ctx context.Context, w dns.ResponseWriter,
 		h.writeMsg(w, msg)
 		return true
 	}
+
+	// Record trace for the FORWARD action
+	trace.Record(traceStagePolicy, string(rule.Action), func(entry *storage.BlockTraceEntry) {
+		entry.Rule = rule.Name
+		entry.Source = "policy_engine"
+		entry.Detail = "forwarding to custom upstreams"
+		entry.Metadata = map[string]string{"upstreams": rule.ActionData}
+	})
 
 	if h.Logger != nil {
 		h.Logger.Debug("Policy forwarding query to specific upstreams",
