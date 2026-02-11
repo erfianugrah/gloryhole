@@ -42,6 +42,8 @@ window.showAddModal = function() {
 
     if (modal) {
         modal.style.display = 'flex';
+        // Initialize form fields based on selected type (handles browser autofill)
+        updateFormFields();
         if (domainInput) {
             domainInput.focus();
         }
@@ -141,13 +143,21 @@ window.submitAdd = async function(event) {
     const form = event.target;
     const submitButton = form.querySelector('button[type="submit"]');
 
-    if (!submitButton) return;
+    if (!submitButton) {
+        console.error('Submit button not found in form');
+        return;
+    }
 
-    // Gather form data
-    const domain = document.getElementById('domain-input')?.value.trim();
-    const type = document.getElementById('type-input')?.value.toUpperCase();
-    const ttl = parseInt(document.getElementById('ttl-input')?.value) || 300;
-    const wildcard = document.getElementById('wildcard-input')?.checked || false;
+    // Gather form data with null safety
+    const domainEl = document.getElementById('domain-input');
+    const typeEl = document.getElementById('type-input');
+    const ttlEl = document.getElementById('ttl-input');
+    const wildcardEl = document.getElementById('wildcard-input');
+
+    const domain = domainEl?.value?.trim() || '';
+    const type = typeEl?.value?.toUpperCase() || '';
+    const ttl = parseInt(ttlEl?.value) || 300;
+    const wildcard = wildcardEl?.checked || false;
 
     // Validation
     if (!domain) {
