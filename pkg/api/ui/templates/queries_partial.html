@@ -33,15 +33,15 @@
                 </td>
                 <td>
                     {{if eq .ResponseCode 0}}
-                    <span class="rcode-badge rcode-success" title="NOERROR - No error condition">0</span>
+                    <span class="rcode-badge rcode-success" data-tooltip="NOERROR - No error condition">0</span>
                     {{else if eq .ResponseCode 2}}
-                    <span class="rcode-badge rcode-error" title="SERVFAIL - Server failure">2</span>
+                    <span class="rcode-badge rcode-error" data-tooltip="SERVFAIL - Server failure">2</span>
                     {{else if eq .ResponseCode 3}}
-                    <span class="rcode-badge rcode-warning" title="NXDOMAIN - Non-existent domain">3</span>
+                    <span class="rcode-badge rcode-warning" data-tooltip="NXDOMAIN - Non-existent domain">3</span>
                     {{else if eq .ResponseCode 5}}
-                    <span class="rcode-badge rcode-error" title="REFUSED - Query refused">5</span>
+                    <span class="rcode-badge rcode-error" data-tooltip="REFUSED - Query refused">5</span>
                     {{else}}
-                    <span class="rcode-badge" title="Response code {{.ResponseCode}}">{{.ResponseCode}}</span>
+                    <span class="rcode-badge" data-tooltip="Response code {{.ResponseCode}}">{{.ResponseCode}}</span>
                     {{end}}
                 </td>
                 <td class="upstream-cell">
@@ -106,6 +106,26 @@
     background: var(--bg-secondary);
     color: var(--text-primary);
     cursor: help;
+    position: relative;
+}
+
+.rcode-badge[data-tooltip]:hover::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    bottom: calc(100% + 6px);
+    left: 50%;
+    transform: translateX(-50%);
+    padding: 0.35rem 0.6rem;
+    border-radius: 4px;
+    font-size: 0.8em;
+    font-weight: 400;
+    white-space: nowrap;
+    z-index: 1000;
+    pointer-events: none;
+    background: #1a1a2e;
+    color: #e0e0e0;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
 }
 
 .rcode-badge.rcode-success {
