@@ -10,6 +10,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"net/http"
@@ -84,7 +85,7 @@ func buildTLSResources(cfg *config.ServerConfig, upstreams []string, logger *log
 func tlsConfigFromCert(cert *tls.Certificate) *tls.Config {
 	return &tls.Config{
 		Certificates: []tls.Certificate{*cert},
-		MinVersion:   tls.VersionTLS12,
+		MinVersion:   tls.VersionTLS13,
 		NextProtos:   []string{"dot", "h2", "http/1.1"},
 	}
 }
@@ -116,7 +117,7 @@ func buildAutocert(cfg *config.ServerConfig, logger *logging.Logger) (*tls.Confi
 
 	tlsCfg := &tls.Config{
 		GetCertificate: m.GetCertificate,
-		MinVersion:     tls.VersionTLS12,
+		MinVersion:     tls.VersionTLS13,
 		NextProtos:     []string{"dot", "h2", "http/1.1", "acme-tls/1"},
 	}
 
@@ -181,12 +182,15 @@ func newACMEManager(cfg *config.ServerConfig, upstreams []string, logger *loggin
 	}
 
 	if err := mgr.ensureCert(); err != nil {
-		return nil, nil, err
+		// Non-fatal: start the server without a cert and retry in the background.
+		// GetCertificate will return an error until a cert is obtained.
+		logger.Error("ACME initial certificate obtain failed, will retry in background", "error", err)
+		mgr.startRetryLoop()
 	}
 
 	tlsCfg := &tls.Config{
 		GetCertificate: mgr.getCertificate,
-		MinVersion:     tls.VersionTLS12,
+		MinVersion:     tls.VersionTLS13,
 		NextProtos:     []string{"dot", "h2", "http/1.1"},
 	}
 
@@ -236,6 +240,11 @@ func (m *acmeManager) loadCached() (*tls.Certificate, error) {
 		}
 		cert.Leaf = leaf
 
+		// Reject expired certificates.
+		if time.Now().After(leaf.NotAfter) {
+			return nil, fmt.Errorf("cached cert expired at %s", leaf.NotAfter)
+		}
+
 		// Reject the cached cert if its SANs don't cover all configured hosts.
 		if !certCoversHosts(leaf, m.hosts) {
 			return nil, fmt.Errorf("cached cert SANs %v do not match configured hosts %v", leaf.DNSNames, m.hosts)
@@ -264,11 +273,12 @@ func (m *acmeManager) obtainCert() (*tls.Certificate, error) {
 		return nil, fmt.Errorf("create cache dir: %w", err)
 	}
 
-	user := newACMEUser(m.email)
-	cfg := lego.NewConfig(user)
-	if m.email != "" {
-		cfg.Certificate.KeyType = certcrypto.RSA2048
+	user, err := loadOrCreateACMEUser(m.email, m.cacheDir)
+	if err != nil {
+		return nil, err
 	}
+	cfg := lego.NewConfig(user)
+	cfg.Certificate.KeyType = certcrypto.RSA2048
 
 	// Honor configured upstream DNS servers (ACME-specific override already resolved by config)
 	// for ACME/Cloudflare HTTP traffic instead of relying on the host resolver.
@@ -306,6 +316,16 @@ func (m *acmeManager) obtainCert() (*tls.Certificate, error) {
 			dns01.RecursiveNSsPropagationRequirement(),
 		)
 	}
+
+	// Add initial delay before first propagation poll to avoid poisoning
+	// recursive resolvers with negative (NXDOMAIN) cache entries.
+	if delay := m.cfg.TLS.ACME.Cloudflare.InitialDelay; delay > 0 {
+		dnsChallengeOpts = append(dnsChallengeOpts, dns01.WrapPreCheck(func(domain, fqdn, value string, check dns01.PreCheckFunc) (bool, error) {
+			m.logger.Info("ACME: waiting for initial DNS propagation delay", "delay", delay, "fqdn", fqdn)
+			time.Sleep(delay)
+			return check(fqdn, value)
+		}))
+	}
 	if m.cfg.TLS.ACME.Cloudflare.ZoneID != "" {
 		provider, err = newCFZoneProvider(m.cfg.TLS.ACME.Cloudflare, m.providerTok, httpClient, m.logger)
 		if err != nil {
@@ -322,15 +342,17 @@ func (m *acmeManager) obtainCert() (*tls.Certificate, error) {
 		return nil, fmt.Errorf("set dns01 provider: %w", err)
 	}
 
-	reg, err := client.Registration.Register(registration.RegisterOptions{TermsOfServiceAgreed: true})
-	if err != nil {
-		// ACME may return already registered; tolerate
-		if !strings.Contains(err.Error(), "already") {
-			return nil, fmt.Errorf("register acme account: %w", err)
+	if user.Registration != nil {
+		m.logger.Info("ACME: reusing persisted account registration", "uri", user.Registration.URI)
+	} else {
+		reg, regErr := client.Registration.Register(registration.RegisterOptions{TermsOfServiceAgreed: true})
+		if regErr != nil {
+			return nil, fmt.Errorf("register acme account: %w", regErr)
 		}
-	}
-	if reg != nil {
 		user.Registration = reg
+		if saveErr := user.saveRegistration(m.cacheDir); saveErr != nil {
+			m.logger.Warn("ACME: failed to persist registration", "error", saveErr)
+		}
 	}
 
 	req := certificate.ObtainRequest{Domains: m.hosts, Bundle: true}
@@ -358,6 +380,35 @@ func (m *acmeManager) obtainCert() (*tls.Certificate, error) {
 
 	m.logger.Info("ACME certificate obtained (DNS-01 Cloudflare)", "hosts", m.hosts, "cache", m.cacheDir)
 	return &cert, nil
+}
+
+// startRetryLoop attempts to obtain an initial certificate with exponential backoff.
+// It runs when the first ensureCert() call fails at startup.
+func (m *acmeManager) startRetryLoop() {
+	m.wg.Add(1)
+	go func() {
+		defer m.wg.Done()
+		backoff := 30 * time.Second
+		const maxBackoff = 15 * time.Minute
+		for {
+			select {
+			case <-time.After(backoff):
+				m.logger.Info("ACME: retrying certificate obtain", "backoff", backoff)
+				if err := m.ensureCert(); err != nil {
+					m.logger.Error("ACME retry failed", "error", err, "next_retry", backoff*2)
+					backoff *= 2
+					if backoff > maxBackoff {
+						backoff = maxBackoff
+					}
+					continue
+				}
+				m.logger.Info("ACME: certificate obtained after retry")
+				return
+			case <-m.stopCh:
+				return
+			}
+		}
+	}()
 }
 
 func (m *acmeManager) startRenewLoop() {
@@ -398,13 +449,35 @@ func (m *acmeManager) maybeRenew() {
 	}
 
 	m.logger.Info("Attempting ACME renewal", "expires", leaf.NotAfter)
-	newCert, err := m.obtainCert()
-	if err != nil {
-		m.logger.Error("ACME renewal failed", "error", err)
+
+	const maxRetries = 3
+	backoff := 2 * time.Minute
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		newCert, err := m.obtainCert()
+		if err != nil {
+			m.logger.Error("ACME renewal failed",
+				"error", err,
+				"attempt", attempt,
+				"max_retries", maxRetries,
+				"expires", leaf.NotAfter,
+			)
+			if attempt < maxRetries {
+				select {
+				case <-time.After(backoff):
+					backoff *= 2
+				case <-m.stopCh:
+					return
+				}
+				continue
+			}
+			m.logger.Error("ACME renewal exhausted retries, will try again next cycle",
+				"expires", leaf.NotAfter)
+			return
+		}
+		m.certStore.Store(newCert)
+		m.logger.Info("ACME renewal succeeded", "new_expiry", newCert.Leaf.NotAfter)
 		return
 	}
-	m.certStore.Store(newCert)
-	m.logger.Info("ACME renewal succeeded", "new_expiry", newCert.Leaf.NotAfter)
 }
 
 func (m *acmeManager) Stop() {
@@ -464,15 +537,21 @@ func (p *cfZoneProvider) Present(domain, token, keyAuth string) error {
 	info := dns01.GetChallengeInfo(domain, keyAuth)
 	fqdn := dns01.UnFqdn(info.EffectiveFQDN)
 
-	body, _ := json.Marshal(map[string]any{
+	body, err := json.Marshal(map[string]any{
 		"type":    "TXT",
 		"name":    fqdn,
-		"content": `"` + info.Value + `"`,
+		"content": info.Value,
 		"ttl":     p.ttl,
 		"proxied": false,
 	})
+	if err != nil {
+		return fmt.Errorf("cloudflare: marshal request body: %w", err)
+	}
 
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost,
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
 		fmt.Sprintf("https://api.cloudflare.com/client/v4/zones/%s/dns_records", url.PathEscape(p.zoneID)),
 		bytes.NewReader(body))
 	if err != nil {
@@ -491,12 +570,16 @@ func (p *cfZoneProvider) Present(domain, token, keyAuth string) error {
 		}
 	}()
 
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("cloudflare: API returned HTTP %d for record create", resp.StatusCode)
+	}
+
 	var parsed cfRecordResponse
 	if err := json.NewDecoder(resp.Body).Decode(&parsed); err != nil {
 		return fmt.Errorf("cloudflare: decode response: %w", err)
 	}
 	if !parsed.Success {
-		return fmt.Errorf("cloudflare: API create failed: status %d body %s", resp.StatusCode, string(parsed.Errors))
+		return fmt.Errorf("cloudflare: API create failed: status %d errors %s", resp.StatusCode, string(parsed.Errors))
 	}
 
 	p.recordIDsMu.Lock()
@@ -510,12 +593,16 @@ func (p *cfZoneProvider) Present(domain, token, keyAuth string) error {
 func (p *cfZoneProvider) CleanUp(domain, token, keyAuth string) error {
 	p.recordIDsMu.Lock()
 	id := p.recordIDs[token]
+	delete(p.recordIDs, token)
 	p.recordIDsMu.Unlock()
 	if id == "" {
 		return nil // nothing to clean
 	}
 
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodDelete,
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodDelete,
 		fmt.Sprintf("https://api.cloudflare.com/client/v4/zones/%s/dns_records/%s", url.PathEscape(p.zoneID), url.PathEscape(id)),
 		nil)
 	if err != nil {
@@ -533,7 +620,10 @@ func (p *cfZoneProvider) CleanUp(domain, token, keyAuth string) error {
 			p.logger.Warn("cloudflare: close response body (cleanup)", "error", cerr)
 		}
 	}()
-	// Ignore body; best-effort delete
+	// Best-effort delete; log non-2xx but don't fail
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		p.logger.Warn("cloudflare: cleanup returned non-2xx", "status", resp.StatusCode, "record_id", id)
+	}
 	return nil
 }
 
@@ -542,17 +632,74 @@ func (p *cfZoneProvider) Timeout() (timeout, interval time.Duration) {
 	return p.timeout, p.interval
 }
 
-// acmeUser implements lego.User
-// For simplicity, keys are ephemeral; registration is stored in memory only.
+// acmeUser implements lego.User with persistent key storage.
 type acmeUser struct {
 	Email        string
 	Registration *registration.Resource
 	key          *ecdsa.PrivateKey
 }
 
-func newACMEUser(email string) *acmeUser {
-	key, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-	return &acmeUser{Email: email, key: key}
+// loadOrCreateACMEUser loads a persisted ACME account key from cacheDir, or
+// generates a new one and saves it. This avoids creating new LE accounts on
+// every restart (which risks hitting rate limits).
+func loadOrCreateACMEUser(email, cacheDir string) (*acmeUser, error) {
+	keyPath := filepath.Join(cacheDir, "account.key.pem")
+	regPath := filepath.Join(cacheDir, "account.json")
+
+	user := &acmeUser{Email: email}
+
+	// Try loading existing key
+	if keyPEM, err := os.ReadFile(keyPath); err == nil {
+		block, _ := pem.Decode(keyPEM)
+		if block != nil {
+			key, err := x509.ParseECPrivateKey(block.Bytes)
+			if err == nil {
+				user.key = key
+			}
+		}
+	}
+
+	// Generate new key if none loaded
+	if user.key == nil {
+		key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+		if err != nil {
+			return nil, fmt.Errorf("generate ACME account key: %w", err)
+		}
+		user.key = key
+
+		// Persist the key
+		keyDER, err := x509.MarshalECPrivateKey(key)
+		if err != nil {
+			return nil, fmt.Errorf("marshal ACME account key: %w", err)
+		}
+		keyPEM := pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: keyDER})
+		if err := os.WriteFile(keyPath, keyPEM, 0o600); err != nil {
+			return nil, fmt.Errorf("write ACME account key: %w", err)
+		}
+	}
+
+	// Try loading existing registration
+	if regJSON, err := os.ReadFile(regPath); err == nil {
+		var reg registration.Resource
+		if err := json.Unmarshal(regJSON, &reg); err == nil {
+			user.Registration = &reg
+		}
+	}
+
+	return user, nil
+}
+
+// saveRegistration persists the ACME registration to disk.
+func (u *acmeUser) saveRegistration(cacheDir string) error {
+	if u.Registration == nil {
+		return nil
+	}
+	regJSON, err := json.Marshal(u.Registration)
+	if err != nil {
+		return fmt.Errorf("marshal ACME registration: %w", err)
+	}
+	regPath := filepath.Join(cacheDir, "account.json")
+	return os.WriteFile(regPath, regJSON, 0o600)
 }
 
 func (u *acmeUser) GetEmail() string                        { return u.Email }

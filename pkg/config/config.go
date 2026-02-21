@@ -24,7 +24,7 @@ type Config struct {
 	Auth                  AuthConfig                  `yaml:"auth"`
 	LocalRecords          LocalRecordsConfig          `yaml:"local_records"`
 	ConditionalForwarding ConditionalForwardingConfig `yaml:"conditional_forwarding"`
-	Forwarder             ForwarderConfig             `yaml:"forwarder"`        // Upstream DNS forwarder config
+	Forwarder             ForwarderConfig             `yaml:"forwarder"` // Upstream DNS forwarder config
 	UpstreamDNSServers    []string                    `yaml:"upstream_dns_servers"`
 	Blocklists            []string                    `yaml:"blocklists"`
 	Whitelist             []string                    `yaml:"whitelist"`
@@ -107,6 +107,7 @@ type CFConfig struct {
 	TTL                int           `yaml:"ttl"`                      // TXT record TTL (min 120)
 	PropagationTimeout time.Duration `yaml:"propagation_timeout"`      // how long to wait for TXT to show up
 	PollingInterval    time.Duration `yaml:"polling_interval"`         // how often to poll during propagation
+	InitialDelay       time.Duration `yaml:"initial_delay"`            // delay before first propagation poll (avoids negative cache)
 	SkipAuthNSCheck    bool          `yaml:"skip_authoritative_check"` // if true, rely on recursive NS only
 }
 
@@ -342,6 +343,9 @@ func (c *Config) applyDefaults() {
 	}
 	if c.Server.TLS.ACME.Cloudflare.PollingInterval == 0 {
 		c.Server.TLS.ACME.Cloudflare.PollingInterval = 2 * time.Second
+	}
+	if c.Server.TLS.ACME.Cloudflare.InitialDelay == 0 {
+		c.Server.TLS.ACME.Cloudflare.InitialDelay = 10 * time.Second
 	}
 
 	// Kill-switch defaults: Enable both if neither is explicitly configured

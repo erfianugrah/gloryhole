@@ -436,6 +436,11 @@ func parseTLSPayload(r *http.Request, current config.ServerConfig) (tlsPayload, 
 					acme.Cloudflare.PollingInterval = d
 				}
 			}
+			if val := strings.TrimSpace(r.FormValue("acme_cf_initial_delay")); val != "" {
+				if d, err := time.ParseDuration(val); err == nil {
+					acme.Cloudflare.InitialDelay = d
+				}
+			}
 			if r.Form.Has("acme_cf_skip_auth_check") {
 				acme.Cloudflare.SkipAuthNSCheck = parseCheckbox(r.FormValue("acme_cf_skip_auth_check"))
 			}

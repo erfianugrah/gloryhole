@@ -97,7 +97,7 @@ func (s *Server) Start(ctx context.Context) error {
 		metrics: s.metrics,
 	}
 
-	errChan := make(chan error, 2)
+	errChan := make(chan error, 4)
 
 	// Create and assign UDP server
 	if s.cfg.Server.UDPEnabled {

@@ -45,7 +45,7 @@ func TestCertCoversHosts(t *testing.T) {
 func TestLoadCachedRejectsMismatchedSANs(t *testing.T) {
 	dir := t.TempDir()
 
-	certPEM, keyPEM := generateSelfSignedPEM(t, "old.example.com")
+	certPEM, keyPEM := generateSelfSignedPEMWithExpiry(t, "old.example.com", -time.Hour, 24*time.Hour)
 	if err := os.WriteFile(filepath.Join(dir, "cert.pem"), certPEM, 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -70,7 +70,7 @@ func TestLoadCachedRejectsMismatchedSANs(t *testing.T) {
 func TestLoadCachedAcceptsMatchingSANs(t *testing.T) {
 	dir := t.TempDir()
 
-	certPEM, keyPEM := generateSelfSignedPEM(t, "dot.example.com")
+	certPEM, keyPEM := generateSelfSignedPEMWithExpiry(t, "dot.example.com", -time.Hour, 24*time.Hour)
 	if err := os.WriteFile(filepath.Join(dir, "cert.pem"), certPEM, 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -92,8 +92,41 @@ func TestLoadCachedAcceptsMatchingSANs(t *testing.T) {
 	}
 }
 
+func TestLoadCachedRejectsExpiredCert(t *testing.T) {
+	dir := t.TempDir()
+
+	// Certificate that expired 1 hour ago
+	certPEM, keyPEM := generateSelfSignedPEMWithExpiry(t, "dot.example.com", -48*time.Hour, -time.Hour)
+	if err := os.WriteFile(filepath.Join(dir, "cert.pem"), certPEM, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "key.pem"), keyPEM, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	mgr := &acmeManager{
+		cacheDir: dir,
+		hosts:    []string{"dot.example.com"},
+	}
+
+	_, err := mgr.loadCached()
+	if err == nil {
+		t.Fatal("expected loadCached to reject expired cert")
+	}
+	if !strings.Contains(err.Error(), "expired") {
+		t.Errorf("unexpected error: %s", err)
+	}
+}
+
 // generateSelfSignedPEM creates a self-signed cert+key PEM for the given DNS name.
 func generateSelfSignedPEM(t *testing.T, dnsName string) (certPEM, keyPEM []byte) {
+	t.Helper()
+	return generateSelfSignedPEMWithExpiry(t, dnsName, -time.Hour, 24*time.Hour)
+}
+
+// generateSelfSignedPEMWithExpiry creates a self-signed cert+key PEM with explicit
+// NotBefore (now + notBeforeOffset) and NotAfter (now + notAfterOffset).
+func generateSelfSignedPEMWithExpiry(t *testing.T, dnsName string, notBeforeOffset, notAfterOffset time.Duration) (certPEM, keyPEM []byte) {
 	t.Helper()
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
@@ -103,8 +136,8 @@ func generateSelfSignedPEM(t *testing.T, dnsName string) (certPEM, keyPEM []byte
 		SerialNumber: big.NewInt(1),
 		Subject:      pkix.Name{CommonName: dnsName},
 		DNSNames:     []string{dnsName},
-		NotBefore:    time.Now().Add(-time.Hour),
-		NotAfter:     time.Now().Add(24 * time.Hour),
+		NotBefore:    time.Now().Add(notBeforeOffset),
+		NotAfter:     time.Now().Add(notAfterOffset),
 		KeyUsage:     x509.KeyUsageDigitalSignature,
 		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
 	}
