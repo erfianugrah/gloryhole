@@ -3,8 +3,12 @@ package api
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net"
 	"net/http"
+	"os"
+	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -14,8 +18,8 @@ import (
 
 const maxConfigPayloadSize = 64 * 1024 // 64KB
 const (
-	settingsTemplateTLS       = "settings-tls"
-	flashKeyTLS               = "tls"
+	settingsTemplateTLS = "settings-tls"
+	flashKeyTLS         = "tls"
 )
 
 // handleUpdateUpstreams handles PUT /api/config/upstreams
@@ -150,6 +154,12 @@ func (s *Server) handleUpdateTLS(w http.ResponseWriter, r *http.Request) {
 
 	if !s.persistConfigSection(w, r, &updated, settingsTemplateTLS, flashKeyTLS, cfg) {
 		return
+	}
+
+	// Purge cached ACME certificate when the configured hosts change so the
+	// next restart obtains a cert matching the new hostnames.
+	if acmeHostsChanged(cfg.Server.TLS.ACME.Hosts, payload.TLS.ACME.Hosts) {
+		purgeACMECache(payload.TLS.ACME.CacheDir, s.logger)
 	}
 
 	data := s.newSettingsPageData(cfg)
@@ -331,7 +341,7 @@ func parseCachePayload(r *http.Request, current config.CacheConfig) (cachePayloa
 	return payload, nil
 }
 
-type tlsPayload struct{
+type tlsPayload struct {
 	DotEnabled bool
 	DotAddress string
 	TLS        config.TLSConfig
@@ -661,6 +671,45 @@ func isNumeric(value string) bool {
 
 func isJSONContent(r *http.Request) bool {
 	return strings.Contains(strings.ToLower(r.Header.Get("Content-Type")), "application/json")
+}
+
+// acmeHostsChanged reports whether the ACME host lists differ.
+func acmeHostsChanged(oldHosts, newHosts []string) bool {
+	if len(oldHosts) != len(newHosts) {
+		return true
+	}
+	a := make([]string, len(oldHosts))
+	b := make([]string, len(newHosts))
+	for i := range oldHosts {
+		a[i] = strings.ToLower(oldHosts[i])
+	}
+	for i := range newHosts {
+		b[i] = strings.ToLower(newHosts[i])
+	}
+	sort.Strings(a)
+	sort.Strings(b)
+	for i := range a {
+		if a[i] != b[i] {
+			return true
+		}
+	}
+	return false
+}
+
+// purgeACMECache removes cached cert/key so the next startup obtains a fresh
+// certificate matching the (potentially changed) hosts.
+func purgeACMECache(cacheDir string, logger *slog.Logger) {
+	if cacheDir == "" {
+		return
+	}
+	for _, name := range []string{"cert.pem", "key.pem"} {
+		p := filepath.Join(cacheDir, name)
+		if err := os.Remove(p); err != nil && !os.IsNotExist(err) {
+			logger.Error("Failed to purge ACME cache file", "path", p, "error", err)
+		} else if err == nil {
+			logger.Info("Purged ACME cache file (hosts changed)", "path", p)
+		}
+	}
 }
 
 func (s *Server) persistConfigSection(w http.ResponseWriter, r *http.Request, updated *config.Config, tmpl, errorKey string, current *config.Config) bool {

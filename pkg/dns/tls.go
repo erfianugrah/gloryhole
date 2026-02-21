@@ -228,13 +228,35 @@ func (m *acmeManager) loadCached() (*tls.Certificate, error) {
 	if err != nil {
 		return nil, err
 	}
-	// Parse leaf for expiry
+	// Parse leaf for expiry and SAN validation.
 	if len(cert.Certificate) > 0 {
-		if leaf, err := x509.ParseCertificate(cert.Certificate[0]); err == nil {
-			cert.Leaf = leaf
+		leaf, err := x509.ParseCertificate(cert.Certificate[0])
+		if err != nil {
+			return nil, fmt.Errorf("parse cached leaf: %w", err)
+		}
+		cert.Leaf = leaf
+
+		// Reject the cached cert if its SANs don't cover all configured hosts.
+		if !certCoversHosts(leaf, m.hosts) {
+			return nil, fmt.Errorf("cached cert SANs %v do not match configured hosts %v", leaf.DNSNames, m.hosts)
 		}
 	}
 	return &cert, nil
+}
+
+// certCoversHosts returns true if the certificate's DNS SANs cover every host
+// in the requested list (case-insensitive).
+func certCoversHosts(leaf *x509.Certificate, hosts []string) bool {
+	sans := make(map[string]struct{}, len(leaf.DNSNames))
+	for _, name := range leaf.DNSNames {
+		sans[strings.ToLower(name)] = struct{}{}
+	}
+	for _, h := range hosts {
+		if _, ok := sans[strings.ToLower(h)]; !ok {
+			return false
+		}
+	}
+	return true
 }
 
 func (m *acmeManager) obtainCert() (*tls.Certificate, error) {
