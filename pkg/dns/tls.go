@@ -540,7 +540,7 @@ func (p *cfZoneProvider) Present(domain, token, keyAuth string) error {
 	body, err := json.Marshal(map[string]any{
 		"type":    "TXT",
 		"name":    fqdn,
-		"content": info.Value,
+		"content": `"` + info.Value + `"`,
 		"ttl":     p.ttl,
 		"proxied": false,
 	})
