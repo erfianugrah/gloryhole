@@ -6,6 +6,7 @@ set -e
 # Handles two scenarios:
 #   1. Running as root (default image, docker-compose, VyOS/podman):
 #      - Ensures mounted config and data dirs are readable/writable by glory-hole user
+#      - Sets NET_BIND_SERVICE capability on the binary so it can bind port 53
 #      - Drops privileges to glory-hole (UID 1000) via su-exec
 #   2. Running as non-root (Kubernetes securityContext, --user flag):
 #      - Executes the binary directly
@@ -27,6 +28,9 @@ if [ "$(id -u)" = "0" ]; then
             [ -f "$f" ] && chmod 644 "$f" 2>/dev/null || true
         done
     fi
+
+    # Grant NET_BIND_SERVICE on the binary so it can bind port 53 after dropping root
+    setcap 'cap_net_bind_service=+ep' /usr/local/bin/glory-hole 2>/dev/null || true
 
     echo "glory-hole: dropping privileges to ${GLORY_USER} (${GLORY_UID}:${GLORY_GID})"
     exec su-exec "${GLORY_USER}" /usr/local/bin/glory-hole "$@"

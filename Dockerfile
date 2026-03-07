@@ -53,12 +53,14 @@ RUN ./glory-hole -version || true
 FROM alpine:latest
 
 # Install runtime dependencies
-# su-exec is needed for the entrypoint to drop privileges from root to glory-hole
+# su-exec: drop privileges from root to glory-hole in entrypoint
+# libcap: setcap for NET_BIND_SERVICE on the binary (port 53)
 RUN apk --no-cache add \
 	ca-certificates \
 	tzdata \
 	sqlite \
 	su-exec \
+	libcap \
 	&& rm -rf /var/cache/apk/*
 
 # Create non-root user
