@@ -16,18 +16,14 @@ GLORY_UID=1000
 GLORY_GID=1000
 
 if [ "$(id -u)" = "0" ]; then
-    # Fix ownership on directories the app needs to write to
-    chown -R "${GLORY_UID}:${GLORY_GID}" /var/lib/glory-hole /var/log/glory-hole 2>/dev/null || true
-
-    # Ensure mounted config files are readable by the app user
-    if [ -d /etc/glory-hole ]; then
-        # Make directory traversable
-        chmod 755 /etc/glory-hole
-        # Make config files readable (preserve read-only mounts by ignoring errors)
-        for f in /etc/glory-hole/*.yml /etc/glory-hole/*.yaml; do
-            [ -f "$f" ] && chmod 644 "$f" 2>/dev/null || true
-        done
-    fi
+    # Fix ownership on all app directories so glory-hole user can read/write.
+    # /etc/glory-hole needs write access for config persistence (policy saves
+    # write a .tmp file then rename).
+    chown -R "${GLORY_UID}:${GLORY_GID}" \
+        /etc/glory-hole \
+        /var/lib/glory-hole \
+        /var/log/glory-hole \
+        2>/dev/null || true
 
     # Grant NET_BIND_SERVICE on the binary so it can bind port 53 after dropping root
     setcap 'cap_net_bind_service=+ep' /usr/local/bin/glory-hole 2>/dev/null || true
