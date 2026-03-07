@@ -108,6 +108,7 @@ dockers:
       - package-lock.json
       - scripts/
       - config/config.example.yml
+      - docker-entrypoint.sh
       - cmd/
       - pkg/
     build_flag_templates:
@@ -133,6 +134,7 @@ dockers:
       - package-lock.json
       - scripts/
       - config/config.example.yml
+      - docker-entrypoint.sh
       - cmd/
       - pkg/
     build_flag_templates:

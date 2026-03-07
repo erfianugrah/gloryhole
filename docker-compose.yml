@@ -13,9 +13,6 @@ services:
     container_name: glory-hole
     restart: unless-stopped
 
-    # Run as non-root user (must match Dockerfile UID/GID)
-    user: "1000:1000"
-
     cap_add:
       - NET_BIND_SERVICE  # Allow binding to port 53
 

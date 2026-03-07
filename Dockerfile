@@ -53,10 +53,12 @@ RUN ./glory-hole -version || true
 FROM alpine:latest
 
 # Install runtime dependencies
+# su-exec is needed for the entrypoint to drop privileges from root to glory-hole
 RUN apk --no-cache add \
 	ca-certificates \
 	tzdata \
 	sqlite \
+	su-exec \
 	&& rm -rf /var/cache/apk/*
 
 # Create non-root user
@@ -71,11 +73,16 @@ RUN mkdir -p /etc/glory-hole /var/lib/glory-hole /var/log/glory-hole && \
 COPY --from=builder /build/glory-hole /usr/local/bin/glory-hole
 RUN chmod +x /usr/local/bin/glory-hole
 
+# Copy entrypoint script
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+
 # Copy configuration examples
 COPY --chown=glory-hole:glory-hole config/config.example.yml /etc/glory-hole/config.example.yml
 
-# Switch to non-root user
-USER glory-hole
+# Do NOT set USER here — the entrypoint starts as root to fix
+# mounted volume permissions, then drops to glory-hole via su-exec.
+# For Kubernetes, use securityContext to run as UID 1000 directly.
 
 # Set working directory
 WORKDIR /var/lib/glory-hole
@@ -91,10 +98,10 @@ EXPOSE 53/udp 53/tcp 8080/tcp 9090/tcp
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
 	CMD wget --no-verbose --tries=1 --spider http://localhost:8080/health || exit 1
 
-# Set entrypoint
-ENTRYPOINT ["/usr/local/bin/glory-hole"]
+# Entrypoint handles privilege drop
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 
-# Default command
+# Default command (passed as args to entrypoint)
 CMD ["-config", "/etc/glory-hole/config.yml"]
 
 # Labels
