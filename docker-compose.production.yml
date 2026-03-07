@@ -7,6 +7,9 @@ services:
     container_name: glory-hole
     restart: unless-stopped
 
+    # Run as non-root user (must match Dockerfile UID/GID)
+    user: "1000:1000"
+
     ports:
       - "53:53/udp"    # DNS UDP
       - "53:53/tcp"    # DNS TCP
