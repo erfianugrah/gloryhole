@@ -3,37 +3,136 @@
 ## Architecture
 
 ```
-Client (:53) → Glory-Hole (filtering, policies, cache, local records)
+Client (:53) → Glory-Hole (filtering, policies, local records, query logging)
                   ↓ allowed queries
               Unbound (127.0.0.1:5353, recursive resolution, DNSSEC, caching)
-                  ↓ or forward-zone
+                  ↓ recursive or forward-zone
               Upstream / Root servers
 ```
 
 Glory-Hole remains the front-facing DNS server on port 53. Unbound runs as a
-supervised child process on localhost:5353, handling recursive resolution and
-DNSSEC validation. Glory-Hole's existing forwarder is replaced (or augmented)
-with Unbound as the default upstream.
+supervised child process on localhost:5353, handling recursive resolution,
+DNSSEC validation, and caching. Glory-Hole's existing forwarder points at
+Unbound instead of external upstreams.
 
 ### What stays in Glory-Hole
 - Port 53 listener (UDP/TCP/DoT)
 - Policy engine (block/allow/redirect rules)
 - Blocklist loading + matching
-- Local records (synced → Unbound local-data for consistency)
+- Local records (highest priority, also pushed to Unbound as local-data)
 - Query logging + analytics
 - Web UI + HTTP API
 - Client management
+- Conditional forwarding for CIDR/qtype-based rules
 
 ### What Unbound handles
 - Recursive resolution (iterative queries to root/TLD/auth servers)
 - DNSSEC validation
-- Its own message/RRset cache (Glory-Hole cache can be disabled or act as L1)
-- Forward zones (replaces Glory-Hole conditional forwarding upstreams)
+- **All caching** (Glory-Hole cache disabled when Unbound is active)
+- Forward zones (domain-based forwarding, replaces simple domain-only rules)
 - Stub zones (authoritative server delegation)
 - Auth zones (locally hosted zones)
 - RPZ (optional, complementary to Glory-Hole blocklists)
 - Rate limiting (per-zone, per-IP)
 - DNS-over-TLS upstream
+
+### What gets disabled when Unbound is active
+- **Glory-Hole's DNS cache** — Unbound's cache is DNSSEC-aware, handles
+  negative caching properly, and respects TTL semantics. Running two caches
+  causes correctness issues (stale DNSSEC signatures, TTL drift, double memory).
+- **Simple domain-only conditional forwarding rules** — migrated to Unbound
+  forward-zones. Glory-Hole conditional forwarding remains for CIDR/qtype rules.
+
+---
+
+## Decisions
+
+### Cache: Unbound is the sole cache
+When Unbound is enabled, Glory-Hole's cache is disabled. Reasons:
+- Glory-Hole's cache sits before forwarding in the pipeline. If it caches a
+  response, Unbound never sees subsequent queries — its cache stays cold.
+- Glory-Hole's cache has no DNSSEC awareness. It would serve responses with
+  expired DNSSEC signatures.
+- Two caches doubles memory usage for no benefit.
+- Unbound's cache is battle-tested and DNSSEC-correct.
+
+### Blocklists: Stay in Glory-Hole only
+Blocking stays in Glory-Hole's pipeline (policy engine + blocklist manager).
+No RPZ duplication. Unbound RPZ is exposed in the UI for advanced users who
+want additional server-side filtering, but it's not auto-populated from
+Glory-Hole's blocklists.
+
+### Config ownership: Glory-Hole owns unbound.conf
+Glory-Hole always writes the full `unbound.conf` from its Go model. No
+parser for reading existing configs. Manual edits to `unbound.conf` will be
+overwritten on next save. For users with existing configs, provide a one-time
+migration guide (copy forward-zone blocks into the UI).
+
+### Conditional forwarding model
+- **CIDR/qtype rules** → stay in Glory-Hole's conditional forwarding handler.
+  These are evaluated in Go before forwarding to the matched upstream.
+- **Domain-only rules** → configured as Unbound forward-zones via the UI.
+  Unbound handles the forwarding natively (supports TLS, TCP, forward-first
+  fallback to recursion).
+- The UI makes this clear: "Domain forwarding" section configures Unbound
+  forward-zones. "Advanced forwarding" section configures Glory-Hole rules
+  for CIDR/qtype matching.
+
+### Feature visibility when Unbound is disabled
+- All `/api/unbound/*` endpoints return `503 Service Unavailable`
+- The "Resolver" nav section is hidden in the sidebar
+- Glory-Hole's cache and forwarder work exactly as before
+- No Unbound-related config appears in the settings
+
+### Managed vs external mode (decided upfront, not deferred)
+Two modes are defined from Phase 1 because the mode affects how every
+other component behaves:
+- **`managed: true`** (default in Docker) — Glory-Hole starts/stops/
+  supervises Unbound, writes `unbound.conf`, handles DNSSEC anchor
+  bootstrapping, monitors health, restarts on crash.
+- **`managed: false`** — User manages Unbound externally (systemd, etc.).
+  Glory-Hole only forwards to it. No config writes, no supervision. Stats
+  endpoints still work if the control socket is accessible.
+
+---
+
+## Failure modes & recovery
+
+### Unbound fails to start on boot
+1. Supervisor logs the error (with stderr from Unbound).
+2. **Fallback**: If `unbound.fallback_upstreams` is set (or previous
+   `upstream_dns_servers` config exists), Glory-Hole falls back to simple
+   forwarding mode with its own cache re-enabled. DNS resolution continues
+   (without DNSSEC/recursion).
+3. Supervisor retries in background with exponential backoff (1s→2s→4s→max 30s).
+4. API reports `GET /api/unbound/status` as `degraded` with the error.
+5. When Unbound eventually starts, supervisor transitions to normal mode,
+   disables Glory-Hole cache again, and switches forwarder to 127.0.0.1:5353.
+
+### Unbound crashes during operation
+1. Supervisor detects process exit, logs exit code + stderr.
+2. Immediate restart attempt (no backoff for first retry).
+3. During the restart window (typically <1s), queries forwarded to Unbound
+   will fail. Glory-Hole's forwarder circuit breaker opens after threshold
+   failures, triggering the fallback upstreams if configured.
+4. If 5 consecutive restart attempts fail within 60 seconds, supervisor
+   enters `failed` state and falls back to forwarding mode (same as boot
+   failure). Manual intervention or config fix required.
+
+### unbound-checkconf rejects a config change
+1. API write endpoint returns 400 with the `unbound-checkconf` error message.
+2. No changes are persisted to `config.yml`.
+3. No reload is sent to Unbound.
+4. The running Unbound continues with the previous valid config.
+5. UI shows the validation error to the user.
+
+### unbound-control reload fails
+1. `unbound.conf` was already written (it passed `unbound-checkconf`).
+2. API returns 500, logs the error.
+3. The stale `unbound.conf` on disk is valid but not yet loaded by Unbound.
+4. Next restart of Unbound will pick up the new config.
+5. UI shows a warning: "Config saved but reload failed. Restart Unbound to
+   apply changes."
 
 ---
 
@@ -41,365 +140,914 @@ with Unbound as the default upstream.
 
 ### Phase 1: Bundle Unbound in Docker image
 **Goal**: Unbound runs as a supervised subprocess, Glory-Hole forwards to it.
+Users get recursive resolution + DNSSEC out of the box with zero config.
 
 #### 1.1 Dockerfile changes
-- Install `unbound` package from Alpine repos (no need to compile from source,
-  Alpine 3.21 ships Unbound 1.22.x)
-- Install `unbound-libs` for `unbound-control`
-- Create `/etc/unbound/` config directory
-- Ship a default `unbound.conf` that:
-  - Listens on `127.0.0.1@5353`
-  - DNSSEC enabled with auto-trust-anchor
-  - No access-control needed (localhost only)
-  - remote-control enabled on localhost (for runtime management)
-  - Sensible cache defaults (msg-cache-size: 64m, rrset-cache-size: 128m)
 
-#### 1.2 Process supervision (`pkg/unbound/supervisor.go`)
-- New package `pkg/unbound` with a `Supervisor` struct
-- Starts Unbound via `exec.Command("unbound", "-d", "-c", configPath)`
-- Captures stdout/stderr → Glory-Hole's logger
-- Health checking via DNS probe to 127.0.0.1:5353
-- Restart on crash with backoff
-- Graceful shutdown: SIGTERM → wait → SIGKILL
-- Config reload: `unbound-control reload` (no restart needed)
+Both `Dockerfile` (dev) and `Dockerfile.release` (CI):
 
-#### 1.3 Wire into Glory-Hole startup
-- `cmd/glory-hole/main.go`: start Supervisor before DNS handler
-- Default `upstream_dns_servers` to `["127.0.0.1:5353"]` when Unbound is enabled
-- Config flag: `unbound.enabled: true` (default true in Docker, false for bare binary)
-- Existing forwarder works unchanged — it just points at localhost:5353
-
-#### 1.4 Config schema additions
-```yaml
-unbound:
-  enabled: true
-  binary_path: "/usr/sbin/unbound"    # auto-detected
-  config_path: "/etc/unbound/unbound.conf"
-  listen_port: 5353
+```dockerfile
+# Runtime stage additions:
+RUN apk add --no-cache unbound unbound-libs
+RUN mkdir -p /etc/unbound /var/run/unbound \
+    && chown glory-hole:glory-hole /etc/unbound /var/run/unbound
 ```
 
-**Deliverable**: Docker image with Unbound, Glory-Hole auto-forwards to it.
-No UI changes yet. Users get recursive resolution + DNSSEC out of the box.
+**Image size impact**: `unbound` + `unbound-libs` on Alpine adds ~3-4MB
+(compressed). Current image is ~35MB. Acceptable overhead for the value
+(DNSSEC + recursion).
+
+**No `setcap` needed for Unbound**: It binds only to 127.0.0.1:5353
+(unprivileged port, localhost only). Only Glory-Hole needs `cap_net_bind_service`
+for port 53.
+
+#### 1.2 Entrypoint changes (`docker-entrypoint.sh`)
+
+The entrypoint stays minimal. DNSSEC anchor bootstrapping is handled by the
+Go supervisor (not the shell script) so it also works in non-Docker deployments.
+
+Only change: ensure Unbound directories have correct ownership when running
+as root (same pattern as existing `chown` for app directories):
+
+```sh
+# Add after existing chown block (before exec):
+if [ "$(id -u)" = "0" ]; then
+    chown -R glory-hole:glory-hole /etc/unbound /var/run/unbound 2>/dev/null || true
+fi
+```
+
+#### 1.3 Process supervision (`pkg/unbound/supervisor.go`)
+
+```go
+type Supervisor struct {
+    cmd           *exec.Cmd
+    cfg           SupervisorConfig
+    logger        *slog.Logger
+    mu            sync.Mutex
+    state         State         // stopped | starting | running | degraded | failed
+    lastErr       error
+    restartCount  int
+    cancelHealth  context.CancelFunc
+}
+
+type SupervisorConfig struct {
+    BinaryPath    string // auto-detected if empty
+    ConfigPath    string // /etc/unbound/unbound.conf
+    ControlSocket string // /var/run/unbound/control.sock
+    ListenAddr    string // 127.0.0.1:5353
+    // Paths to unbound-control and unbound-checkconf (auto-detected)
+    ControlBin    string
+    CheckconfBin  string
+}
+
+type State string
+const (
+    StateStopped  State = "stopped"
+    StateStarting State = "starting"
+    StateRunning  State = "running"
+    StateDegraded State = "degraded" // started but health checks failing
+    StateFailed   State = "failed"   // gave up restarting
+)
+```
+
+**Startup sequence** (called from `main.go`):
+1. Auto-detect binary paths (`unbound`, `unbound-control`, `unbound-checkconf`)
+   via `exec.LookPath`, then fallback to common paths.
+2. Run `unbound-anchor -a /etc/unbound/root.key` to bootstrap/refresh the
+   DNSSEC root trust anchor. This is idempotent and safe to run every startup.
+   Failure is non-fatal (logged as warning — anchor may already exist).
+3. Write default `unbound.conf` if none exists (or regenerate from config).
+4. Run `unbound-checkconf <configPath>` to validate before starting.
+5. Start Unbound: `exec.Command(binaryPath, "-d", "-c", configPath)`.
+   - `-d` = don't daemonize (stays in foreground, supervisor manages lifecycle)
+   - Capture stdout/stderr → slog with `[unbound]` prefix
+6. **Readiness gate**: Probe `127.0.0.1:5353` with a DNS `CH TXT id.server`
+   query in a loop (100ms interval, 30s timeout). If timeout: log error,
+   enter `failed` state, trigger fallback.
+7. Start health monitor goroutine (every 10s DNS probe).
+
+**Orphan detection** (before step 5):
+- Check if port 5353 is already listening (`net.DialTimeout`).
+- If so, try `unbound-control status` via the socket.
+- If it responds, adopt it (skip starting a new process, go to step 7).
+- If it doesn't respond, fail with: "Port 5353 in use by unknown process".
+
+**Health monitoring**:
+- Every 10s: send `CH TXT id.server` to 127.0.0.1:5353.
+- 3 consecutive failures → restart Unbound with backoff (1s, 2s, 4s, max 30s).
+- 5 restarts within 60s → enter `failed` state, stop retrying.
+- Health status exposed via `Status() (State, error)`.
+
+**Reload** (config changes without restart):
+```go
+func (s *Supervisor) Reload() error {
+    return s.runControl("reload")
+}
+
+func (s *Supervisor) FlushCache() error {
+    return s.runControl("flush_zone", ".")
+}
+
+func (s *Supervisor) FlushZone(zone string) error {
+    return s.runControl("flush_zone", zone)
+}
+
+func (s *Supervisor) runControl(args ...string) error {
+    cmdArgs := append([]string{"-s", s.cfg.ControlSocket}, args...)
+    out, err := exec.Command(s.cfg.ControlBin, cmdArgs...).CombinedOutput()
+    if err != nil {
+        return fmt.Errorf("unbound-control %v: %w: %s", args, err, out)
+    }
+    return nil
+}
+```
+
+**Shutdown**: SIGTERM → 5s grace → SIGKILL. Called from Glory-Hole's shutdown
+handler before storage/telemetry cleanup.
+
+#### 1.4 Wire into Glory-Hole startup (`cmd/glory-hole/main.go`)
+
+Insert between config watcher start (step 4) and DNS handler creation (step 7):
+
+```go
+// After config watcher start, before DNS handler creation:
+var unboundSupervisor *unbound.Supervisor
+
+if cfg.Unbound.Enabled && cfg.Unbound.Managed {
+    ubCfg := unbound.SupervisorConfig{
+        BinaryPath:    cfg.Unbound.BinaryPath,
+        ConfigPath:    cfg.Unbound.ConfigPath,
+        ControlSocket: cfg.Unbound.ControlSocket,
+        ListenAddr:    fmt.Sprintf("127.0.0.1:%d", cfg.Unbound.ListenPort),
+    }
+
+    unboundSupervisor = unbound.NewSupervisor(ubCfg, logger)
+
+    // Write unbound.conf from config (or default)
+    if cfg.Unbound.Config != nil {
+        if err := unbound.WriteConfig(cfg.Unbound.Config, cfg.Unbound.ConfigPath); err != nil {
+            logger.Error("Failed to write unbound.conf", "error", err)
+            // Continue — default config from image may still work
+        }
+    }
+
+    if err := unboundSupervisor.Start(ctx); err != nil {
+        logger.Error("Unbound failed to start", "error", err)
+        // Fallback: keep upstream_dns_servers and cache as-is
+    } else {
+        // Override upstreams and disable cache
+        cfg.UpstreamDNSServers = []string{ubCfg.ListenAddr}
+        cfg.Cache.Enabled = false
+        logger.Info("Unbound active, forwarding to local resolver",
+            "addr", ubCfg.ListenAddr)
+    }
+}
+```
+
+The existing `forwarder.NewForwarder(cfg, logger)` call (inside
+`dns.NewServer` at line 560) will automatically use `["127.0.0.1:5353"]`
+since we mutated `cfg.UpstreamDNSServers`.
+
+**Hot-reload callback** (main.go lines 582-854) additions:
+
+```go
+// In the OnChange callback:
+// 1. If unbound.enabled changed true→false:
+//    - Stop supervisor
+//    - Restore upstream_dns_servers from new config
+//    - Re-enable cache
+//    - Create new forwarder
+
+// 2. If unbound.enabled changed false→true:
+//    - Start supervisor
+//    - Override upstreams to 127.0.0.1:5353
+//    - Disable cache
+//    - Create new forwarder pointing at Unbound
+
+// 3. If unbound config changed (but still enabled):
+//    - Write new unbound.conf
+//    - Validate with unbound-checkconf
+//    - Reload via unbound-control
+//    - No forwarder/cache changes needed
+```
+
+**Shutdown order** (main.go lines 886-927) addition:
+
+```go
+// After stopping DNS server and API server, before storage close:
+if unboundSupervisor != nil {
+    logger.Info("Stopping Unbound resolver")
+    unboundSupervisor.Stop() // SIGTERM → wait → SIGKILL
+}
+```
+
+#### 1.5 Config schema additions
+
+```yaml
+unbound:
+  enabled: true                    # default: true in Docker, false for bare binary
+  managed: true                    # true = supervise process, false = external
+  binary_path: ""                  # auto-detected from PATH if empty
+  config_path: "/etc/unbound/unbound.conf"
+  listen_port: 5353
+  control_socket: "/var/run/unbound/control.sock"
+  fallback_upstreams:              # used when Unbound fails (optional)
+    - "1.1.1.1:53"
+    - "8.8.8.8:53"
+```
+
+Added to `pkg/config/config.go`:
+```go
+type UnboundConfig struct {
+    Enabled           bool         `yaml:"enabled"`
+    Managed           bool         `yaml:"managed"`
+    BinaryPath        string       `yaml:"binary_path"`
+    ConfigPath        string       `yaml:"config_path"`
+    ListenPort        int          `yaml:"listen_port"`
+    ControlSocket     string       `yaml:"control_socket"`
+    FallbackUpstreams []string     `yaml:"fallback_upstreams"`
+    Config            *UnboundServerConfig `yaml:"config,omitempty"` // Phase 2
+}
+```
+
+Default values (set in `config.Load` or `config.Defaults()`):
+- `enabled: true` in Docker (detected via `/etc/glory-hole/.docker` sentinel
+  file or `GLORY_HOLE_DOCKER=1` env var)
+- `enabled: false` for bare binary
+- `managed: true`
+- `listen_port: 5353`
+- `config_path: /etc/unbound/unbound.conf`
+- `control_socket: /var/run/unbound/control.sock`
+
+#### 1.6 Default unbound.conf
+
+Shipped in the Docker image at `/etc/unbound/unbound.conf`. Used when no
+custom config is present. After Phase 2, this file is always generated from
+the Go model.
+
+```
+server:
+    interface: 127.0.0.1@5353
+    do-ip6: no
+    do-daemonize: no
+    username: ""
+    chroot: ""
+    directory: "/etc/unbound"
+
+    # Access control (localhost only)
+    access-control: 127.0.0.0/8 allow
+    access-control: 0.0.0.0/0 refuse
+
+    # DNSSEC
+    module-config: "validator iterator"
+    auto-trust-anchor-file: "/etc/unbound/root.key"
+
+    # Cache
+    msg-cache-size: 64m
+    rrset-cache-size: 128m
+    cache-max-ttl: 86400
+    cache-min-ttl: 0
+    cache-max-negative-ttl: 3600
+    infra-cache-numhosts: 10000
+    key-cache-size: 8m
+
+    # Performance
+    num-threads: 2
+    so-reuseport: yes
+    edns-buffer-size: 1232
+
+    # Hardening
+    harden-glue: yes
+    harden-dnssec-stripped: yes
+    harden-below-nxdomain: yes
+    harden-algo-downgrade: yes
+    qname-minimisation: yes
+    aggressive-nsec: yes
+
+    # Serve stale
+    serve-expired: yes
+    serve-expired-ttl: 86400
+    serve-expired-client-timeout: 1800
+
+    # Logging (minimal — Glory-Hole handles query logging)
+    verbosity: 1
+    logfile: ""
+    log-queries: no
+    log-replies: no
+    log-servfail: yes
+
+remote-control:
+    control-enable: yes
+    control-interface: /var/run/unbound/control.sock
+    control-use-cert: no
+```
+
+#### 1.7 Deliverable
+Docker image with Unbound. `docker run` gives recursive resolution + DNSSEC
+with zero config. If Unbound fails to start, falls back to simple forwarding
+(existing behavior). Users who set `unbound.enabled: false` get exactly the
+old behavior with no overhead.
 
 ---
 
-### Phase 2: Unbound config management (Go layer)
-**Goal**: Go code that reads/writes/validates unbound.conf programmatically.
+### Phase 2: Unbound config model + serializer
+**Goal**: Go code that generates valid `unbound.conf` from a typed struct,
+validated by `unbound-checkconf`.
 
-#### 2.1 Config model (`pkg/unbound/config.go`)
-Go struct that maps to unbound.conf sections:
+No parser. Glory-Hole owns the config and always writes the full file.
+
+#### 2.1 Config model — two tiers
+
+The config model is split into **essential** (exposed in UI) and **advanced**
+(config.yml only) tiers. The Go struct contains all fields, but the UI only
+renders forms for the essential tier. Advanced users edit `config.yml` directly
+for the rest.
+
+**Essential** (shown in UI):
+
+| Category | Fields |
+|----------|--------|
+| Cache | msg_cache_size, rrset_cache_size, cache_max_ttl, cache_min_ttl, cache_max_negative_ttl |
+| DNSSEC | module_config (on/off/permissive), domain_insecure list, harden_dnssec_stripped |
+| Performance | num_threads |
+| Hardening | qname_minimisation, aggressive_nsec, harden_glue, harden_below_nxdomain |
+| Serve Stale | serve_expired toggle, serve_expired_ttl |
+| Logging | verbosity (0-5) |
+| Forward Zones | full CRUD (name, addrs, TLS, forward-first) |
+| Stub Zones | full CRUD (name, addrs, prime, first) |
+
+**Advanced** (config.yml only, not in UI):
+
+| Category | Fields |
+|----------|--------|
+| Cache | msg_cache_slabs, rrset_cache_slabs, infra_cache_numhosts, key_cache_size |
+| Performance | so_reuseport, outgoing_range, num_queries_per_thread, edns_buffer_size |
+| Rate Limiting | ratelimit, ratelimit_size, ratelimit_factor, ip_ratelimit, ip_ratelimit_size |
+| TLS | tls_cert_bundle, tls_upstream, tls_service_key/pem, tls_port |
+| Auth Zones | full config |
+| RPZ | full config |
+| Access Control | custom ACL entries |
+
+This keeps the UI manageable (~15 settings) while supporting the full
+Unbound feature set via config.yml.
+
+#### 2.2 Config struct (`pkg/unbound/config.go`)
 
 ```go
-type UnboundConfig struct {
-    Server        ServerConfig         `json:"server"`
-    ForwardZones  []ForwardZone        `json:"forward_zones"`
-    StubZones     []StubZone           `json:"stub_zones"`
-    AuthZones     []AuthZone           `json:"auth_zones"`
-    RemoteControl RemoteControlConfig  `json:"remote_control"`
-    RPZ           []RPZConfig          `json:"rpz"`
-    Views         []ViewConfig         `json:"views"`
+// UnboundServerConfig is the full typed representation of unbound.conf.
+// Fields with `ui:"essential"` are exposed in the web UI.
+// All other fields are config.yml-only.
+type UnboundServerConfig struct {
+    Server        ServerBlock       `yaml:"server" json:"server"`
+    ForwardZones  []ForwardZone     `yaml:"forward_zones" json:"forward_zones"`
+    StubZones     []StubZone        `yaml:"stub_zones" json:"stub_zones"`
+    AuthZones     []AuthZone        `yaml:"auth_zones,omitempty" json:"auth_zones,omitempty"`
+    RemoteControl RemoteControl     `yaml:"remote_control" json:"remote_control"`
+    RPZ           []RPZConfig       `yaml:"rpz,omitempty" json:"rpz,omitempty"`
 }
 
-type ServerConfig struct {
-    // Interface & Port
-    Interfaces       []string `json:"interfaces"`
-    Port             int      `json:"port"`
-    OutgoingInterfaces []string `json:"outgoing_interfaces"`
+type ServerBlock struct {
+    // Cache (essential)
+    MsgCacheSize       string `yaml:"msg_cache_size" json:"msg_cache_size"`
+    RRSetCacheSize     string `yaml:"rrset_cache_size" json:"rrset_cache_size"`
+    CacheMaxTTL        int    `yaml:"cache_max_ttl" json:"cache_max_ttl"`
+    CacheMinTTL        int    `yaml:"cache_min_ttl" json:"cache_min_ttl"`
+    CacheMaxNegTTL     int    `yaml:"cache_max_negative_ttl" json:"cache_max_negative_ttl"`
 
-    // Access Control
-    AccessControl    []AccessControlEntry `json:"access_control"`
+    // Cache (advanced)
+    MsgCacheSlabs      int    `yaml:"msg_cache_slabs,omitempty" json:"msg_cache_slabs,omitempty"`
+    RRSetCacheSlabs    int    `yaml:"rrset_cache_slabs,omitempty" json:"rrset_cache_slabs,omitempty"`
+    InfraCacheNumHosts int    `yaml:"infra_cache_numhosts,omitempty" json:"infra_cache_numhosts,omitempty"`
+    KeyCacheSize       string `yaml:"key_cache_size,omitempty" json:"key_cache_size,omitempty"`
 
-    // Cache
-    MsgCacheSize     string `json:"msg_cache_size"`
-    MsgCacheSlabs    int    `json:"msg_cache_slabs"`
-    RRSetCacheSize   string `json:"rrset_cache_size"`
-    RRSetCacheSlabs  int    `json:"rrset_cache_slabs"`
-    CacheMaxTTL      int    `json:"cache_max_ttl"`
-    CacheMinTTL      int    `json:"cache_min_ttl"`
-    CacheMaxNegTTL   int    `json:"cache_max_negative_ttl"`
-    InfraCacheNumHosts int  `json:"infra_cache_numhosts"`
-    KeyCacheSize     string `json:"key_cache_size"`
+    // DNSSEC (essential)
+    ModuleConfig       string   `yaml:"module_config" json:"module_config"`
+    DomainInsecure     []string `yaml:"domain_insecure,omitempty" json:"domain_insecure,omitempty"`
+    HardenDNSSEC       bool     `yaml:"harden_dnssec_stripped" json:"harden_dnssec_stripped"`
 
-    // DNSSEC
-    ModuleConfig     string   `json:"module_config"`
-    AutoTrustAnchor  string   `json:"auto_trust_anchor_file"`
-    TrustAnchors     []string `json:"trust_anchors"`
-    DomainInsecure   []string `json:"domain_insecure"`
-    ValLogLevel      int      `json:"val_log_level"`
-    ValPermissive    bool     `json:"val_permissive_mode"`
-    HardenDNSSEC     bool     `json:"harden_dnssec_stripped"`
-    HardenBelowNX    bool     `json:"harden_below_nxdomain"`
-    HardenGlue       bool     `json:"harden_glue"`
-    HardenAlgoDown   bool     `json:"harden_algo_downgrade"`
+    // DNSSEC (advanced)
+    AutoTrustAnchor    string `yaml:"auto_trust_anchor_file" json:"auto_trust_anchor_file"`
+    ValLogLevel        int    `yaml:"val_log_level,omitempty" json:"val_log_level,omitempty"`
+    ValPermissive      bool   `yaml:"val_permissive_mode,omitempty" json:"val_permissive_mode,omitempty"`
+    HardenAlgoDown     bool   `yaml:"harden_algo_downgrade" json:"harden_algo_downgrade"`
 
-    // TLS
-    TLSServiceKey    string `json:"tls_service_key"`
-    TLSServicePem    string `json:"tls_service_pem"`
-    TLSPort          int    `json:"tls_port"`
-    TLSCertBundle    string `json:"tls_cert_bundle"`
-    TLSUpstream      bool   `json:"tls_upstream"`
+    // Hardening (essential)
+    HardenGlue         bool `yaml:"harden_glue" json:"harden_glue"`
+    HardenBelowNX      bool `yaml:"harden_below_nxdomain" json:"harden_below_nxdomain"`
+    QnameMinimisation  bool `yaml:"qname_minimisation" json:"qname_minimisation"`
+    AggressiveNSEC     bool `yaml:"aggressive_nsec" json:"aggressive_nsec"`
 
-    // Logging
-    Verbosity        int    `json:"verbosity"`
-    LogQueries       bool   `json:"log_queries"`
-    LogReplies       bool   `json:"log_replies"`
-    LogServfail      bool   `json:"log_servfail"`
+    // Performance (essential: threads only)
+    NumThreads         int  `yaml:"num_threads" json:"num_threads"`
 
-    // Performance
-    NumThreads       int    `json:"num_threads"`
-    SoReusePort      bool   `json:"so_reuseport"`
-    OutgoingRange    int    `json:"outgoing_range"`
-    NumQueriesPerThread int `json:"num_queries_per_thread"`
-    EDNSBufferSize   int    `json:"edns_buffer_size"`
+    // Performance (advanced)
+    SoReusePort        bool `yaml:"so_reuseport,omitempty" json:"so_reuseport,omitempty"`
+    OutgoingRange      int  `yaml:"outgoing_range,omitempty" json:"outgoing_range,omitempty"`
+    NumQueriesPerThread int `yaml:"num_queries_per_thread,omitempty" json:"num_queries_per_thread,omitempty"`
+    EDNSBufferSize     int  `yaml:"edns_buffer_size,omitempty" json:"edns_buffer_size,omitempty"`
 
-    // Hardening
-    QnameMinimisation bool  `json:"qname_minimisation"`
-    AggressiveNSEC    bool  `json:"aggressive_nsec"`
+    // Serve Stale (essential)
+    ServeExpired              bool `yaml:"serve_expired" json:"serve_expired"`
+    ServeExpiredTTL           int  `yaml:"serve_expired_ttl" json:"serve_expired_ttl"`
+    ServeExpiredClientTimeout int  `yaml:"serve_expired_client_timeout,omitempty" json:"serve_expired_client_timeout,omitempty"`
 
-    // Serve Stale
-    ServeExpired      bool  `json:"serve_expired"`
-    ServeExpiredTTL   int   `json:"serve_expired_ttl"`
-    ServeExpiredClientTimeout int `json:"serve_expired_client_timeout"`
+    // Logging (essential: verbosity only)
+    Verbosity  int  `yaml:"verbosity" json:"verbosity"`
+    LogQueries bool `yaml:"log_queries,omitempty" json:"log_queries,omitempty"`
+    LogReplies bool `yaml:"log_replies,omitempty" json:"log_replies,omitempty"`
+    LogServfail bool `yaml:"log_servfail,omitempty" json:"log_servfail,omitempty"`
 
-    // Rate Limiting
-    Ratelimit         int    `json:"ratelimit"`
-    RatelimitSize     string `json:"ratelimit_size"`
-    RatelimitFactor   int    `json:"ratelimit_factor"`
-    IPRatelimit       int    `json:"ip_ratelimit"`
-    IPRatelimitSize   string `json:"ip_ratelimit_size"`
+    // Rate Limiting (advanced)
+    Ratelimit       int    `yaml:"ratelimit,omitempty" json:"ratelimit,omitempty"`
+    RatelimitSize   string `yaml:"ratelimit_size,omitempty" json:"ratelimit_size,omitempty"`
+    IPRatelimit     int    `yaml:"ip_ratelimit,omitempty" json:"ip_ratelimit,omitempty"`
+    IPRatelimitSize string `yaml:"ip_ratelimit_size,omitempty" json:"ip_ratelimit_size,omitempty"`
 
-    // Local Data
-    LocalZones       []LocalZoneEntry `json:"local_zones"`
-    LocalData        []string         `json:"local_data"`
+    // TLS upstream (advanced)
+    TLSCertBundle string `yaml:"tls_cert_bundle,omitempty" json:"tls_cert_bundle,omitempty"`
+    TLSUpstream   bool   `yaml:"tls_upstream,omitempty" json:"tls_upstream,omitempty"`
+
+    // Access Control (advanced)
+    AccessControl []ACLEntry `yaml:"access_control,omitempty" json:"access_control,omitempty"`
+
+    // Local Data (synced from Glory-Hole local records — not user-editable)
+    LocalZones []LocalZoneEntry `yaml:"-" json:"-"` // generated, not persisted
+    LocalData  []string         `yaml:"-" json:"-"` // generated, not persisted
+}
+
+type ACLEntry struct {
+    Netblock string `yaml:"netblock" json:"netblock"`
+    Action   string `yaml:"action" json:"action"`
+}
+
+type LocalZoneEntry struct {
+    Name string `yaml:"name" json:"name"`
+    Type string `yaml:"type" json:"type"`
 }
 
 type ForwardZone struct {
-    Name           string   `json:"name"`
-    ForwardAddrs   []string `json:"forward_addrs"`
-    ForwardHosts   []string `json:"forward_hosts"`
-    ForwardFirst   bool     `json:"forward_first"`
-    ForwardTLS     bool     `json:"forward_tls_upstream"`
-    ForwardNoCache bool     `json:"forward_no_cache"`
+    Name         string   `yaml:"name" json:"name"`
+    ForwardAddrs []string `yaml:"forward_addrs" json:"forward_addrs"`
+    ForwardFirst bool     `yaml:"forward_first,omitempty" json:"forward_first,omitempty"`
+    ForwardTLS   bool     `yaml:"forward_tls_upstream,omitempty" json:"forward_tls_upstream,omitempty"`
 }
 
 type StubZone struct {
-    Name         string   `json:"name"`
-    StubAddrs    []string `json:"stub_addrs"`
-    StubHosts    []string `json:"stub_hosts"`
-    StubPrime    bool     `json:"stub_prime"`
-    StubFirst    bool     `json:"stub_first"`
-    StubTLS      bool     `json:"stub_tls_upstream"`
+    Name      string   `yaml:"name" json:"name"`
+    StubAddrs []string `yaml:"stub_addrs" json:"stub_addrs"`
+    StubPrime bool     `yaml:"stub_prime,omitempty" json:"stub_prime,omitempty"`
+    StubFirst bool     `yaml:"stub_first,omitempty" json:"stub_first,omitempty"`
+    StubTLS   bool     `yaml:"stub_tls_upstream,omitempty" json:"stub_tls_upstream,omitempty"`
 }
 
 type AuthZone struct {
-    Name            string   `json:"name"`
-    Primaries       []string `json:"primaries"`
-    URLs            []string `json:"urls"`
-    Zonefile        string   `json:"zonefile"`
-    FallbackEnabled bool     `json:"fallback_enabled"`
-    ForDownstream   bool     `json:"for_downstream"`
-    ForUpstream     bool     `json:"for_upstream"`
-    AllowNotify     []string `json:"allow_notify"`
+    Name            string   `yaml:"name" json:"name"`
+    Primaries       []string `yaml:"primaries,omitempty" json:"primaries,omitempty"`
+    URLs            []string `yaml:"urls,omitempty" json:"urls,omitempty"`
+    Zonefile        string   `yaml:"zonefile,omitempty" json:"zonefile,omitempty"`
+    FallbackEnabled bool     `yaml:"fallback_enabled,omitempty" json:"fallback_enabled,omitempty"`
+    ForDownstream   bool     `yaml:"for_downstream,omitempty" json:"for_downstream,omitempty"`
+    ForUpstream     bool     `yaml:"for_upstream,omitempty" json:"for_upstream,omitempty"`
+}
+
+type RemoteControl struct {
+    Enabled          bool   `yaml:"enabled" json:"enabled"`
+    ControlInterface string `yaml:"control_interface" json:"control_interface"`
+    ControlUseCert   bool   `yaml:"control_use_cert" json:"control_use_cert"`
 }
 
 type RPZConfig struct {
-    Name           string `json:"name"`
-    Zonefile       string `json:"zonefile"`
-    URL            string `json:"url"`
-    Primary        string `json:"primary"`
-    ActionOverride string `json:"rpz_action_override"`
-    CNAMEOverride  string `json:"rpz_cname_override"`
-    Log            bool   `json:"rpz_log"`
-    LogName        string `json:"rpz_log_name"`
+    Name           string `yaml:"name" json:"name"`
+    URL            string `yaml:"url,omitempty" json:"url,omitempty"`
+    Zonefile       string `yaml:"zonefile,omitempty" json:"zonefile,omitempty"`
+    ActionOverride string `yaml:"rpz_action_override,omitempty" json:"rpz_action_override,omitempty"`
+    Log            bool   `yaml:"rpz_log,omitempty" json:"rpz_log,omitempty"`
+    LogName        string `yaml:"rpz_log_name,omitempty" json:"rpz_log_name,omitempty"`
 }
 ```
 
-#### 2.2 Config serializer (`pkg/unbound/writer.go`)
-- `WriteConfig(cfg *UnboundConfig, path string) error`
-- Generates valid unbound.conf from the Go struct
-- Atomic write (temp + rename, same as Glory-Hole config)
+#### 2.3 Defaults (`pkg/unbound/defaults.go`)
 
-#### 2.3 Config parser (`pkg/unbound/parser.go`)
-- `ParseConfig(path string) (*UnboundConfig, error)`
-- Reads existing unbound.conf back into Go struct
-- Handles include directives
+`DefaultServerConfig() *UnboundServerConfig` returns sensible defaults
+matching the shipped `unbound.conf` from Phase 1:
+- Cache: 64m msg, 128m rrset, 86400 max TTL
+- DNSSEC: validator iterator, all harden flags on
+- Performance: 2 threads, so-reuseport on
+- Serve stale: on, 86400 TTL
+- Remote control: enabled, unix socket, no cert
 
-#### 2.4 Config validator
-- `Validate(cfg *UnboundConfig) error`
-- Or shell out to `unbound-checkconf <path>` for authoritative validation
+#### 2.4 Config serializer (`pkg/unbound/writer.go`)
+
+Uses `text/template` for clean separation of Go logic and output format:
+
+```go
+func WriteConfig(cfg *UnboundServerConfig, path string) error {
+    // 1. Render template to buffer
+    var buf bytes.Buffer
+    if err := confTemplate.Execute(&buf, cfg); err != nil {
+        return fmt.Errorf("render unbound.conf: %w", err)
+    }
+    // 2. Atomic write: path.tmp → rename → path
+    tmp := path + ".tmp"
+    if err := os.WriteFile(tmp, buf.Bytes(), 0644); err != nil {
+        return fmt.Errorf("write temp config: %w", err)
+    }
+    return os.Rename(tmp, path)
+}
+```
+
+Template rules:
+- Boolean fields: `yes`/`no`
+- Zero-value int/string fields: omitted (Unbound uses its own defaults)
+- Lists (forward-zone, stub-zone, etc.): iterated with `{{range}}`
+- LocalData/LocalZones: injected at render time (not persisted in config.yml)
+
+#### 2.5 Config validator (`pkg/unbound/validator.go`)
+
+```go
+func Validate(cfg *UnboundServerConfig, checkconfBin string) error {
+    tmp, err := os.CreateTemp("", "unbound-*.conf")
+    // ... write config to temp file ...
+    defer os.Remove(tmp.Name())
+
+    out, err := exec.Command(checkconfBin, tmp.Name()).CombinedOutput()
+    if err != nil {
+        return fmt.Errorf("unbound-checkconf: %s", strings.TrimSpace(string(out)))
+    }
+    return nil
+}
+```
+
+#### 2.6 Persistence
+
+The Unbound config is stored in Glory-Hole's `config.yml` under
+`unbound.config`. On startup and after every API save:
+1. Go struct → serialize to `unbound.conf` via template
+2. Validate with `unbound-checkconf`
+3. Persist to `config.yml`
+4. Reload via `unbound-control reload`
+
+```yaml
+# In config.yml:
+unbound:
+  enabled: true
+  managed: true
+  config:
+    server:
+      msg_cache_size: "64m"
+      rrset_cache_size: "128m"
+      num_threads: 2
+    forward_zones:
+      - name: "internal.corp."
+        forward_addrs: ["10.0.0.1"]
+        forward_tls_upstream: true
+```
 
 ---
 
-### Phase 3: API endpoints
-**Goal**: Full CRUD for Unbound config sections via REST API.
+### Phase 3: API endpoints + stats
+**Goal**: REST API for Unbound config and stats. Consolidated endpoints
+(fewer than the original plan — 1 server config endpoint, not 8).
 
-#### 3.1 Read endpoints
-```
-GET /api/unbound/config          → full UnboundConfig JSON
-GET /api/unbound/config/server   → server section
-GET /api/unbound/forward-zones   → list of forward zones
-GET /api/unbound/stub-zones      → list of stub zones
-GET /api/unbound/auth-zones      → list of auth zones
-GET /api/unbound/rpz             → list of RPZ configs
-GET /api/unbound/status          → unbound-control status output
-GET /api/unbound/stats           → unbound-control stats (cache hits, etc.)
-```
+#### 3.1 Middleware guard
 
-#### 3.2 Write endpoints
-```
-PUT  /api/unbound/config/server     → update server config
-PUT  /api/unbound/config/dnssec     → update DNSSEC settings
-PUT  /api/unbound/config/cache      → update cache settings
-PUT  /api/unbound/config/tls        → update TLS settings
-PUT  /api/unbound/config/logging    → update logging settings
-PUT  /api/unbound/config/performance → update threads/buffers
-PUT  /api/unbound/config/ratelimit  → update rate limiting
-PUT  /api/unbound/config/hardening  → update hardening flags
+All `/api/unbound/*` routes are wrapped in a middleware that returns `503
+Service Unavailable` when `unbound.enabled` is false. This is a single
+check, not per-handler.
 
-POST   /api/unbound/forward-zones   → add forward zone
-PUT    /api/unbound/forward-zones/:name → update forward zone
-DELETE /api/unbound/forward-zones/:name → delete forward zone
-
-POST   /api/unbound/stub-zones      → add stub zone
-PUT    /api/unbound/stub-zones/:name → update stub zone
-DELETE /api/unbound/stub-zones/:name → delete stub zone
-
-POST   /api/unbound/auth-zones      → add auth zone
-PUT    /api/unbound/auth-zones/:name → update auth zone
-DELETE /api/unbound/auth-zones/:name → delete auth zone
-
-POST   /api/unbound/rpz             → add RPZ
-PUT    /api/unbound/rpz/:name       → update RPZ
-DELETE /api/unbound/rpz/:name       → delete RPZ
+```go
+func (s *Server) unboundGuard(next http.HandlerFunc) http.HandlerFunc {
+    return func(w http.ResponseWriter, r *http.Request) {
+        if s.unboundSupervisor == nil {
+            s.writeError(w, http.StatusServiceUnavailable, "Unbound resolver is not enabled")
+            return
+        }
+        next(w, r)
+    }
+}
 ```
 
-#### 3.3 Control endpoints
+#### 3.2 Endpoints
+
 ```
-POST /api/unbound/reload            → unbound-control reload
-POST /api/unbound/flush-cache       → unbound-control flush_zone .
-POST /api/unbound/flush-zone/:zone  → unbound-control flush_zone <zone>
+GET  /api/unbound/status              → supervisor state + unbound-control status
+GET  /api/unbound/stats               → parsed unbound-control stats_noreset (cached 5s)
+GET  /api/unbound/config              → full UnboundServerConfig JSON
+
+PUT  /api/unbound/config/server       → update server block (cache, DNSSEC, perf, etc.)
+
+GET  /api/unbound/forward-zones       → list
+POST /api/unbound/forward-zones       → add
+PUT  /api/unbound/forward-zones/{name} → update
+DELETE /api/unbound/forward-zones/{name} → delete
+
+GET  /api/unbound/stub-zones          → list
+POST /api/unbound/stub-zones          → add
+PUT  /api/unbound/stub-zones/{name}   → update
+DELETE /api/unbound/stub-zones/{name} → delete
+
+POST /api/unbound/reload              → unbound-control reload
+POST /api/unbound/flush-cache         → unbound-control flush_zone .
+POST /api/unbound/flush-zone/{zone}   → unbound-control flush_zone <zone>
 ```
 
-#### 3.4 Apply pattern
-All write endpoints follow:
+**Consolidated server config**: One `PUT /api/unbound/config/server` endpoint
+accepts partial updates (only the fields present in the JSON body are applied).
+This replaces the 8 separate section PUTs from the original plan. The UI sends
+only the tab's fields; the handler merges them into the current config.
+
+**Auth zones and RPZ**: Deferred to Phase 5+ as advanced features. Most home/
+small-office users won't need them. Available via config.yml editing.
+
+#### 3.3 Apply pattern (all write endpoints)
+
 1. Parse + validate request body
-2. Load current UnboundConfig
-3. Apply changes
-4. Validate via `unbound-checkconf`
-5. Write config atomically
-6. Reload via `unbound-control reload`
-7. Return updated config section
+2. Load current `UnboundServerConfig` from Glory-Hole's config
+3. Merge changes into the relevant section
+4. Validate via `unbound-checkconf` (temp file)
+5. If valid: persist to `config.yml`, write `unbound.conf`, reload Unbound
+6. If invalid: return 400 with error, no changes persisted
+7. Return updated config section JSON
+
+#### 3.4 Stats integration (`pkg/unbound/stats.go`)
+
+```go
+type Stats struct {
+    TotalQueries     int64              `json:"total_queries"`
+    CacheHits        int64              `json:"cache_hits"`
+    CacheMiss        int64              `json:"cache_miss"`
+    CacheHitRate     float64            `json:"cache_hit_rate"`
+    AvgRecursionMs   float64            `json:"avg_recursion_ms"`
+    MsgCacheCount    int64              `json:"msg_cache_count"`
+    RRSetCacheCount  int64              `json:"rrset_cache_count"`
+    MemTotalBytes    int64              `json:"mem_total_bytes"`
+    MemCacheBytes    int64              `json:"mem_cache_bytes"`
+    UptimeSeconds    int64              `json:"uptime_seconds"`
+    QueryTypes       map[string]int64   `json:"query_types"`
+    ResponseCodes    map[string]int64   `json:"response_codes"`
+}
+```
+
+`GetStats()` runs `unbound-control stats_noreset` and parses the key=value
+output. Results are cached for 5 seconds (in-memory) to avoid hammering
+`unbound-control` when multiple dashboard clients poll simultaneously.
 
 ---
 
-### Phase 4: UI — Unbound settings pages
-**Goal**: Full Unbound config management in the dashboard.
+### Phase 4: UI — resolver pages + dashboard integration
+**Goal**: 3 pages in the dashboard for Unbound management.
 
 #### 4.1 Navigation
-Add "Resolver" collapsible section to sidebar:
-- **Resolver Overview** — status, stats (cache hit rate, queries, uptime)
-- **Server Config** — interface, threads, buffers, hardening toggles
-- **DNSSEC** — module config, trust anchors, insecure domains, validation mode
-- **Cache** — sizes, slabs, TTL ranges, serve-stale settings
-- **Forward Zones** — CRUD table (name, addrs, TLS, first, no-cache)
-- **Stub Zones** — CRUD table
-- **Auth Zones** — CRUD table (with zonefile upload?)
-- **RPZ** — CRUD table (sources, actions, logging)
-- **Rate Limiting** — per-zone and per-IP settings
-- **TLS** — upstream TLS, service TLS, certs
-- **Logging** — verbosity, query/reply logging
 
-#### 4.2 Component structure
-```
-src/components/
-  unbound/
-    UnboundOverviewPage.tsx    — stats dashboard (cache hits, thread load)
-    UnboundServerPage.tsx      — server section form
-    UnboundDNSSECPage.tsx      — DNSSEC config form
-    UnboundCachePage.tsx       — cache settings form
-    UnboundForwardZonesPage.tsx — forward zone CRUD table + dialog
-    UnboundStubZonesPage.tsx   — stub zone CRUD table + dialog
-    UnboundAuthZonesPage.tsx   — auth zone CRUD table + dialog
-    UnboundRPZPage.tsx         — RPZ CRUD table + dialog
-    UnboundRateLimitPage.tsx   — rate limit form
-    UnboundTLSPage.tsx         — TLS config form
-    UnboundLoggingPage.tsx     — logging config form
+Add "Resolver" collapsible section to sidebar in `DashboardLayout.astro`
+(hidden when Unbound is disabled — determined by a feature flag from
+`GET /api/unbound/status` or `GET /api/features`):
+
+```ts
+// Added to navLinks array:
+{ id: "resolver", label: "Overview", href: "/resolver", icon: "server", section: "Resolver" },
+{ id: "resolver-settings", label: "Settings", href: "/resolver/settings", icon: "sliders", section: "Resolver" },
+{ id: "resolver-zones", label: "Zones", href: "/resolver/zones", icon: "globe", section: "Resolver" },
 ```
 
-Each page follows the existing pattern: `useEffect` fetch on mount, form state
-via `useState`, save via PUT/POST, toast feedback.
+The section is rendered client-side only when the feature flag is active.
+Server-side (Astro SSG), all pages are always built — the guard is in the
+React component (`if (!unboundEnabled) return <NotEnabled />`).
 
-#### 4.3 Astro pages
+#### 4.2 File structure
+
 ```
-src/pages/
-  resolver/
-    index.astro          → UnboundOverviewPage
-    server.astro         → UnboundServerPage
-    dnssec.astro         → UnboundDNSSECPage
-    cache.astro          → UnboundCachePage
-    forward-zones.astro  → UnboundForwardZonesPage
-    stub-zones.astro     → UnboundStubZonesPage
-    auth-zones.astro     → UnboundAuthZonesPage
-    rpz.astro            → UnboundRPZPage
-    ratelimit.astro      → UnboundRateLimitPage
-    tls.astro            → UnboundTLSPage
-    logging.astro        → UnboundLoggingPage
+src/components/resolver/
+  ResolverOverviewPage.tsx   — status + stats dashboard
+  ResolverSettingsPage.tsx   — tabbed settings form (essential tier only)
+  ResolverZonesPage.tsx      — tabbed CRUD for forward/stub zones
+
+src/pages/resolver/
+  index.astro                → ResolverOverviewPage (client:load)
+  settings.astro             → ResolverSettingsPage (client:load)
+  zones.astro                → ResolverZonesPage (client:load)
 ```
+
+#### 4.3 Resolver Overview page
+
+Status cards (same `StatCard` pattern as `DashboardOverview.tsx`):
+- **Status**: Running / Degraded / Failed (with error message)
+- **DNSSEC**: Active / Disabled
+- **Cache Hit Rate**: percentage donut
+- **Uptime**: human-readable duration
+
+Charts (Recharts, same style as main dashboard):
+- **Cache efficiency**: donut (hits vs misses)
+- **Memory usage**: bar chart (cache, module, total)
+
+Action buttons:
+- **Flush Cache** — `POST /api/unbound/flush-cache`
+- **Reload Config** — `POST /api/unbound/reload`
+
+#### 4.4 Resolver Settings page
+
+Tabs (essential tier only):
+- **Cache** — msg_cache_size, rrset_cache_size, max TTL, min TTL, negative TTL
+- **DNSSEC** — enable/disable toggle, domain_insecure list, harden_dnssec toggle
+- **Hardening** — qname_minimisation, aggressive_nsec, harden_glue, harden_below_nx
+- **Serve Stale** — serve_expired toggle, TTL
+- **Logging** — verbosity slider (0-5)
+- **Performance** — num_threads (with note: requires Unbound restart)
+
+Each tab submits via `PUT /api/unbound/config/server` with only its fields.
+Toast on success/error.
+
+#### 4.5 Resolver Zones page
+
+Tabs:
+- **Forward Zones** — table + add/edit dialog (same CRUD pattern as PoliciesPage)
+- **Stub Zones** — table + add/edit dialog
+
+Zone dialog fields:
+- Forward: name, addresses (multi-input), TLS toggle, forward-first toggle
+- Stub: name, addresses (multi-input), prime toggle, first toggle, TLS toggle
+
+#### 4.6 Dashboard integration
+
+Update `DashboardOverview.tsx`:
+- Add conditional "Resolver" card row when Unbound is enabled
+- Cards: cache hit rate, DNSSEC status, avg recursion latency
+- `fetchUnboundStats()` called alongside existing `fetchStats()`
+- Graceful degradation: if the endpoint returns 503, hide the row
 
 ---
 
-### Phase 5: Local record sync + conditional forwarding migration
-**Goal**: Unify overlapping features.
+### Phase 5: Feature consolidation
+**Goal**: Clean up overlapping features between Glory-Hole and Unbound.
 
 #### 5.1 Local records → Unbound local-data
-When Glory-Hole local records are added/modified/deleted, also update Unbound's
-local-data via `unbound-control local_data <name> <type> <data>` or config
-reload. This ensures Unbound's cache is consistent.
 
-#### 5.2 Conditional forwarding → Unbound forward-zones
-Glory-Hole's conditional forwarding rules can map to Unbound forward-zones.
-Options:
-- **Keep both**: Glory-Hole rules for complex matching (CIDR, qtype),
-  Unbound forward-zones for simple domain-based forwarding
-- **Migrate**: Convert simple domain rules to Unbound forward-zones,
-  keep Glory-Hole rules only for CIDR/qtype matching
+When Glory-Hole local records change (API or config reload):
+1. Generate `local-zone`, `local-data`, and `domain-insecure` directives
+2. Inject into the `UnboundServerConfig.Server.LocalZones` / `LocalData`
+   fields (these are `yaml:"-"` — generated at write time, not persisted)
+3. Regenerate `unbound.conf` and reload
 
-#### 5.3 Cache strategy
-With Unbound handling caching:
-- Option A: Disable Glory-Hole cache, let Unbound be the sole cache
-- Option B: Glory-Hole cache = L1 (small, fast), Unbound cache = L2 (large, DNSSEC-validated)
-- Recommendation: **Option A** for simplicity — Unbound's cache is battle-tested
+```
+Glory-Hole A record "nas.local → 10.0.0.5"
+  → local-zone: "nas.local." transparent
+  → local-data: "nas.local. A 10.0.0.5"
+  → domain-insecure: "nas.local."
+```
+
+#### 5.2 Conditional forwarding migration
+
+**Manual, not automatic.** The UI shows a banner on the Forwarding page:
+"Some domain-only forwarding rules can be migrated to Unbound forward-zones
+for better performance and TLS support. [Migrate Now]"
+
+Clicking "Migrate Now":
+1. Shows a preview of which rules will be migrated
+2. User confirms
+3. API creates forward-zones in Unbound config
+4. Original rules are marked `migrated_to_unbound: true` (disabled, preserved)
+5. Revert available by re-enabling the original rules and deleting the
+   forward-zones
+
+This avoids surprising behavior on upgrade and gives the user control.
+
+#### 5.3 Cache transition
+
+When `unbound.enabled` changes:
+- `true → false`: Re-enable Glory-Hole cache, restore upstream_dns_servers
+- `false → true`: Disable Glory-Hole cache, clear it, point forwarder at Unbound
+- Settings UI shows a notice on the Cache tab: "DNS caching is handled by the
+  Unbound resolver. Configure cache settings in Resolver → Settings."
+
+#### 5.4 Upstream DNS servers transition
+
+When Unbound is enabled:
+- Settings page DNS tab shows: "Upstream resolution is handled by Unbound.
+  Configure forwarding in Resolver → Zones."
+- The upstream_dns_servers input is disabled
+- If Unbound is later disabled, previous upstreams are restored from config
 
 ---
 
 ### Phase 6: Non-Docker support
-**Goal**: Unbound integration works outside Docker too.
+**Goal**: Unbound integration works outside Docker.
 
-- Auto-detect Unbound binary in PATH
-- Config flag `unbound.binary_path` for custom location
-- `unbound.manage_config: false` for users who manage unbound.conf themselves
-  (Glory-Hole just forwards to it, no config writes)
-- SystemD unit file template for running both services
-- Bare metal install docs
+#### 6.1 Binary auto-detection
+
+On startup, if `unbound.enabled: true` and `binary_path` is empty:
+1. `exec.LookPath("unbound")`
+2. Fallback: `/usr/sbin/unbound`, `/usr/local/sbin/unbound`
+3. Same for `unbound-control` and `unbound-checkconf`
+4. If not found: log warning, set `unbound.enabled: false` in effective config
+
+#### 6.2 External mode (`managed: false`)
+
+- Supervisor is not started
+- Config writer is not used
+- `unbound.conf` is not touched
+- Config write endpoints return 503
+- Stats endpoints work if control socket is accessible
+- Glory-Hole forwards to `127.0.0.1:<listen_port>`
+
+This mode is for users who manage Unbound via systemd or other means.
+
+#### 6.3 SystemD template
+
+Ship `contrib/glory-hole.service`:
+```ini
+[Unit]
+Description=Glory-Hole DNS Server
+After=network.target
+Wants=unbound.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/glory-hole -config /etc/glory-hole/config.yml
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
+```
+
+With `managed: false`, Unbound runs as its own unit.
+With `managed: true`, Glory-Hole supervises Unbound (no separate unit needed).
+
+#### 6.4 Documentation
+- Migration guide for users of klutchell/unbound-docker
+- Config reference for all Unbound settings
+- Architecture diagram
+- Troubleshooting (DNSSEC failures, port conflicts, permissions)
+
+---
+
+## Testing strategy
+
+### Phase 1 tests
+
+**Unit tests** (`pkg/unbound/supervisor_test.go`):
+- Supervisor state machine transitions (stopped→starting→running→degraded→failed)
+- Readiness gate timeout behavior
+- Crash restart with backoff calculation
+- Orphan detection (mock port listener)
+- Shutdown signal sequence
+
+**Integration test** (requires `unbound` binary):
+- Start supervisor with default config
+- Verify readiness gate completes
+- Send DNS query through 127.0.0.1:5353
+- Verify DNSSEC validation works (query `dnssec-failed.org` → SERVFAIL)
+- Kill Unbound process, verify supervisor restarts it
+- Verify health check detects failure and recovery
+- Build constraint: `//go:build integration`
+
+### Phase 2 tests
+
+**Golden file tests** (`pkg/unbound/writer_test.go`):
+- `DefaultServerConfig()` → serialize → compare to `testdata/default.conf`
+- Config with forward-zones → serialize → compare to `testdata/forward.conf`
+- Config with all fields populated → serialize → compare to `testdata/full.conf`
+- Zero-value fields are omitted in output
+
+**Validator test** (requires `unbound-checkconf`):
+- Valid config passes
+- Invalid config (bad directive) returns error with message
+- Build constraint: `//go:build integration`
+
+**Round-trip test**:
+- `DefaultServerConfig()` → `WriteConfig()` → `Validate()` → no error
+
+### Phase 3 tests
+
+**API handler tests** (`pkg/api/handlers_unbound_test.go`):
+- All endpoints return 503 when supervisor is nil
+- GET /api/unbound/status returns correct state
+- PUT /api/unbound/config/server with partial payload merges correctly
+- Forward zone CRUD operations
+- Stats caching (two rapid calls, only one `unbound-control` invocation)
+
+### Phase 4 tests
+
+- Astro build succeeds with new resolver pages
+- TypeScript types match Go API response shapes (manual review)
 
 ---
 
 ## Priority order
 
-1. **Phase 1** — Bundle + supervise (biggest user-facing value, enables DNSSEC)
-2. **Phase 2** — Config management (Go layer, foundation for everything else)
-3. **Phase 3** — API endpoints (enables UI)
-4. **Phase 4** — UI pages (user-facing config)
-5. **Phase 5** — Feature sync (polish, dedup)
-6. **Phase 6** — Non-Docker (broader audience)
+1. **Phase 1** — Bundle + supervise (biggest value: DNSSEC + recursion)
+2. **Phase 2** — Config model + serializer (foundation for API/UI)
+3. **Phase 3** — API + stats (enables UI, dashboard integration)
+4. **Phase 4** — UI pages (user-facing config management)
+5. **Phase 5** — Feature consolidation (migration, overlap cleanup)
+6. **Phase 6** — Non-Docker support (broader audience)
 
-## Open questions
+## Estimated effort
 
-1. **Cache dedup**: Should we disable Glory-Hole's cache entirely when Unbound
-   is enabled, or keep it as L1?
-2. **Blocklist format**: Should we also feed Glory-Hole blocklists to Unbound
-   as RPZ/local-zone for defense-in-depth, or keep blocking purely in Glory-Hole?
-3. **Config ownership**: If a user edits unbound.conf manually, should Glory-Hole
-   detect drift and warn, or just overwrite on next save?
-4. **Upgrade path**: For users running klutchell/unbound separately, how do we
-   migrate their existing unbound.conf into the managed config?
+| Phase | Scope | Estimate |
+|-------|-------|----------|
+| 1 | Dockerfile, supervisor, entrypoint, startup wiring, fallback | 2 sessions |
+| 2 | Config model (two-tier), serializer (template), validator, defaults | 1 session |
+| 3 | ~15 API endpoints, stats parser, middleware guard, handlers | 1-2 sessions |
+| 4 | 3 React components, 3 Astro pages, API client, dashboard integration | 2 sessions |
+| 5 | Local record sync, manual forwarding migration, cache/upstream transition | 1 session |
+| 6 | Auto-detection, external mode, systemd template, docs | 1 session |
