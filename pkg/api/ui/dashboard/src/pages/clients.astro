@@ -1,0 +1,8 @@
+---
+import DashboardLayout from "../layouts/DashboardLayout.astro";
+import { ClientsPage } from "../components/ClientsPage";
+---
+
+<DashboardLayout title="glory-hole — Clients" active="clients">
+  <ClientsPage client:load />
+</DashboardLayout>

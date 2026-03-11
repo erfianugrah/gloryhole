@@ -33,6 +33,10 @@ bin/
 # Node.js
 node_modules/
 
+# Astro dashboard build output
+pkg/api/ui/static/dist/
+pkg/api/ui/dashboard/.astro/
+
 # GoLand
 .idea/
 

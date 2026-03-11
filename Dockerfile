@@ -34,6 +34,9 @@ COPY . .
 # Build frontend assets from npm packages
 RUN npm run build:vendor
 
+# Build Astro dashboard (outputs to pkg/api/ui/static/dist/)
+RUN cd pkg/api/ui/dashboard && npm ci && npm run build
+
 # Build the application
 # - Strip debug info (-s -w)
 # - Set version from build arg

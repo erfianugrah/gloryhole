@@ -1,0 +1,396 @@
+---
+import "../styles/globals.css";
+
+interface Props {
+  title?: string;
+  active?: string;
+}
+
+const { title = "glory-hole", active = "dashboard" } = Astro.props;
+
+const navLinks = [
+  { id: "dashboard", label: "Dashboard", href: "/", icon: "grid", section: "" },
+  { id: "queries", label: "Query Log", href: "/queries", icon: "list", section: "DNS" },
+  { id: "policies", label: "Policies", href: "/policies", icon: "shield", section: "DNS" },
+  { id: "localrecords", label: "Local Records", href: "/localrecords", icon: "database", section: "Records" },
+  { id: "forwarding", label: "Forwarding", href: "/forwarding", icon: "forward", section: "Records" },
+  { id: "blocklists", label: "Blocklists", href: "/blocklists", icon: "block", section: "Filtering" },
+  { id: "clients", label: "Clients", href: "/clients", icon: "users", section: "Filtering" },
+  { id: "settings", label: "Settings", href: "/settings", icon: "settings", section: "System" },
+];
+
+// Group nav links by section for collapsible rendering
+const standaloneLinks = navLinks.filter((l) => !l.section);
+const sectionOrder: string[] = [];
+const sectionMap = new Map<string, typeof navLinks>();
+for (const link of navLinks) {
+  if (!link.section) continue;
+  if (!sectionMap.has(link.section)) {
+    sectionOrder.push(link.section);
+    sectionMap.set(link.section, []);
+  }
+  sectionMap.get(link.section)!.push(link);
+}
+---
+
+<!doctype html>
+<html lang="en" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{title}</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  </head>
+  <body class="h-screen overflow-hidden bg-background text-foreground antialiased">
+    <div class="flex h-screen overflow-hidden">
+      <!-- Sidebar -->
+      <aside
+        id="sidebar"
+        class="hidden w-60 flex-shrink-0 overflow-y-auto border-r border-border bg-gh-950 md:block"
+      >
+        <div class="flex h-full flex-col">
+          <!-- Logo area -->
+          <div class="flex h-14 items-center gap-2.5 border-b border-border px-4">
+            <div class="flex h-8 w-8 items-center justify-center rounded-md bg-gh-green/10">
+              <svg
+                class="h-5 w-5 text-gh-green"
+                viewBox="0 0 32 32"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <circle cx="16" cy="16" r="12" />
+                <circle cx="16" cy="14" r="4" />
+                <rect x="14.5" y="17" width="3" height="5" rx="1.5" fill="currentColor" />
+              </svg>
+            </div>
+            <span class="text-sm font-bold tracking-wider text-gh-green glow-green">
+              GLORY-HOLE
+            </span>
+          </div>
+
+          <!-- Navigation -->
+          <nav class="flex-1 space-y-1 px-2 py-4">
+            {/* Standalone links (no section) */}
+            {standaloneLinks.map((link) => (
+              <a
+                href={link.href}
+                class:list={[
+                  "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
+                  active === link.id
+                    ? "bg-gh-green/10 text-gh-green"
+                    : "text-muted-foreground hover:bg-accent hover:text-foreground",
+                ]}
+              >
+                {link.icon === "grid" && (
+                  <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" />
+                    <rect x="3" y="14" width="7" height="7" /><rect x="14" y="14" width="7" height="7" />
+                  </svg>
+                )}
+                <span>{link.label}</span>
+              </a>
+            ))}
+
+            {/* Collapsible sections */}
+            {sectionOrder.map((section) => {
+              const links = sectionMap.get(section)!;
+              const hasActive = links.some((l) => l.id === active);
+              return (
+                <div class="nav-section" data-section={section}>
+                  <button
+                    class="nav-section-toggle flex w-full items-center gap-1.5 px-3 pt-4 pb-1 group"
+                    type="button"
+                    data-section={section}
+                  >
+                    <svg
+                      class="nav-chevron h-3 w-3 text-muted-foreground/60 transition-transform"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2.5"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    >
+                      <polyline points="9 18 15 12 9 6" />
+                    </svg>
+                    <span class="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/60 group-hover:text-muted-foreground transition-colors">
+                      {section}
+                    </span>
+                  </button>
+                  <div class="nav-section-links" data-section={section} data-has-active={hasActive ? "true" : "false"}>
+                    {links.map((link) => (
+                      <a
+                        href={link.href}
+                        class:list={[
+                          "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
+                          active === link.id
+                            ? "bg-gh-green/10 text-gh-green"
+                            : "text-muted-foreground hover:bg-accent hover:text-foreground",
+                        ]}
+                      >
+                        {link.icon === "list" && (
+                          <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="8" y1="6" x2="21" y2="6" /><line x1="8" y1="12" x2="21" y2="12" />
+                            <line x1="8" y1="18" x2="21" y2="18" /><line x1="3" y1="6" x2="3.01" y2="6" />
+                            <line x1="3" y1="12" x2="3.01" y2="12" /><line x1="3" y1="18" x2="3.01" y2="18" />
+                          </svg>
+                        )}
+                        {link.icon === "shield" && (
+                          <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                          </svg>
+                        )}
+                        {link.icon === "database" && (
+                          <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <ellipse cx="12" cy="5" rx="9" ry="3" />
+                            <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3" />
+                            <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" />
+                          </svg>
+                        )}
+                        {link.icon === "forward" && (
+                          <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <polyline points="15 17 20 12 15 7" />
+                            <path d="M4 18v-2a4 4 0 0 1 4-4h12" />
+                          </svg>
+                        )}
+                        {link.icon === "block" && (
+                          <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="10" />
+                            <line x1="4.93" y1="4.93" x2="19.07" y2="19.07" />
+                          </svg>
+                        )}
+                        {link.icon === "users" && (
+                          <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                            <circle cx="9" cy="7" r="4" />
+                            <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+                            <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                          </svg>
+                        )}
+                        {link.icon === "settings" && (
+                          <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="3" />
+                            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+                          </svg>
+                        )}
+                        <span>{link.label}</span>
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </nav>
+
+          <!-- Footer -->
+          <div class="border-t border-border px-4 py-3 space-y-2">
+            <div id="auth-info" class="hidden">
+              <div class="flex items-center justify-between gap-2">
+                <span id="auth-label" class="text-xs font-medium text-foreground truncate"></span>
+                <form method="POST" action="/logout">
+                  <button
+                    type="submit"
+                    class="flex-shrink-0 rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                    title="Sign out"
+                  >
+                    <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                      <polyline points="16 17 21 12 16 7" />
+                      <line x1="21" y1="12" x2="9" y2="12" />
+                    </svg>
+                  </button>
+                </form>
+              </div>
+            </div>
+            <div class="text-[10px] text-muted-foreground/50 font-data" id="version-label">glory-hole</div>
+          </div>
+        </div>
+      </aside>
+
+      <!-- Main content area -->
+      <div class="flex flex-1 flex-col overflow-hidden">
+        <!-- Header -->
+        <header class="flex h-14 items-center justify-between border-b border-border bg-gh-950/50 px-6">
+          <!-- Mobile menu button -->
+          <button
+            class="inline-flex items-center justify-center rounded-md p-2 text-muted-foreground hover:bg-accent md:hidden"
+            aria-label="Toggle menu"
+            id="mobile-menu-btn"
+          >
+            <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="3" y1="12" x2="21" y2="12" />
+              <line x1="3" y1="6" x2="21" y2="6" />
+              <line x1="3" y1="18" x2="21" y2="18" />
+            </svg>
+          </button>
+
+          <h1 class="text-sm font-medium text-foreground">{title}</h1>
+
+          <div class="flex items-center gap-3">
+            <!-- Health indicator -->
+            <div id="health-indicator" class="flex items-center gap-2">
+              <span class="relative flex h-2 w-2">
+                <span
+                  id="health-ping"
+                  class="absolute inline-flex h-full w-full animate-ping rounded-full bg-muted-foreground opacity-75"
+                ></span>
+                <span
+                  id="health-dot"
+                  class="relative inline-flex h-2 w-2 rounded-full bg-muted-foreground"
+                ></span>
+              </span>
+              <span id="health-text" class="text-xs text-muted-foreground font-data">CHECKING...</span>
+            </div>
+          </div>
+        </header>
+
+        <!-- Page content -->
+        <main id="main-content" class="flex-1 overflow-y-auto p-6">
+          <slot />
+
+          <!-- Scroll to top button -->
+          <button
+            id="scroll-top-btn"
+            class="fixed bottom-6 right-6 z-40 hidden h-10 w-10 items-center justify-center rounded-full border border-border bg-gh-950/90 text-muted-foreground shadow-lg backdrop-blur-sm transition-all hover:bg-accent hover:text-foreground"
+            aria-label="Scroll to top"
+          >
+            <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="18 15 12 9 6 15" />
+            </svg>
+          </button>
+        </main>
+      </div>
+    </div>
+
+    <!-- Scroll to top -->
+    <script>
+      const mainEl = document.getElementById("main-content");
+      const scrollBtn = document.getElementById("scroll-top-btn");
+      if (mainEl && scrollBtn) {
+        mainEl.addEventListener("scroll", () => {
+          if (mainEl.scrollTop > 400) {
+            scrollBtn.classList.remove("hidden");
+            scrollBtn.classList.add("flex");
+          } else {
+            scrollBtn.classList.add("hidden");
+            scrollBtn.classList.remove("flex");
+          }
+        });
+        scrollBtn.addEventListener("click", () => {
+          mainEl.scrollTo({ top: 0, behavior: "smooth" });
+        });
+      }
+    </script>
+
+    <!-- Health check -->
+    <script>
+      (function () {
+        const dot = document.getElementById("health-dot");
+        const ping = document.getElementById("health-ping");
+        const text = document.getElementById("health-text");
+        const versionLabel = document.getElementById("version-label");
+        if (!dot || !ping || !text) return;
+
+        function setStatus(ok: boolean, version?: string) {
+          const color = ok ? "bg-gh-green" : "bg-gh-pink";
+          const remove = ok ? "bg-gh-pink" : "bg-gh-green";
+          dot!.classList.remove("bg-muted-foreground", remove);
+          dot!.classList.add(color);
+          ping!.classList.remove("bg-muted-foreground", remove);
+          ping!.classList.add(color);
+          text!.textContent = ok ? "HEALTHY" : "UNHEALTHY";
+          if (version && versionLabel) {
+            versionLabel.textContent = `glory-hole ${version}`;
+          }
+        }
+
+        async function checkHealth() {
+          try {
+            const res = await fetch("/api/health", { cache: "no-store" });
+            if (!res.ok) { setStatus(false); return; }
+            const data = await res.json();
+            setStatus(true, data.version);
+          } catch {
+            setStatus(false);
+          }
+        }
+
+        checkHealth();
+        setInterval(checkHealth, 30_000);
+      })();
+    </script>
+
+    <!-- Collapsible sidebar sections -->
+    <script>
+      (function () {
+        const STORAGE_KEY = "gh-nav-collapsed";
+        let collapsed: Set<string>;
+        try {
+          const raw = localStorage.getItem(STORAGE_KEY);
+          collapsed = raw ? new Set(JSON.parse(raw)) : new Set();
+        } catch {
+          collapsed = new Set();
+        }
+
+        function persist() {
+          try { localStorage.setItem(STORAGE_KEY, JSON.stringify([...collapsed])); } catch {}
+        }
+
+        function applyState(section: string) {
+          const linksEl = document.querySelector<HTMLElement>(`.nav-section-links[data-section="${section}"]`);
+          const chevron = document.querySelector<SVGElement>(`.nav-section[data-section="${section}"] .nav-chevron`);
+          if (!linksEl) return;
+          if (collapsed.has(section)) {
+            linksEl.style.display = "none";
+            if (chevron) chevron.style.transform = "rotate(0deg)";
+          } else {
+            linksEl.style.display = "";
+            if (chevron) chevron.style.transform = "rotate(90deg)";
+          }
+        }
+
+        // Apply initial state — never collapse a section containing the active link
+        document.querySelectorAll<HTMLElement>(".nav-section-links").forEach((el) => {
+          const section = el.dataset.section!;
+          if (el.dataset.hasActive === "true") collapsed.delete(section);
+          applyState(section);
+        });
+
+        // Attach toggle handlers
+        document.querySelectorAll<HTMLButtonElement>(".nav-section-toggle").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            const section = btn.dataset.section!;
+            if (collapsed.has(section)) collapsed.delete(section);
+            else collapsed.add(section);
+            persist();
+            applyState(section);
+          });
+        });
+      })();
+    </script>
+
+    <!-- Mobile nav overlay -->
+    <script>
+      const btn = document.getElementById("mobile-menu-btn");
+      const sidebar = document.getElementById("sidebar");
+      if (btn && sidebar) {
+        btn.addEventListener("click", () => {
+          sidebar.classList.toggle("hidden");
+          sidebar.classList.toggle("fixed");
+          sidebar.classList.toggle("inset-0");
+          sidebar.classList.toggle("z-50");
+          sidebar.classList.toggle("w-60");
+        });
+        sidebar.querySelectorAll("a").forEach((link) => {
+          link.addEventListener("click", () => {
+            if (sidebar.classList.contains("fixed")) {
+              sidebar.classList.add("hidden");
+              sidebar.classList.remove("fixed", "inset-0", "z-50");
+            }
+          });
+        });
+      }
+    </script>
+  </body>
+</html>

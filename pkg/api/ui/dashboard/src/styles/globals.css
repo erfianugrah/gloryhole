@@ -1,0 +1,165 @@
+@import "tailwindcss";
+
+/* Self-hosted fonts — bundled into build output, zero external requests */
+@import "@fontsource/space-grotesk/latin-400.css";
+@import "@fontsource/space-grotesk/latin-500.css";
+@import "@fontsource/space-grotesk/latin-600.css";
+@import "@fontsource/space-grotesk/latin-700.css";
+@import "@fontsource/jetbrains-mono/latin-400.css";
+@import "@fontsource/jetbrains-mono/latin-500.css";
+@import "@fontsource/jetbrains-mono/latin-600.css";
+@import "@fontsource/jetbrains-mono/latin-700.css";
+
+@theme {
+  /* Surveillance Terminal palette */
+  --color-gh-950: #070b1f;
+  --color-gh-900: #0a0e27;
+  --color-gh-800: #141830;
+  --color-gh-700: #1a1f3d;
+  --color-gh-600: #2a2f52;
+  --color-gh-500: #3a3f62;
+
+  --color-gh-green: #00ff41;
+  --color-gh-green-dim: #00cc33;
+  --color-gh-pink: #ff006e;
+  --color-gh-pink-dim: #cc0058;
+  --color-gh-blue: #4a6cf7;
+  --color-gh-blue-dim: #3a5cd7;
+  --color-gh-cyan: #00d4ff;
+  --color-gh-yellow: #ffd866;
+  --color-gh-orange: #ff9500;
+
+  /* shadcn CSS variable mapping */
+  --color-background: #0a0e27;
+  --color-foreground: #e0e0e0;
+  --color-card: #141830;
+  --color-card-foreground: #e0e0e0;
+  --color-popover: #141830;
+  --color-popover-foreground: #e0e0e0;
+  --color-primary: #00ff41;
+  --color-primary-foreground: #0a0e27;
+  --color-secondary: #1a1f3d;
+  --color-secondary-foreground: #e0e0e0;
+  --color-muted: #1a1f3d;
+  --color-muted-foreground: #8888aa;
+  --color-accent: #1e2448;
+  --color-accent-foreground: #e0e0e0;
+  --color-destructive: #ff006e;
+  --color-destructive-foreground: #ffffff;
+  --color-border: #2a2f52;
+  --color-input: #2a2f52;
+  --color-ring: #00ff41;
+
+  /* Sidebar */
+  --color-sidebar: #070b1f;
+  --color-sidebar-foreground: #e0e0e0;
+  --color-sidebar-border: #1a1f3d;
+  --color-sidebar-accent: #141830;
+  --color-sidebar-accent-foreground: #00ff41;
+
+  /* Chart colors */
+  --color-chart-1: #00ff41;
+  --color-chart-2: #ff006e;
+  --color-chart-3: #4a6cf7;
+  --color-chart-4: #ffd866;
+  --color-chart-5: #00d4ff;
+
+  /* Fonts */
+  --font-sans: "Space Grotesk", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", "Fira Code", monospace;
+
+  /* Radius */
+  --radius: 0.5rem;
+}
+
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
+
+  button,
+  [role="button"],
+  a,
+  select,
+  summary {
+    cursor: pointer;
+  }
+
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+    font-size: 16px;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Monospace utility for data-oriented elements */
+  .font-data {
+    font-family: var(--font-mono);
+  }
+
+  /* Glow utilities */
+  .glow-green {
+    text-shadow: 0 0 10px rgba(0, 255, 65, 0.5),
+      0 0 20px rgba(0, 255, 65, 0.3), 0 0 40px rgba(0, 255, 65, 0.1);
+  }
+
+  .glow-pink {
+    text-shadow: 0 0 10px rgba(255, 0, 110, 0.5),
+      0 0 20px rgba(255, 0, 110, 0.3), 0 0 40px rgba(255, 0, 110, 0.1);
+  }
+
+  /* Scrollbar styling */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: var(--color-gh-950);
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-gh-600);
+    border-radius: 3px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--color-gh-green);
+  }
+
+  /* Stat card fade-in animation */
+  @keyframes fadeInUp {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .animate-fade-in-up {
+    animation: fadeInUp 0.4s ease-out forwards;
+  }
+
+  /* Clickable table row press effect */
+  tr.cursor-pointer {
+    transition: background-color 150ms ease-out;
+  }
+  tr.cursor-pointer:active {
+    background-color: rgba(42, 47, 82, 0.5);
+  }
+
+  /* Hide native number input spinners */
+  input[type="number"]::-webkit-inner-spin-button,
+  input[type="number"]::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+  input[type="number"] {
+    -moz-appearance: textfield;
+  }
+}

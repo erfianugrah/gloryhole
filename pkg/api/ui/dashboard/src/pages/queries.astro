@@ -1,0 +1,8 @@
+---
+import DashboardLayout from "../layouts/DashboardLayout.astro";
+import { QueryLogPage } from "../components/QueryLogPage";
+---
+
+<DashboardLayout title="glory-hole — Query Log" active="queries">
+  <QueryLogPage client:load />
+</DashboardLayout>

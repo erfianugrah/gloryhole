@@ -1,0 +1,8 @@
+---
+import DashboardLayout from "../layouts/DashboardLayout.astro";
+import { DashboardOverview } from "../components/DashboardOverview";
+---
+
+<DashboardLayout title="glory-hole — Dashboard" active="dashboard">
+  <DashboardOverview client:load />
+</DashboardLayout>

@@ -1,4 +1,4 @@
-.PHONY: help build build-all install clean test test-race test-coverage lint fmt vet run dev version npm-install npm-build
+.PHONY: help build build-all install clean test test-race test-coverage lint fmt vet run dev version npm-install npm-build ui
 
 # Variables
 BINARY_NAME=glory-hole
@@ -40,8 +40,14 @@ npm-build: npm-install
 	@echo "Building frontend assets..."
 	@npm run build:vendor
 
+## ui: Build the Astro dashboard
+ui:
+	@echo "Building Astro dashboard..."
+	@cd pkg/api/ui/dashboard && npm ci && npm run build
+	@echo "Dashboard build complete: pkg/api/ui/static/dist/"
+
 ## build: Build the binary for current platform
-build: npm-build
+build: npm-build ui
 	@echo "Building $(BINARY_NAME) $(VERSION)..."
 	@mkdir -p $(BUILD_DIR)
 	go build $(GOFLAGS) $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME) $(MAIN_PATH)
@@ -71,6 +77,8 @@ clean:
 	rm -rf node_modules
 	rm -rf pkg/api/ui/static/js/vendor
 	rm -rf pkg/api/ui/static/fonts
+	rm -rf pkg/api/ui/static/dist
+	rm -rf pkg/api/ui/dashboard/node_modules
 	go clean
 
 ## test: Run tests
