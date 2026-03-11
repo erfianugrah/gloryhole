@@ -34,6 +34,9 @@ jobs:
           cache: 'npm'
           cache-dependency-path: pkg/api/ui/dashboard/package-lock.json
 
+      - name: Build Astro dashboard
+        run: cd pkg/api/ui/dashboard && npm ci && npm run build
+
       - name: Test with coverage
         run: go test -race -coverprofile=coverage.out -covermode=atomic ./...
 
