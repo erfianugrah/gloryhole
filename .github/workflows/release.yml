@@ -40,7 +40,7 @@ jobs:
       - name: Test with coverage
         run: go test -race -coverprofile=coverage.out -covermode=atomic ./...
 
-  # Use GoReleaser for fast, efficient cross-platform builds and Docker images
+  # GoReleaser builds binaries and creates the GitHub release
   release:
     name: Release with GoReleaser
     needs: [test]
@@ -64,6 +64,28 @@ jobs:
           cache: 'npm'
           cache-dependency-path: pkg/api/ui/dashboard/package-lock.json
 
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: '~> v2'
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
+
+  # Docker images built separately with buildx — much faster than
+  # building inside GoReleaser with QEMU per-arch Dockerfiles
+  docker:
+    name: Docker Images
+    needs: [release]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
 
@@ -83,14 +105,46 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Run GoReleaser
-        uses: goreleaser/goreleaser-action@v6
-        with:
-          distribution: goreleaser
-          version: '~> v2'
-          args: release --clean
+      - name: Download GoReleaser dist
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
-          GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          mkdir -p dist
+
+          # Download linux binaries from the GitHub release and place them
+          # where Dockerfile.release expects: dist/glory-hole_linux_${TARGETARCH}*/glory-hole
+          for arch in amd64 arm64; do
+            ARCHIVE="glory-hole-${TAG#v}-linux-${arch}.tar.gz"
+            gh release download "$TAG" --pattern "$ARCHIVE" --dir /tmp
+            mkdir -p "dist/glory-hole_linux_${arch}"
+            tar xzf "/tmp/$ARCHIVE" -C "dist/glory-hole_linux_${arch}"
+          done
+
+      - name: Extract version metadata
+        id: meta
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          echo "version=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "created=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+          echo "revision=${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push multi-arch Docker images
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.release
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ${{ secrets.DOCKER_USERNAME }}/glory-hole:${{ steps.meta.outputs.version }}
+            ${{ secrets.DOCKER_USERNAME }}/glory-hole:latest
+            ghcr.io/${{ github.repository }}:${{ steps.meta.outputs.version }}
+            ghcr.io/${{ github.repository }}:latest
+          labels: |
+            org.opencontainers.image.created=${{ steps.meta.outputs.created }}
+            org.opencontainers.image.title=glory-hole
+            org.opencontainers.image.revision=${{ steps.meta.outputs.revision }}
+            org.opencontainers.image.version=${{ steps.meta.outputs.version }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

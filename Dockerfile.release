@@ -1,0 +1,52 @@
+# Glory-Hole DNS Server — release image
+# Copies a pre-built binary from GoReleaser (no compilation inside Docker).
+# Used by the CI release workflow with docker buildx for multi-arch images.
+# For local development builds, use the full Dockerfile instead.
+
+FROM alpine:latest
+
+# Install runtime dependencies
+RUN apk --no-cache add \
+	ca-certificates \
+	tzdata \
+	sqlite \
+	su-exec \
+	libcap \
+	&& rm -rf /var/cache/apk/*
+
+# Create non-root user
+RUN addgroup -g 1000 glory-hole && \
+	adduser -D -u 1000 -G glory-hole glory-hole
+
+# Create necessary directories
+RUN mkdir -p /etc/glory-hole /var/lib/glory-hole /var/log/glory-hole && \
+	chown -R glory-hole:glory-hole /etc/glory-hole /var/lib/glory-hole /var/log/glory-hole
+
+# Copy pre-built binary from build context (placed by release workflow)
+ARG TARGETARCH
+COPY dist/glory-hole_linux_${TARGETARCH}*/glory-hole /usr/local/bin/glory-hole
+RUN chmod +x /usr/local/bin/glory-hole
+
+# Copy entrypoint script
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+
+# Copy configuration examples
+COPY --chown=glory-hole:glory-hole config/config.example.yml /etc/glory-hole/config.example.yml
+
+WORKDIR /var/lib/glory-hole
+
+EXPOSE 53/udp 53/tcp 8080/tcp 9090/tcp
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+	CMD wget --no-verbose --tries=1 --spider http://localhost:8080/health || exit 1
+
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
+CMD ["-config", "/etc/glory-hole/config.yml"]
+
+LABEL org.opencontainers.image.title="Glory-Hole DNS Server"
+LABEL org.opencontainers.image.description="High-performance DNS server with ad-blocking, caching, and policy engine"
+LABEL org.opencontainers.image.vendor="Glory-Hole"
+LABEL org.opencontainers.image.licenses="MIT"
+LABEL org.opencontainers.image.source="https://github.com/erfianugrah/glory-hole"
+LABEL org.opencontainers.image.documentation="https://github.com/erfianugrah/glory-hole/tree/main/docs"
