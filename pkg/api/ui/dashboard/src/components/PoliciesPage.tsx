@@ -55,14 +55,12 @@ export function PoliciesPage() {
 
   // Form state
   const [formName, setFormName] = useState("");
-  const [formExpression, setFormExpression] = useState("");
-  const [formAction, setFormAction] = useState("block");
+  const [formLogic, setFormLogic] = useState("");
+  const [formAction, setFormAction] = useState("BLOCK");
+  const [formActionData, setFormActionData] = useState("");
   const [formEnabled, setFormEnabled] = useState(true);
-  const [formPriority, setFormPriority] = useState(0);
-  const [formDescription, setFormDescription] = useState("");
-  const [formClientFilter, setFormClientFilter] = useState("");
-  const [formGroupFilter, setFormGroupFilter] = useState("");
   const [saving, setSaving] = useState(false);
+  const [testDomain, setTestDomain] = useState("");
 
   const loadData = useCallback(async () => {
     try {
@@ -83,28 +81,24 @@ export function PoliciesPage() {
   function openCreateDialog() {
     setEditingPolicy(null);
     setFormName("");
-    setFormExpression("");
-    setFormAction("block");
+    setFormLogic("");
+    setFormAction("BLOCK");
+    setFormActionData("");
     setFormEnabled(true);
-    setFormPriority(policies.length);
-    setFormDescription("");
-    setFormClientFilter("");
-    setFormGroupFilter("");
     setTestResult(null);
+    setTestDomain("");
     setDialogOpen(true);
   }
 
   function openEditDialog(policy: Policy) {
     setEditingPolicy(policy);
     setFormName(policy.name);
-    setFormExpression(policy.expression);
+    setFormLogic(policy.logic);
     setFormAction(policy.action);
+    setFormActionData(policy.action_data || "");
     setFormEnabled(policy.enabled);
-    setFormPriority(policy.priority);
-    setFormDescription(policy.description || "");
-    setFormClientFilter(policy.client_filter || "");
-    setFormGroupFilter(policy.group_filter || "");
     setTestResult(null);
+    setTestDomain("");
     setDialogOpen(true);
   }
 
@@ -113,13 +107,10 @@ export function PoliciesPage() {
     try {
       const data = {
         name: formName,
-        expression: formExpression,
+        logic: formLogic,
         action: formAction,
+        action_data: formActionData || undefined,
         enabled: formEnabled,
-        priority: formPriority,
-        description: formDescription || undefined,
-        client_filter: formClientFilter || undefined,
-        group_filter: formGroupFilter || undefined,
       };
 
       if (editingPolicy) {
@@ -136,7 +127,7 @@ export function PoliciesPage() {
     }
   }
 
-  async function handleDelete(id: string) {
+  async function handleDelete(id: number) {
     if (!confirm("Delete this policy?")) return;
     try {
       await deletePolicy(id);
@@ -148,7 +139,13 @@ export function PoliciesPage() {
 
   async function handleToggle(policy: Policy) {
     try {
-      await updatePolicy(policy.id, { enabled: !policy.enabled });
+      await updatePolicy(policy.id, {
+        name: policy.name,
+        logic: policy.logic,
+        action: policy.action,
+        action_data: policy.action_data,
+        enabled: !policy.enabled,
+      });
       await loadData();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to toggle policy");
@@ -156,9 +153,11 @@ export function PoliciesPage() {
   }
 
   async function handleTest() {
+    if (!formLogic.trim() || !testDomain.trim()) return;
     try {
-      const result = await testPolicy(formExpression);
-      setTestResult(result);
+      const result = await testPolicy(formLogic, testDomain);
+      // Go returns {matched: bool}, map to our UI format
+      setTestResult({ valid: result.matched ?? false });
     } catch (err) {
       setTestResult({ valid: false, error: err instanceof Error ? err.message : "Test failed" });
     }
@@ -225,47 +224,36 @@ export function PoliciesPage() {
               <TableRow>
                 <TableHead className="w-[50px]">#</TableHead>
                 <TableHead>Name</TableHead>
-                <TableHead>Expression</TableHead>
-                <TableHead className="w-[80px]">Action</TableHead>
-                <TableHead className="w-[80px]">Scope</TableHead>
+                <TableHead>Logic</TableHead>
+                <TableHead className="w-[100px]">Action</TableHead>
                 <TableHead className="w-[70px]">Enabled</TableHead>
                 <TableHead className="w-[80px]"></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {policies
-                .sort((a, b) => a.priority - b.priority)
-                .map((policy) => (
+              {policies.map((policy) => (
                   <TableRow key={policy.id}>
-                    <TableCell className={T.tableCellMono}>{policy.priority}</TableCell>
+                    <TableCell className={T.tableCellMono}>{policy.id}</TableCell>
                     <TableCell>
                       <div className={T.tableRowName}>{policy.name}</div>
-                      {policy.description && (
-                        <div className={T.muted}>{policy.description}</div>
-                      )}
                     </TableCell>
                     <TableCell className={cn(T.tableCellMono, "max-w-[300px] truncate")}>
-                      {policy.expression}
+                      {policy.logic}
                     </TableCell>
                     <TableCell>
                       <Badge
                         className={
-                          policy.action === "block"
+                          policy.action === "BLOCK"
                             ? "bg-gh-red/20 text-gh-red border-gh-red/30"
-                            : "bg-gh-green/20 text-gh-green border-gh-green/30"
+                            : policy.action === "ALLOW"
+                            ? "bg-gh-green/20 text-gh-green border-gh-green/30"
+                            : policy.action === "REDIRECT"
+                            ? "bg-gh-yellow/20 text-gh-yellow border-gh-yellow/30"
+                            : "bg-gh-blue/20 text-gh-blue border-gh-blue/30"
                         }
                       >
                         {policy.action}
                       </Badge>
-                    </TableCell>
-                    <TableCell>
-                      {(policy.client_filter || policy.group_filter) ? (
-                        <Badge variant="outline" className="text-[10px]">
-                          {policy.client_filter || policy.group_filter}
-                        </Badge>
-                      ) : (
-                        <span className={T.muted}>All</span>
-                      )}
                     </TableCell>
                     <TableCell>
                       <Switch
@@ -328,32 +316,59 @@ export function PoliciesPage() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="block">Block</SelectItem>
-                    <SelectItem value="allow">Allow</SelectItem>
+                    <SelectItem value="BLOCK">Block</SelectItem>
+                    <SelectItem value="ALLOW">Allow</SelectItem>
+                    <SelectItem value="REDIRECT">Redirect</SelectItem>
+                    <SelectItem value="FORWARD">Forward</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
             </div>
 
             <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label className={T.formLabel}>Expression</Label>
+              <Label className={T.formLabel}>Logic Expression</Label>
+              <Textarea
+                value={formLogic}
+                onChange={(e) => { setFormLogic(e.target.value); setTestResult(null); }}
+                placeholder='domain matches "*.ads.example.com"'
+                className="font-data min-h-[80px]"
+              />
+            </div>
+
+            {(formAction === "REDIRECT" || formAction === "FORWARD") && (
+              <div className="space-y-2">
+                <Label className={T.formLabel}>
+                  {formAction === "REDIRECT" ? "Redirect IP" : "Upstream DNS servers"}
+                </Label>
+                <Input
+                  value={formActionData}
+                  onChange={(e) => setFormActionData(e.target.value)}
+                  placeholder={formAction === "REDIRECT" ? "127.0.0.1" : "8.8.8.8:53,8.8.4.4:53"}
+                  className="font-data"
+                />
+              </div>
+            )}
+
+            {/* Test expression */}
+            <div className="space-y-2">
+              <Label className={T.formLabel}>Test Expression (optional)</Label>
+              <div className="flex items-center gap-2">
+                <Input
+                  value={testDomain}
+                  onChange={(e) => { setTestDomain(e.target.value); setTestResult(null); }}
+                  placeholder="ads.example.com"
+                  className="font-data flex-1"
+                />
                 <Button
-                  variant="ghost"
-                  size="xs"
+                  variant="outline"
+                  size="sm"
                   onClick={handleTest}
-                  disabled={!formExpression.trim()}
+                  disabled={!formLogic.trim() || !testDomain.trim()}
                 >
                   <Play className="h-3 w-3 mr-1" />
                   Test
                 </Button>
               </div>
-              <Textarea
-                value={formExpression}
-                onChange={(e) => { setFormExpression(e.target.value); setTestResult(null); }}
-                placeholder='domain matches "*.ads.example.com"'
-                className="font-data min-h-[80px]"
-              />
               {testResult && (
                 <div
                   className={cn(
@@ -363,45 +378,9 @@ export function PoliciesPage() {
                       : "border border-gh-red/30 bg-gh-red/10 text-gh-red"
                   )}
                 >
-                  {testResult.valid ? "Expression is valid" : testResult.error}
+                  {testResult.valid ? "Expression matched" : testResult.error || "Expression did not match"}
                 </div>
               )}
-            </div>
-
-            <div className="space-y-2">
-              <Label className={T.formLabel}>Description (optional)</Label>
-              <Input
-                value={formDescription}
-                onChange={(e) => setFormDescription(e.target.value)}
-                placeholder="Block advertising domains"
-              />
-            </div>
-
-            <div className="grid grid-cols-3 gap-4">
-              <div className="space-y-2">
-                <Label className={T.formLabel}>Priority</Label>
-                <Input
-                  type="number"
-                  value={formPriority}
-                  onChange={(e) => setFormPriority(Number(e.target.value))}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label className={T.formLabel}>Client filter</Label>
-                <Input
-                  value={formClientFilter}
-                  onChange={(e) => setFormClientFilter(e.target.value)}
-                  placeholder="192.168.1.*"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label className={T.formLabel}>Group filter</Label>
-                <Input
-                  value={formGroupFilter}
-                  onChange={(e) => setFormGroupFilter(e.target.value)}
-                  placeholder="kids"
-                />
-              </div>
             </div>
 
             <div className="flex items-center gap-2">
@@ -414,7 +393,7 @@ export function PoliciesPage() {
             <Button variant="outline" onClick={() => setDialogOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={handleSave} disabled={saving || !formName || !formExpression}>
+            <Button onClick={handleSave} disabled={saving || !formName || !formLogic}>
               {saving ? "Saving..." : editingPolicy ? "Update" : "Create"}
             </Button>
           </DialogFooter>

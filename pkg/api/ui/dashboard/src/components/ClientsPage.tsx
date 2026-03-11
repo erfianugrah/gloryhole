@@ -66,7 +66,7 @@ export function ClientsPage() {
     if (!editingClient) return;
     setSaving(true);
     try {
-      await updateClient(editingClient.client_ip, { name: editName, group: editGroup });
+      await updateClient(editingClient.client_ip, { display_name: editName, group_name: editGroup });
       setEditDialog(false);
       await loadData();
     } catch (err) {
@@ -84,7 +84,12 @@ export function ClientsPage() {
       </div>
 
       {error && (
-        <div className="rounded-lg border border-gh-red/30 bg-gh-red/10 px-4 py-3 text-sm text-gh-red">{error}</div>
+        <div className="rounded-lg border border-gh-red/30 bg-gh-red/10 px-4 py-3 text-sm text-gh-red flex items-center justify-between">
+          <span>{error}</span>
+          <Button variant="outline" size="xs" onClick={() => { setError(null); setLoading(true); loadData(); }}>
+            Retry
+          </Button>
+        </div>
       )}
 
       <Card>

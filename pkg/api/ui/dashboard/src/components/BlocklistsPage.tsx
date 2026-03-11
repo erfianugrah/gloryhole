@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { RefreshCw, Search, ShieldCheck, ShieldBan } from "lucide-react";
+import { RefreshCw, Search, ShieldCheck, ShieldBan, Plus, Trash2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -25,6 +25,7 @@ import {
   fetchFeatures,
   enableBlocklist,
   disableBlocklist,
+  updateBlocklistSources,
 } from "@/lib/api";
 
 function formatNumber(n: number): string {
@@ -42,6 +43,8 @@ export function BlocklistsPage() {
   const [checkQuery, setCheckQuery] = useState("");
   const [checkResult, setCheckResult] = useState<{ blocked: boolean; source?: string } | null>(null);
   const [checking, setChecking] = useState(false);
+  const [newSource, setNewSource] = useState("");
+  const [savingSources, setSavingSources] = useState(false);
 
   const loadData = useCallback(async () => {
     try {
@@ -93,6 +96,39 @@ export function BlocklistsPage() {
       await loadData();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Toggle failed");
+    }
+  }
+
+  async function handleAddSource() {
+    const url = newSource.trim();
+    if (!url || !info) return;
+    if (info.sources.includes(url)) {
+      setError("This source URL is already in the list");
+      return;
+    }
+    setSavingSources(true);
+    try {
+      await updateBlocklistSources([...info.sources, url]);
+      setNewSource("");
+      await loadData();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to add source");
+    } finally {
+      setSavingSources(false);
+    }
+  }
+
+  async function handleRemoveSource(url: string) {
+    if (!info) return;
+    if (!confirm(`Remove blocklist source?\n${url}`)) return;
+    setSavingSources(true);
+    try {
+      await updateBlocklistSources(info.sources.filter((s) => s !== url));
+      await loadData();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to remove source");
+    } finally {
+      setSavingSources(false);
     }
   }
 
@@ -200,24 +236,64 @@ export function BlocklistsPage() {
       </Card>
 
       {/* Sources Table */}
-      {info && info.sources.length > 0 && (
+      {info && (
         <Card>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Source URL</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {info.sources.map((url, i) => (
-                <TableRow key={i}>
-                  <TableCell className={cn(T.tableCellMono, "truncate max-w-[600px]")}>
-                    {url}
-                  </TableCell>
+          <CardHeader className="pb-2">
+            <CardTitle className={T.cardTitle}>Sources</CardTitle>
+          </CardHeader>
+          <CardContent className="pb-2">
+            <div className="flex items-center gap-2">
+              <Input
+                placeholder="https://example.com/blocklist.txt"
+                value={newSource}
+                onChange={(e) => setNewSource(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleAddSource()}
+                className="font-data flex-1"
+              />
+              <Button
+                size="sm"
+                onClick={handleAddSource}
+                disabled={savingSources || !newSource.trim()}
+              >
+                <Plus className="h-3.5 w-3.5 mr-1" />
+                Add
+              </Button>
+            </div>
+          </CardContent>
+          {info.sources.length > 0 ? (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>URL</TableHead>
+                  <TableHead className="w-[50px]"></TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {info.sources.map((url, i) => (
+                  <TableRow key={i}>
+                    <TableCell className={cn(T.tableCellMono, "truncate max-w-[600px]")}>
+                      {url}
+                    </TableCell>
+                    <TableCell>
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        onClick={() => handleRemoveSource(url)}
+                        disabled={savingSources}
+                        className="text-gh-red hover:text-gh-red"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          ) : (
+            <CardContent className="pt-0 pb-4">
+              <p className={T.mutedSm}>No blocklist sources configured</p>
+            </CardContent>
+          )}
         </Card>
       )}
     </div>

@@ -195,6 +195,7 @@ func New(cfg *Config) *Server {
 	// Blocklist summary APIs
 	mux.HandleFunc("GET /api/blocklists", s.handleGetBlocklists)
 	mux.HandleFunc("GET /api/blocklists/check", s.handleCheckBlocklist)
+	mux.HandleFunc("PUT /api/config/blocklists", s.handleUpdateBlocklistSources)
 
 	// Astro build output: serve /_astro/* assets and /favicon.svg from dist/
 	if distFS, err := getAstroDistFS(); err == nil {

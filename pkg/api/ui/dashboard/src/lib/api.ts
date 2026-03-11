@@ -109,15 +109,12 @@ export interface BlockTraceEntry {
 }
 
 export interface Policy {
-  id: string;
+  id: number;
   name: string;
-  expression: string;
+  logic: string;
   action: string;
+  action_data?: string;
   enabled: boolean;
-  priority: number;
-  client_filter?: string;
-  group_filter?: string;
-  description?: string;
 }
 
 export interface LocalRecord {
@@ -285,7 +282,7 @@ export function createPolicy(
 }
 
 export function updatePolicy(
-  id: string,
+  id: number,
   policy: Partial<Policy>
 ): Promise<Policy> {
   return apiFetch<Policy>(`/api/policies/${id}`, {
@@ -294,19 +291,25 @@ export function updatePolicy(
   });
 }
 
-export function deletePolicy(id: string): Promise<void> {
+export function deletePolicy(id: number): Promise<void> {
   return apiFetch<void>(`/api/policies/${id}`, { method: "DELETE" });
 }
 
-export function testPolicy(expression: string): Promise<{ valid: boolean; error?: string }> {
+export function testPolicy(
+  logic: string,
+  domain: string,
+  clientIP?: string,
+  queryType?: string
+): Promise<{ matched: boolean }> {
   return apiFetch(`/api/policies/test`, {
     method: "POST",
-    body: JSON.stringify({ expression }),
+    body: JSON.stringify({ logic, domain, client_ip: clientIP, query_type: queryType }),
   });
 }
 
-export function exportPolicies(): Promise<Policy[]> {
-  return apiFetch<Policy[]>("/api/policies/export");
+export async function exportPolicies(): Promise<Policy[]> {
+  const res = await apiFetch<{ policies: Policy[]; total: number }>("/api/policies/export");
+  return res.policies ?? [];
 }
 
 // ─── Local Records ───────────────────────────────────────────────────
@@ -369,7 +372,7 @@ export async function fetchClients(
 
 export function updateClient(
   client: string,
-  data: { name?: string; group?: string }
+  data: { display_name?: string; group_name?: string; notes?: string }
 ): Promise<void> {
   return apiFetch<void>(`/api/clients/${encodeURIComponent(client)}`, {
     method: "PUT",
@@ -419,6 +422,15 @@ export function checkDomain(
   domain: string
 ): Promise<{ blocked: boolean; source?: string }> {
   return apiFetch(`/api/blocklists/check?domain=${encodeURIComponent(domain)}`);
+}
+
+export function updateBlocklistSources(
+  sources: string[]
+): Promise<{ status: string; message: string; sources: string[] }> {
+  return apiFetch("/api/config/blocklists", {
+    method: "PUT",
+    body: JSON.stringify({ sources }),
+  });
 }
 
 // ─── Features ────────────────────────────────────────────────────────

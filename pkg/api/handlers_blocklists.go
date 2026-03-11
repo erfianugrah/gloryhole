@@ -2,7 +2,10 @@ package api
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -94,6 +97,66 @@ func (s *Server) buildBlocklistSummary(ctx context.Context) blocklistSummaryResp
 	}
 
 	return summary
+}
+
+// handleUpdateBlocklistSources handles PUT /api/config/blocklists
+func (s *Server) handleUpdateBlocklistSources(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPut {
+		s.writeError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		return
+	}
+
+	cfg, err := s.mutableConfig()
+	if err != nil {
+		s.writeError(w, http.StatusServiceUnavailable, err.Error())
+		return
+	}
+
+	r.Body = http.MaxBytesReader(w, r.Body, maxConfigPayloadSize)
+
+	var req struct {
+		Sources []string `json:"sources"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		s.writeError(w, http.StatusBadRequest, fmt.Sprintf("Invalid JSON: %v", err))
+		return
+	}
+
+	// Validate and deduplicate URLs
+	seen := make(map[string]struct{})
+	sources := make([]string, 0, len(req.Sources))
+	for _, raw := range req.Sources {
+		trimmed := strings.TrimSpace(raw)
+		if trimmed == "" {
+			continue
+		}
+		// Basic URL validation
+		if _, err := url.ParseRequestURI(trimmed); err != nil {
+			s.writeError(w, http.StatusBadRequest, fmt.Sprintf("Invalid URL %q: %v", trimmed, err))
+			return
+		}
+		lower := strings.ToLower(trimmed)
+		if _, ok := seen[lower]; ok {
+			continue
+		}
+		seen[lower] = struct{}{}
+		sources = append(sources, trimmed)
+	}
+
+	updated := *cfg
+	updated.Blocklists = sources
+
+	if !s.persistConfigSection(w, r, &updated, "", "", cfg) {
+		return
+	}
+
+	s.logger.Info("Blocklist sources updated via API", "count", len(sources))
+
+	s.writeJSON(w, http.StatusOK, map[string]any{
+		"status":  "ok",
+		"message": "Blocklist sources updated",
+		"sources": sources,
+	})
 }
 
 func normalizeDomain(value string) string {
