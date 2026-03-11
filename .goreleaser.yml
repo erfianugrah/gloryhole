@@ -5,7 +5,7 @@ project_name: glory-hole
 before:
   hooks:
     - go mod tidy
-    - cmd: bash -c 'cd pkg/api/ui/dashboard && npm ci && npm run build'
+    - bash -c 'cd pkg/api/ui/dashboard && npm ci && npm run build'
 
 builds:
   - id: glory-hole
