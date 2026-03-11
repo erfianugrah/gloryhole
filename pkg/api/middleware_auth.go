@@ -83,7 +83,9 @@ func (s *Server) isAuthRequired(r *http.Request) bool {
 		return false
 	}
 
-	if strings.HasPrefix(r.URL.Path, "/static/") {
+	if strings.HasPrefix(r.URL.Path, "/static/") ||
+		strings.HasPrefix(r.URL.Path, "/_astro/") ||
+		r.URL.Path == "/favicon.svg" {
 		return false
 	}
 
