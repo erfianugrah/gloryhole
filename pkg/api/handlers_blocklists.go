@@ -20,27 +20,8 @@ type blocklistSummaryResponse struct {
 	Sources        []string       `json:"sources"`
 }
 
-type blocklistsPageData struct {
-	Version string
-	Summary blocklistSummaryResponse
-}
-
 func (s *Server) handleBlocklistsPage(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	summary := s.buildBlocklistSummary(r.Context())
-	data := blocklistsPageData{
-		Version: s.uiVersion(),
-		Summary: summary,
-	}
-
-	if err := blocklistsTemplate.ExecuteTemplate(w, "blocklists.html", data); err != nil {
-		s.logger.Error("Failed to render blocklists template", "error", err)
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-	}
+	s.serveAstroPage(w, r, "blocklists/index.html")
 }
 
 func (s *Server) handleGetBlocklists(w http.ResponseWriter, r *http.Request) {

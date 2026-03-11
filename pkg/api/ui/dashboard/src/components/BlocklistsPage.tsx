@@ -133,7 +133,7 @@ export function BlocklistsPage() {
       </div>
 
       {error && (
-        <div className="rounded-lg border border-gh-pink/30 bg-gh-pink/10 px-4 py-3 text-sm text-gh-pink">{error}</div>
+        <div className="rounded-lg border border-gh-red/30 bg-gh-red/10 px-4 py-3 text-sm text-gh-red">{error}</div>
       )}
 
       {/* Stats */}
@@ -142,7 +142,7 @@ export function BlocklistsPage() {
           <Card className="animate-fade-in-up">
             <CardContent className="p-4">
               <div className={T.statLabelUpper}>Total Domains Blocked</div>
-              <div className={cn(T.statValue, "text-gh-pink mt-2")}>{formatNumber(info.total_domains)}</div>
+              <div className={cn(T.statValue, "text-gh-red mt-2")}>{formatNumber(info.total_domains)}</div>
             </CardContent>
           </Card>
           <Card className="animate-fade-in-up">
@@ -155,7 +155,7 @@ export function BlocklistsPage() {
             <CardContent className="p-4">
               <div className={T.statLabelUpper}>Last Refresh</div>
               <div className={cn(T.statValueSm, "mt-2 font-data")}>
-                {info.last_refresh ? new Date(info.last_refresh).toLocaleString() : "Never"}
+                {info.last_updated ? new Date(info.last_updated).toLocaleString() : "Never"}
               </div>
             </CardContent>
           </Card>
@@ -187,7 +187,7 @@ export function BlocklistsPage() {
             <div className={cn(
               "mt-3 flex items-center gap-2 rounded-md px-3 py-2 text-sm",
               checkResult.blocked
-                ? "border border-gh-pink/30 bg-gh-pink/10 text-gh-pink"
+                ? "border border-gh-red/30 bg-gh-red/10 text-gh-red"
                 : "border border-gh-green/30 bg-gh-green/10 text-gh-green"
             )}>
               {checkResult.blocked ? <ShieldBan className="h-4 w-4" /> : <ShieldCheck className="h-4 w-4" />}
@@ -205,33 +205,14 @@ export function BlocklistsPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Source</TableHead>
-                <TableHead className="w-[100px] text-right">Domains</TableHead>
-                <TableHead className="w-[160px]">Last Updated</TableHead>
-                <TableHead className="w-[80px]">Status</TableHead>
+                <TableHead>Source URL</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {info.sources.map((src, i) => (
+              {info.sources.map((url, i) => (
                 <TableRow key={i}>
-                  <TableCell>
-                    <div className={T.tableRowName}>{src.name || src.url}</div>
-                    {src.name && <div className={cn(T.muted, "truncate max-w-[400px]")}>{src.url}</div>}
-                  </TableCell>
-                  <TableCell className={T.tableCellNumeric}>{formatNumber(src.domain_count)}</TableCell>
-                  <TableCell className={T.tableCellMono}>
-                    {src.last_updated ? new Date(src.last_updated).toLocaleString() : "Never"}
-                  </TableCell>
-                  <TableCell>
-                    <Badge className={
-                      src.last_status === "ok" || src.last_status === "success"
-                        ? "bg-gh-green/20 text-gh-green border-gh-green/30"
-                        : src.last_status === "error"
-                          ? "bg-gh-pink/20 text-gh-pink border-gh-pink/30"
-                          : "bg-secondary text-secondary-foreground"
-                    }>
-                      {src.last_status || "unknown"}
-                    </Badge>
+                  <TableCell className={cn(T.tableCellMono, "truncate max-w-[600px]")}>
+                    {url}
                   </TableCell>
                 </TableRow>
               ))}

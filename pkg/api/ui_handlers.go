@@ -1,48 +1,14 @@
 package api
 
 import (
-	"context"
 	"embed"
-	"encoding/json"
-	"html/template"
 	"io/fs"
 	"net/http"
-	"strconv"
 	"strings"
-	"time"
-
-	"github.com/dustin/go-humanize"
-
-	"glory-hole/pkg/storage"
 )
 
-//go:embed ui/templates/*
-var templatesFS embed.FS
-
-//go:embed ui/static/*
+//go:embed all:ui/static
 var staticFS embed.FS
-
-// UI templates grouped per page/partial to prevent block collisions.
-var (
-	dashboardTemplate             *template.Template
-	queriesTemplate               *template.Template
-	policiesTemplate              *template.Template
-	localrecordsTemplate          *template.Template
-	conditionalforwardingTemplate       *template.Template
-	settingsTemplate                    *template.Template
-	clientsTemplate                     *template.Template
-	blocklistsTemplate                  *template.Template
-	loginTemplate                       *template.Template
-	statsPartialTemplate                *template.Template
-	queriesPartialTemplate      *template.Template
-	topDomainsTemplate          *template.Template
-	policiesPartialTemplate     *template.Template
-	localRecordsPartialTemplate *template.Template
-	conditionalForwardingPartialTemplate *template.Template
-	clientsPartialTemplate              *template.Template
-)
-
-const dnsRcodeNameError = 3
 
 func formatVersionLabel(version string) string {
 	v := strings.TrimSpace(version)
@@ -59,141 +25,41 @@ func (s *Server) uiVersion() string {
 	return formatVersionLabel(s.version)
 }
 
-// initTemplates initializes the HTML templates
-func initTemplates() error {
-	var err error
-
-	tmplFS, err := fs.Sub(templatesFS, "ui/templates")
-	if err != nil {
-		return err
-	}
-
-	funcMap := template.FuncMap{
-		"lower": strings.ToLower,
-		"json": func(v interface{}) template.JS {
-			b, _ := json.Marshal(v)
-			return template.JS(b)
-		},
-		"add": func(a, b int) int {
-			return a + b
-		},
-		"join":       strings.Join,
-		"humanBytes": humanize.Bytes,
-	}
-
-	baseTemplate, err := template.New("base.html").Funcs(funcMap).ParseFS(tmplFS, "base.html")
-	if err != nil {
-		return err
-	}
-
-	parsePage := func(name string) (*template.Template, error) {
-		clone, cloneErr := baseTemplate.Clone()
-		if cloneErr != nil {
-			return nil, cloneErr
-		}
-		if _, parseErr := clone.ParseFS(tmplFS, name); parseErr != nil {
-			return nil, parseErr
-		}
-		return clone, nil
-	}
-
-	if dashboardTemplate, err = parsePage("dashboard.html"); err != nil {
-		return err
-	}
-	if queriesTemplate, err = parsePage("queries.html"); err != nil {
-		return err
-	}
-	if policiesTemplate, err = parsePage("policies.html"); err != nil {
-		return err
-	}
-	if localrecordsTemplate, err = parsePage("localrecords.html"); err != nil {
-		return err
-	}
-	if conditionalforwardingTemplate, err = parsePage("conditionalforwarding.html"); err != nil {
-		return err
-	}
-	if settingsTemplate, err = parsePage("settings.html"); err != nil {
-		return err
-	}
-	if clientsTemplate, err = parsePage("clients.html"); err != nil {
-		return err
-	}
-	if _, err = clientsTemplate.ParseFS(tmplFS, "clients_partial.html"); err != nil {
-		return err
-	}
-	if blocklistsTemplate, err = parsePage("blocklists.html"); err != nil {
-		return err
-	}
-	if loginTemplate, err = parsePage("login.html"); err != nil {
-		return err
-	}
-
-	parseStandalone := func(name string) (*template.Template, error) {
-		return template.New(name).Funcs(funcMap).ParseFS(tmplFS, name)
-	}
-
-	if statsPartialTemplate, err = parseStandalone("stats_partial.html"); err != nil {
-		return err
-	}
-	if queriesPartialTemplate, err = parseStandalone("queries_partial.html"); err != nil {
-		return err
-	}
-	if topDomainsTemplate, err = parseStandalone("top_domains_partial.html"); err != nil {
-		return err
-	}
-	if policiesPartialTemplate, err = parseStandalone("policies_partial.html"); err != nil {
-		return err
-	}
-	if localRecordsPartialTemplate, err = parseStandalone("localrecords_partial.html"); err != nil {
-		return err
-	}
-	if conditionalForwardingPartialTemplate, err = parseStandalone("conditionalforwarding_partial.html"); err != nil {
-		return err
-	}
-	if clientsPartialTemplate, err = parseStandalone("clients_partial.html"); err != nil {
-		return err
-	}
-
-	return nil
+// getAstroDistFS returns the Astro build output filesystem (ui/static/dist).
+func getAstroDistFS() (fs.FS, error) {
+	return fs.Sub(staticFS, "ui/static/dist")
 }
 
-// getStaticFS returns the static files filesystem
-func getStaticFS() (http.FileSystem, error) {
-	staticFiles, err := fs.Sub(staticFS, "ui/static")
-	if err != nil {
-		return nil, err
-	}
-	return http.FS(staticFiles), nil
-}
-
-// handleDashboard serves the main dashboard page
-func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
+// serveAstroPage serves a pre-rendered Astro HTML page from the embedded dist/ directory.
+// For the root page pass pagePath = "index.html"; for sub-pages pass e.g. "queries/index.html".
+func (s *Server) serveAstroPage(w http.ResponseWriter, r *http.Request, pagePath string) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
-	data := struct {
-		Version string
-		Uptime  string
-	}{
-		Version: s.uiVersion(),
-		Uptime:  s.getUptime(),
-	}
-
-	if err := dashboardTemplate.ExecuteTemplate(w, "dashboard.html", data); err != nil {
-		s.logger.Error("Failed to render dashboard template", "error", err)
+	distFS, err := getAstroDistFS()
+	if err != nil {
+		s.logger.Error("Failed to access Astro dist filesystem", "error", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
+
+	data, err := fs.ReadFile(distFS, pagePath)
+	if err != nil {
+		s.logger.Error("Failed to read Astro page", "path", pagePath, "error", err)
+		http.Error(w, "Page not found", http.StatusNotFound)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(data)
 }
 
-type loginPageData struct {
-	Version        string
-	Next           string
-	Error          string
-	HasAPIKey      bool
-	HasUserAccount bool
+// handleDashboard serves the main dashboard page (Astro pre-rendered).
+func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
+	s.serveAstroPage(w, r, "index.html")
 }
 
 func (s *Server) handleLoginPage(w http.ResponseWriter, r *http.Request) {
@@ -210,7 +76,7 @@ func (s *Server) handleLoginPage(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, next, http.StatusFound)
 		return
 	}
-	s.renderLoginPage(w, http.StatusOK, s.newLoginPageData(next, ""))
+	s.serveAstroPage(w, r, "login/index.html")
 }
 
 func (s *Server) handleLoginPost(w http.ResponseWriter, r *http.Request) {
@@ -223,7 +89,7 @@ func (s *Server) handleLoginPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := r.ParseForm(); err != nil {
-		s.renderLoginPage(w, http.StatusBadRequest, s.newLoginPageData("/", "Invalid form submission"))
+		http.Redirect(w, r, "/login?error=Invalid+form+submission", http.StatusSeeOther)
 		return
 	}
 	next := sanitizeRedirectTarget(r.FormValue("next"))
@@ -238,7 +104,7 @@ func (s *Server) handleLoginPost(w http.ResponseWriter, r *http.Request) {
 	case username != "" && password != "" && s.validateUserPasswordInput(username, password):
 		subject = username
 	default:
-		s.renderLoginPage(w, http.StatusUnauthorized, s.newLoginPageData(next, "Invalid credentials"))
+		http.Redirect(w, r, "/login?error=Invalid+credentials&next="+next, http.StatusSeeOther)
 		return
 	}
 
@@ -267,410 +133,27 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, redirectTo, http.StatusSeeOther)
 }
 
-func (s *Server) newLoginPageData(next, errMsg string) loginPageData {
-	next = sanitizeRedirectTarget(next)
-	s.authMu.RLock()
-	apiKeyConfigured := s.apiKey != ""
-	userConfigured := s.basicUser != ""
-	s.authMu.RUnlock()
-	return loginPageData{
-		Version:        s.uiVersion(),
-		Next:           next,
-		Error:          errMsg,
-		HasAPIKey:      apiKeyConfigured,
-		HasUserAccount: userConfigured,
-	}
-}
-
-func (s *Server) renderLoginPage(w http.ResponseWriter, status int, data loginPageData) {
-	if loginTemplate == nil {
-		http.Error(w, "Login unavailable", http.StatusServiceUnavailable)
-		return
-	}
-	if status != 0 {
-		w.WriteHeader(status)
-	}
-	if err := loginTemplate.ExecuteTemplate(w, "login.html", data); err != nil {
-		s.logger.Error("failed to render login template", "error", err)
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-	}
-}
-
-// handleQueriesPage serves the queries log page
+// handleQueriesPage serves the queries log page (Astro pre-rendered).
 func (s *Server) handleQueriesPage(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	data := struct {
-		Version string
-	}{
-		Version: s.uiVersion(),
-	}
-
-	if err := queriesTemplate.ExecuteTemplate(w, "queries.html", data); err != nil {
-		s.logger.Error("Failed to render queries template", "error", err)
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-		return
-	}
+	s.serveAstroPage(w, r, "queries/index.html")
 }
 
-// handleStatsPartial returns stats as HTML fragment for HTMX
-func (s *Server) handleStatsPartial(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	// Get statistics
-	since := parseDuration(r.URL.Query().Get("since"), 24*time.Hour)
-
-	sysMetrics := collectSystemMetrics(r.Context())
-	stats := StatsResponse{
-		CPUUsagePercent:    sysMetrics.CPUPercent,
-		MemoryUsageBytes:   sysMetrics.MemUsed,
-		MemoryTotalBytes:   sysMetrics.MemTotal,
-		MemoryUsagePercent: sysMetrics.MemPercent,
-		Period:             since.String(),
-		Timestamp:          time.Now().Format(time.RFC3339),
-	}
-
-	if sysMetrics.TemperatureAvailable() {
-		stats.TemperatureCelsius = sysMetrics.TemperatureC
-		stats.TemperatureAvailable = true
-	}
-
-	if s.storage != nil {
-		dbStats, err := s.storage.GetStatistics(r.Context(), time.Now().Add(-since))
-		if err == nil {
-			stats.TotalQueries = dbStats.TotalQueries
-			stats.BlockedQueries = dbStats.BlockedQueries
-			stats.CachedQueries = dbStats.CachedQueries
-			stats.BlockRate = dbStats.BlockRate
-			stats.CacheHitRate = dbStats.CacheHitRate
-			stats.AvgResponseMs = dbStats.AvgResponseTimeMs
-		}
-	}
-
-	if err := statsPartialTemplate.ExecuteTemplate(w, "stats_partial.html", stats); err != nil {
-		s.logger.Error("Failed to render stats partial", "error", err)
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-		return
-	}
-}
-
-// handlePoliciesPage serves the policies management page
+// handlePoliciesPage serves the policies management page (Astro pre-rendered).
 func (s *Server) handlePoliciesPage(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	var cfgResp ConfigResponse
-	if cfg := s.currentConfig(); cfg != nil {
-		cfgResp = convertConfigResponse(cfg)
-	}
-
-	data := struct {
-		Version string
-		Config  ConfigResponse
-	}{
-		Version: s.uiVersion(),
-		Config:  cfgResp,
-	}
-
-	if err := policiesTemplate.ExecuteTemplate(w, "policies.html", data); err != nil {
-		s.logger.Error("Failed to render policies template", "error", err)
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-		return
-	}
+	s.serveAstroPage(w, r, "policies/index.html")
 }
 
-// handleLocalRecordsPage serves the local DNS records management page
+// handleLocalRecordsPage serves the local DNS records management page (Astro pre-rendered).
 func (s *Server) handleLocalRecordsPage(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	data := struct {
-		Version string
-	}{
-		Version: s.uiVersion(),
-	}
-
-	if err := localrecordsTemplate.ExecuteTemplate(w, "localrecords.html", data); err != nil {
-		s.logger.Error("Failed to render localrecords template", "error", err)
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-		return
-	}
+	s.serveAstroPage(w, r, "localrecords/index.html")
 }
 
-// handleConditionalForwardingPage serves the conditional forwarding management page
+// handleConditionalForwardingPage serves the conditional forwarding management page (Astro pre-rendered).
 func (s *Server) handleConditionalForwardingPage(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	data := struct {
-		Version string
-	}{
-		Version: s.uiVersion(),
-	}
-
-	if err := conditionalforwardingTemplate.ExecuteTemplate(w, "conditionalforwarding.html", data); err != nil {
-		s.logger.Error("Failed to render conditionalforwarding template", "error", err)
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-		return
-	}
+	s.serveAstroPage(w, r, "forwarding/index.html")
 }
 
-// handleSettingsPage serves the settings/configuration page
+// handleSettingsPage serves the settings/configuration page (Astro pre-rendered).
 func (s *Server) handleSettingsPage(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	cfg := s.currentConfig()
-	if cfg == nil {
-		s.logger.Error("Configuration not available for settings page")
-		http.Error(w, "Configuration not available", http.StatusServiceUnavailable)
-		return
-	}
-
-	data := s.newSettingsPageData(cfg)
-
-	if err := settingsTemplate.ExecuteTemplate(w, "settings.html", data); err != nil {
-		s.logger.Error("Failed to render settings template", "error", err)
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-		return
-	}
-}
-
-// handleTopDomainsPartial returns top domains as HTML fragment for HTMX
-func (s *Server) handleTopDomainsPartial(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	// Parse parameters
-	limitParam := r.URL.Query().Get("limit")
-	limit := 10 // Default
-	if limitParam != "" {
-		if l, err := strconv.Atoi(limitParam); err == nil && l > 0 && l <= 100 {
-			limit = l
-		}
-	}
-
-	blockedParam := r.URL.Query().Get("blocked")
-	blocked := blockedParam == "true"
-
-	// Parse since parameter (optional)
-	sinceParam := r.URL.Query().Get("since")
-	var sinceTime time.Time
-	if sinceParam != "" {
-		d := parseDuration(sinceParam, 0)
-		if d > 0 {
-			sinceTime = time.Now().Add(-d)
-		}
-	}
-
-	// Template-friendly domain data
-	type DomainData struct {
-		Domain     string
-		Queries    int64
-		Percentage float64
-	}
-
-	domains := []DomainData{}
-
-	// Get domains from storage
-	if s.storage != nil {
-		dbDomains, err := s.storage.GetTopDomains(r.Context(), limit, blocked, sinceTime)
-		if err == nil && len(dbDomains) > 0 {
-			maxQueries := dbDomains[0].QueryCount
-			for _, d := range dbDomains {
-				percentage := float64(d.QueryCount) / float64(maxQueries) * 100
-				domains = append(domains, DomainData{
-					Domain:     d.Domain,
-					Queries:    d.QueryCount,
-					Percentage: percentage,
-				})
-			}
-		}
-	}
-
-	data := struct {
-		Domains []DomainData
-		Blocked bool
-	}{
-		Domains: domains,
-		Blocked: blocked,
-	}
-
-	if err := topDomainsTemplate.ExecuteTemplate(w, "top_domains_partial.html", data); err != nil {
-		s.logger.Error("Failed to render top domains partial", "error", err)
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-		return
-	}
-}
-
-// handleQueriesPartial returns queries as HTML fragment for HTMX
-func (s *Server) handleQueriesPartial(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	// Parse limit parameter
-	limitParam := r.URL.Query().Get("limit")
-	limit := 20 // Default for UI
-	if limitParam != "" {
-		if l, err := strconv.Atoi(limitParam); err == nil && l > 0 && l <= 1000 {
-			limit = l
-		}
-	}
-
-	// Parse offset parameter
-	offsetParam := r.URL.Query().Get("offset")
-	offset := 0 // Default offset
-	if offsetParam != "" {
-		if o, err := strconv.Atoi(offsetParam); err == nil && o >= 0 {
-			offset = o
-		}
-	}
-
-	// Template-friendly query data
-	type QueryData struct {
-		Timestamp      time.Time
-		ClientIP       string
-		Domain         string
-		QueryType      string
-		Blocked        bool
-		Cached         bool
-		ResponseCode   int
-		Status         string
-		StatusLabel    string
-		Upstream       string
-		BlockTrace     []storage.BlockTraceEntry
-		ResponseTimeMs float64
-		UpstreamTimeMs float64
-	}
-
-	queries := []QueryData{}
-
-	// Get queries from storage
-	if s.storage != nil {
-		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
-		defer cancel()
-
-		filter := buildQueryFilterFromRequest(r)
-		dbQueries, err := s.storage.GetQueriesFiltered(ctx, filter, limit, offset)
-		if err == nil {
-			for _, q := range dbQueries {
-				status, label := classifyQuery(q)
-				queries = append(queries, QueryData{
-					Timestamp:      q.Timestamp,
-					ClientIP:       q.ClientIP,
-					Domain:         q.Domain,
-					QueryType:      q.QueryType,
-					Blocked:        q.Blocked,
-					Cached:         q.Cached,
-					ResponseCode:   q.ResponseCode,
-					Status:         status,
-					StatusLabel:    label,
-					Upstream:       q.Upstream,
-					BlockTrace:     q.BlockTrace,
-					ResponseTimeMs: q.ResponseTimeMs,
-					UpstreamTimeMs: q.UpstreamTimeMs,
-				})
-			}
-		}
-	}
-
-	data := struct {
-		Queries []QueryData
-	}{
-		Queries: queries,
-	}
-
-	if err := queriesPartialTemplate.ExecuteTemplate(w, "queries_partial.html", data); err != nil {
-		s.logger.Error("Failed to render queries partial", "error", err)
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-		return
-	}
-}
-
-// handleClientsPartial renders the clients table as an HTML fragment for HTMX.
-func (s *Server) handleClientsPartial(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	limit := parsePositiveInt(r.URL.Query().Get("limit"), defaultClientPageSize, maxClientPageSize)
-	offset := parseNonNegativeInt(r.URL.Query().Get("offset"), 0)
-	search := strings.TrimSpace(r.URL.Query().Get("search"))
-
-	clients := []*storage.ClientSummary{}
-
-	if s.storage != nil {
-		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
-		defer cancel()
-
-		if search != "" {
-			ctx = storage.WithClientSearch(ctx, search)
-		}
-
-		if records, err := s.storage.GetClientSummaries(ctx, limit, offset); err == nil {
-			clients = records
-		} else {
-			s.logger.Error("Failed to list client summaries", "error", err)
-		}
-	}
-
-	data := struct {
-		Clients []*storage.ClientSummary
-	}{
-		Clients: clients,
-	}
-
-	meta := map[string]any{
-		"limit":    limit,
-		"offset":   offset,
-		"count":    len(clients),
-		"has_more": len(clients) >= limit,
-	}
-	if search != "" {
-		meta["search"] = search
-	}
-	if payload, err := json.Marshal(map[string]any{"clients-page-meta": meta}); err == nil {
-		w.Header().Set("HX-Trigger", string(payload))
-	}
-
-	if err := clientsPartialTemplate.ExecuteTemplate(w, "clients_partial.html", data); err != nil {
-		s.logger.Error("Failed to render clients partial", "error", err)
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-		return
-	}
-}
-
-func classifyQuery(q *storage.QueryLog) (string, string) {
-	if q == nil {
-		return "allowed", "Allowed"
-	}
-	switch {
-	case q.Blocked:
-		return "blocked", "Blocked"
-	case q.ResponseCode == dnsRcodeNameError:
-		return "nxdomain", "NXDOMAIN"
-	case q.Cached:
-		return "cached", "Cached"
-	default:
-		return "allowed", "Allowed"
-	}
+	s.serveAstroPage(w, r, "settings/index.html")
 }

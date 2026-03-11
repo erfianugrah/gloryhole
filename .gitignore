@@ -25,10 +25,8 @@ bin/
 # Database files
 *.db
 
-# Dependency directories (Go vendor, but not UI static vendor)
+# Dependency directories
 /vendor/
-# Allow UI static vendor files
-!pkg/api/ui/static/js/vendor/
 
 # Node.js
 node_modules/

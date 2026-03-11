@@ -13,7 +13,7 @@ import (
 
 // ForwardingRuleResponse represents a forwarding rule in API responses
 type ForwardingRuleResponse struct {
-	ID          string   `json:"id"`          // Unique identifier (name:index)
+	ID          string   `json:"id"` // Unique identifier (name:index)
 	Name        string   `json:"name"`
 	Domains     []string `json:"domains,omitempty"`
 	ClientCIDRs []string `json:"client_cidrs,omitempty"`
@@ -89,25 +89,6 @@ func (s *Server) handleGetConditionalForwarding(w http.ResponseWriter, r *http.R
 		return rules[i].Name < rules[j].Name
 	})
 
-	// Check if request wants HTML (from HTMX or browser)
-	if r.Header.Get("HX-Request") == "true" || r.Header.Get("Accept") == "text/html" {
-		// Return HTML partial
-		data := struct {
-			Rules   []ForwardingRuleResponse
-			Enabled bool
-		}{
-			Rules:   rules,
-			Enabled: enabled,
-		}
-
-		if err := conditionalForwardingPartialTemplate.Execute(w, data); err != nil {
-			s.logger.Error("Failed to render conditional forwarding partial", "error", err)
-			http.Error(w, "Internal server error", http.StatusInternalServerError)
-		}
-		return
-	}
-
-	// Return JSON
 	s.writeJSON(w, http.StatusOK, ConditionalForwardingListResponse{
 		Rules:   rules,
 		Total:   len(rules),

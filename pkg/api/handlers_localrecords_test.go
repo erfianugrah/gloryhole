@@ -446,11 +446,9 @@ func TestHandleGetLocalRecords_HTMLResponse(t *testing.T) {
 	server := createTestServerForLocalRecords(t, initialRecords)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/localrecords", nil)
-	req.Header.Set("HX-Request", "true")
 	w := httptest.NewRecorder()
 
 	server.handleGetLocalRecords(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
-	// Should return HTML when HX-Request header is present
 }

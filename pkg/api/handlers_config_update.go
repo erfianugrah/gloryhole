@@ -17,9 +17,16 @@ import (
 )
 
 const maxConfigPayloadSize = 64 * 1024 // 64KB
+// Legacy template/flash constants — kept for function signature compatibility.
 const (
-	settingsTemplateTLS = "settings-tls"
-	flashKeyTLS         = "tls"
+	settingsTemplateUpstreams = "settings-upstreams"
+	settingsTemplateCache     = "settings-cache"
+	settingsTemplateLogging   = "settings-logging"
+	settingsTemplateTLS       = "settings-tls"
+	flashKeyUpstreams         = "upstreams"
+	flashKeyCache             = "cache"
+	flashKeyLogging           = "logging"
+	flashKeyTLS               = "tls"
 )
 
 // handleUpdateUpstreams handles PUT /api/config/upstreams
@@ -715,34 +722,4 @@ func purgeACMECache(cacheDir string, logger *slog.Logger) {
 			logger.Info("Purged ACME cache file (hosts changed)", "path", p)
 		}
 	}
-}
-
-func (s *Server) persistConfigSection(w http.ResponseWriter, r *http.Request, updated *config.Config, tmpl, errorKey string, current *config.Config) bool {
-	if s.configPath == "" {
-		s.respondConfigValidationError(
-			w, r, tmpl, errorKey,
-			"Configuration path is not set; settings are read-only in this deployment",
-			current,
-			http.StatusServiceUnavailable,
-		)
-		return false
-	}
-
-	if err := config.Save(s.configPath, updated); err != nil {
-		s.logger.Error("Failed to save configuration", "error", err)
-		status := http.StatusInternalServerError
-		if isHTMXRequest(r) {
-			status = http.StatusOK
-		}
-		s.respondConfigValidationError(
-			w, r, tmpl, errorKey,
-			fmt.Sprintf("Failed to save configuration: %v", err),
-			current,
-			status,
-		)
-		return false
-	}
-
-	*current = *updated
-	return true
 }

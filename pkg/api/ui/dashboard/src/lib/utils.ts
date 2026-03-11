@@ -17,34 +17,34 @@ export async function copyToClipboard(text: string): Promise<boolean> {
 }
 
 // ─── Centralized Color Map ───────────────────────────────────────────
-// Surveillance Terminal palette — used across charts, badges, and stat cards.
+// Lovelace palette — used across charts, badges, and stat cards.
 
 export const STATUS_COLORS = {
-  allowed: "#00ff41", // green
-  blocked: "#ff006e", // pink
-  cached: "#4a6cf7", // blue
-  nxdomain: "#ff9500", // orange
+  allowed: "#5adecd", // green
+  blocked: "#f37e96", // red
+  cached: "#8796f4", // blue
+  nxdomain: "#f1a171", // peach
 } as const;
 
 export const CHART_PALETTE = [
-  "#00ff41",
-  "#ff006e",
-  "#4a6cf7",
+  "#5adecd",
+  "#c574dd",
+  "#79e6f3",
+  "#f1a171",
+  "#8796f4",
+  "#f37e96",
   "#ffd866",
-  "#00d4ff",
-  "#ff9500",
-  "#00cc33",
-  "#cc0058",
+  "#ff4870",
 ] as const;
 
 export const CHART_TOOLTIP_STYLE = {
   contentStyle: {
-    backgroundColor: "#141830",
-    border: "1px solid #2a2f52",
+    backgroundColor: "#282a36",
+    border: "1px solid #414457",
     borderRadius: "8px",
     fontSize: "12px",
-    color: "#e0e0e0",
+    color: "#fcfcfc",
   },
-  itemStyle: { color: "#e0e0e0" },
-  labelStyle: { color: "#8888aa" },
+  itemStyle: { color: "#fcfcfc" },
+  labelStyle: { color: "#bdbdc1" },
 };

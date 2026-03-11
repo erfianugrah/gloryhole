@@ -199,7 +199,7 @@ export function PoliciesPage() {
       </div>
 
       {error && (
-        <div className="rounded-lg border border-gh-pink/30 bg-gh-pink/10 px-4 py-3 text-sm text-gh-pink">
+        <div className="rounded-lg border border-gh-red/30 bg-gh-red/10 px-4 py-3 text-sm text-gh-red">
           {error}
         </div>
       )}
@@ -251,7 +251,7 @@ export function PoliciesPage() {
                       <Badge
                         className={
                           policy.action === "block"
-                            ? "bg-gh-pink/20 text-gh-pink border-gh-pink/30"
+                            ? "bg-gh-red/20 text-gh-red border-gh-red/30"
                             : "bg-gh-green/20 text-gh-green border-gh-green/30"
                         }
                       >
@@ -286,7 +286,7 @@ export function PoliciesPage() {
                           variant="ghost"
                           size="icon-sm"
                           onClick={() => handleDelete(policy.id)}
-                          className="text-gh-pink hover:text-gh-pink"
+                          className="text-gh-red hover:text-gh-red"
                         >
                           <Trash2 className="h-3.5 w-3.5" />
                         </Button>
@@ -360,7 +360,7 @@ export function PoliciesPage() {
                     "rounded-md px-3 py-2 text-xs",
                     testResult.valid
                       ? "border border-gh-green/30 bg-gh-green/10 text-gh-green"
-                      : "border border-gh-pink/30 bg-gh-pink/10 text-gh-pink"
+                      : "border border-gh-red/30 bg-gh-red/10 text-gh-red"
                   )}
                 >
                   {testResult.valid ? "Expression is valid" : testResult.error}

@@ -62,23 +62,6 @@ func (s *Server) handleGetPolicies(w http.ResponseWriter, r *http.Request) {
 		policies = make([]PolicyResponse, 0)
 	}
 
-	// Check if request wants HTML (from HTMX or browser)
-	if r.Header.Get("HX-Request") == "true" || r.Header.Get("Accept") == "text/html" {
-		// Return HTML partial
-		data := struct {
-			Policies []PolicyResponse
-		}{
-			Policies: policies,
-		}
-
-		if err := policiesPartialTemplate.ExecuteTemplate(w, "policies_partial.html", data); err != nil {
-			s.logger.Error("Failed to render policies partial", "error", err)
-			http.Error(w, "Internal server error", http.StatusInternalServerError)
-		}
-		return
-	}
-
-	// Return JSON
 	s.writeJSON(w, http.StatusOK, PolicyListResponse{
 		Policies: policies,
 		Total:    len(policies),
@@ -473,11 +456,11 @@ func (s *Server) handleExportPolicies(w http.ResponseWriter, r *http.Request) {
 			policies = append(policies, PolicyResponse{
 				ID:         i,
 				Name:       rule.Name,
-			Logic:      rule.Logic,
-			Action:     rule.Action,
-			ActionData: rule.ActionData,
-			Enabled:    rule.Enabled,
-		})
+				Logic:      rule.Logic,
+				Action:     rule.Action,
+				ActionData: rule.ActionData,
+				Enabled:    rule.Enabled,
+			})
 		}
 	} else {
 		policies = make([]PolicyResponse, 0)

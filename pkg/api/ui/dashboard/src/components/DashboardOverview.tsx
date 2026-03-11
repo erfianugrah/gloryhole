@@ -154,7 +154,7 @@ export function DashboardOverview() {
       </div>
 
       {error && (
-        <div className="rounded-lg border border-gh-pink/30 bg-gh-pink/10 px-4 py-3 text-sm text-gh-pink">
+        <div className="rounded-lg border border-gh-red/30 bg-gh-red/10 px-4 py-3 text-sm text-gh-red">
           {error}
         </div>
       )}
@@ -166,14 +166,14 @@ export function DashboardOverview() {
             icon={<Activity className="h-4 w-4" />}
             label="Total Queries"
             value={formatNumber(stats.total_queries)}
-            color="text-gh-green"
+            color="text-gh-purple"
           />
           <StatCard
             icon={<ShieldBan className="h-4 w-4" />}
             label="Blocked"
             value={formatNumber(stats.blocked_queries)}
             sub={formatPercent(stats.block_rate)}
-            color="text-gh-pink"
+            color="text-gh-red"
           />
           <StatCard
             icon={<Database className="h-4 w-4" />}
@@ -205,7 +205,7 @@ export function DashboardOverview() {
             label="Memory"
             value={formatBytes(stats.memory_usage_bytes)}
             sub={`${formatPercent(stats.memory_usage_percent)} of ${formatBytes(stats.memory_total_bytes)}`}
-            color="text-gh-orange"
+            color="text-gh-peach"
           />
           {stats.temperature_available && (
             <StatCard
@@ -214,7 +214,7 @@ export function DashboardOverview() {
               value={`${stats.temperature_celsius.toFixed(1)}°C`}
               color={
                 stats.temperature_celsius > 70
-                  ? "text-gh-pink"
+                  ? "text-gh-red"
                   : stats.temperature_celsius > 50
                     ? "text-gh-yellow"
                     : "text-gh-green"
@@ -234,16 +234,16 @@ export function DashboardOverview() {
             <div className="h-[260px]">
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={timeseries}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#2a2f52" />
+                  <CartesianGrid strokeDasharray="3 3" stroke="#414457" />
                   <XAxis
                     dataKey="timestamp"
                     tickFormatter={formatTimeShort}
-                    tick={{ fontSize: T.chartAxisTick, fill: "#8888aa" }}
-                    stroke="#2a2f52"
+                    tick={{ fontSize: T.chartAxisTick, fill: "#bdbdc1" }}
+                    stroke="#414457"
                   />
                   <YAxis
-                    tick={{ fontSize: T.chartAxisTick, fill: "#8888aa" }}
-                    stroke="#2a2f52"
+                    tick={{ fontSize: T.chartAxisTick, fill: "#bdbdc1" }}
+                    stroke="#414457"
                   />
                   <Tooltip
                     {...CHART_TOOLTIP_STYLE}
@@ -347,20 +347,20 @@ export function DashboardOverview() {
                   >
                     <CartesianGrid
                       strokeDasharray="3 3"
-                      stroke="#2a2f52"
+                      stroke="#414457"
                       horizontal={false}
                     />
                     <XAxis
                       type="number"
-                      tick={{ fontSize: T.chartAxisTick, fill: "#8888aa" }}
-                      stroke="#2a2f52"
+                      tick={{ fontSize: T.chartAxisTick, fill: "#bdbdc1" }}
+                      stroke="#414457"
                     />
                     <YAxis
                       type="category"
                       dataKey="domain"
                       width={120}
-                      tick={{ fontSize: 9, fill: "#8888aa" }}
-                      stroke="#2a2f52"
+                      tick={{ fontSize: 9, fill: "#bdbdc1" }}
+                      stroke="#414457"
                     />
                     <Tooltip {...CHART_TOOLTIP_STYLE} />
                     <Bar dataKey="query_count" fill={STATUS_COLORS.allowed} radius={[0, 4, 4, 0]} />
@@ -387,20 +387,20 @@ export function DashboardOverview() {
                   >
                     <CartesianGrid
                       strokeDasharray="3 3"
-                      stroke="#2a2f52"
+                      stroke="#414457"
                       horizontal={false}
                     />
                     <XAxis
                       type="number"
-                      tick={{ fontSize: T.chartAxisTick, fill: "#8888aa" }}
-                      stroke="#2a2f52"
+                      tick={{ fontSize: T.chartAxisTick, fill: "#bdbdc1" }}
+                      stroke="#414457"
                     />
                     <YAxis
                       type="category"
                       dataKey="domain"
                       width={120}
-                      tick={{ fontSize: 9, fill: "#8888aa" }}
-                      stroke="#2a2f52"
+                      tick={{ fontSize: 9, fill: "#bdbdc1" }}
+                      stroke="#414457"
                     />
                     <Tooltip {...CHART_TOOLTIP_STYLE} />
                     <Bar dataKey="query_count" fill={STATUS_COLORS.blocked} radius={[0, 4, 4, 0]} />

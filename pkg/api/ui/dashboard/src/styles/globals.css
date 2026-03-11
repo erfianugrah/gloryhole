@@ -11,58 +11,58 @@
 @import "@fontsource/jetbrains-mono/latin-700.css";
 
 @theme {
-  /* Surveillance Terminal palette */
-  --color-gh-950: #070b1f;
-  --color-gh-900: #0a0e27;
-  --color-gh-800: #141830;
-  --color-gh-700: #1a1f3d;
-  --color-gh-600: #2a2f52;
-  --color-gh-500: #3a3f62;
+  /* Lovelace palette — warm charcoal base, pastel-neon accents */
+  --color-gh-950: #15161e;
+  --color-gh-900: #1d1f28;
+  --color-gh-800: #282a36;
+  --color-gh-700: #343647;
+  --color-gh-600: #414457;
 
-  --color-gh-green: #00ff41;
-  --color-gh-green-dim: #00cc33;
-  --color-gh-pink: #ff006e;
-  --color-gh-pink-dim: #cc0058;
-  --color-gh-blue: #4a6cf7;
-  --color-gh-blue-dim: #3a5cd7;
-  --color-gh-cyan: #00d4ff;
+  --color-gh-purple: #c574dd;
+  --color-gh-purple-dim: #af43d1;
+  --color-gh-red: #f37e96;
+  --color-gh-red-dim: #ff4870;
+  --color-gh-blue: #8796f4;
+  --color-gh-blue-dim: #546eff;
+  --color-gh-cyan: #79e6f3;
+  --color-gh-green: #5adecd;
+  --color-gh-peach: #f1a171;
   --color-gh-yellow: #ffd866;
-  --color-gh-orange: #ff9500;
 
   /* shadcn CSS variable mapping */
-  --color-background: #0a0e27;
+  --color-background: #1d1f28;
   --color-foreground: #e0e0e0;
-  --color-card: #141830;
+  --color-card: #282a36;
   --color-card-foreground: #e0e0e0;
-  --color-popover: #141830;
+  --color-popover: #282a36;
   --color-popover-foreground: #e0e0e0;
-  --color-primary: #00ff41;
-  --color-primary-foreground: #0a0e27;
-  --color-secondary: #1a1f3d;
+  --color-primary: #c574dd;
+  --color-primary-foreground: #15161e;
+  --color-secondary: #343647;
   --color-secondary-foreground: #e0e0e0;
-  --color-muted: #1a1f3d;
-  --color-muted-foreground: #8888aa;
-  --color-accent: #1e2448;
+  --color-muted: #343647;
+  --color-muted-foreground: #bdbdc1;
+  --color-accent: #343647;
   --color-accent-foreground: #e0e0e0;
-  --color-destructive: #ff006e;
+  --color-destructive: #f37e96;
   --color-destructive-foreground: #ffffff;
-  --color-border: #2a2f52;
-  --color-input: #2a2f52;
-  --color-ring: #00ff41;
+  --color-border: #414457;
+  --color-input: #414457;
+  --color-ring: #c574dd;
 
   /* Sidebar */
-  --color-sidebar: #070b1f;
+  --color-sidebar: #15161e;
   --color-sidebar-foreground: #e0e0e0;
-  --color-sidebar-border: #1a1f3d;
-  --color-sidebar-accent: #141830;
-  --color-sidebar-accent-foreground: #00ff41;
+  --color-sidebar-border: #343647;
+  --color-sidebar-accent: #282a36;
+  --color-sidebar-accent-foreground: #c574dd;
 
   /* Chart colors */
-  --color-chart-1: #00ff41;
-  --color-chart-2: #ff006e;
-  --color-chart-3: #4a6cf7;
-  --color-chart-4: #ffd866;
-  --color-chart-5: #00d4ff;
+  --color-chart-1: #5adecd;
+  --color-chart-2: #c574dd;
+  --color-chart-3: #79e6f3;
+  --color-chart-4: #f1a171;
+  --color-chart-5: #8796f4;
 
   /* Fonts */
   --font-sans: "Space Grotesk", system-ui, sans-serif;
@@ -100,14 +100,14 @@
   }
 
   /* Glow utilities */
-  .glow-green {
-    text-shadow: 0 0 10px rgba(0, 255, 65, 0.5),
-      0 0 20px rgba(0, 255, 65, 0.3), 0 0 40px rgba(0, 255, 65, 0.1);
+  .glow-purple {
+    text-shadow: 0 0 10px rgba(197, 116, 221, 0.5),
+      0 0 20px rgba(197, 116, 221, 0.3), 0 0 40px rgba(197, 116, 221, 0.1);
   }
 
-  .glow-pink {
-    text-shadow: 0 0 10px rgba(255, 0, 110, 0.5),
-      0 0 20px rgba(255, 0, 110, 0.3), 0 0 40px rgba(255, 0, 110, 0.1);
+  .glow-green {
+    text-shadow: 0 0 10px rgba(90, 222, 205, 0.5),
+      0 0 20px rgba(90, 222, 205, 0.3), 0 0 40px rgba(90, 222, 205, 0.1);
   }
 
   /* Scrollbar styling */
@@ -126,7 +126,7 @@
   }
 
   ::-webkit-scrollbar-thumb:hover {
-    background: var(--color-gh-green);
+    background: var(--color-gh-purple);
   }
 
   /* Stat card fade-in animation */
@@ -150,7 +150,7 @@
     transition: background-color 150ms ease-out;
   }
   tr.cursor-pointer:active {
-    background-color: rgba(42, 47, 82, 0.5);
+    background-color: rgba(65, 68, 87, 0.5);
   }
 
   /* Hide native number input spinners */

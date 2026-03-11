@@ -57,8 +57,8 @@ export function ClientsPage() {
 
   function openEdit(client: ClientSummary) {
     setEditingClient(client);
-    setEditName(client.name);
-    setEditGroup(client.group);
+    setEditName(client.display_name);
+    setEditGroup(client.group_name || "");
     setEditDialog(true);
   }
 
@@ -66,7 +66,7 @@ export function ClientsPage() {
     if (!editingClient) return;
     setSaving(true);
     try {
-      await updateClient(editingClient.ip, { name: editName, group: editGroup });
+      await updateClient(editingClient.client_ip, { name: editName, group: editGroup });
       setEditDialog(false);
       await loadData();
     } catch (err) {
@@ -84,7 +84,7 @@ export function ClientsPage() {
       </div>
 
       {error && (
-        <div className="rounded-lg border border-gh-pink/30 bg-gh-pink/10 px-4 py-3 text-sm text-gh-pink">{error}</div>
+        <div className="rounded-lg border border-gh-red/30 bg-gh-red/10 px-4 py-3 text-sm text-gh-red">{error}</div>
       )}
 
       <Card>
@@ -134,18 +134,18 @@ export function ClientsPage() {
                   </TableRow>
                 ) : (
                   clients.map((c) => (
-                    <TableRow key={c.ip}>
-                      <TableCell className={T.tableCellMono}>{c.ip}</TableCell>
-                      <TableCell className={T.tableRowName}>{c.name || <span className={T.muted}>—</span>}</TableCell>
+                    <TableRow key={c.client_ip}>
+                      <TableCell className={T.tableCellMono}>{c.client_ip}</TableCell>
+                      <TableCell className={T.tableRowName}>{c.display_name || <span className={T.muted}>—</span>}</TableCell>
                       <TableCell>
-                        {c.group ? (
-                          <Badge variant="outline" className="text-[10px]">{c.group}</Badge>
+                        {c.group_name ? (
+                          <Badge variant="outline" className="text-[10px]">{c.group_name}</Badge>
                         ) : (
                           <span className={T.muted}>—</span>
                         )}
                       </TableCell>
-                      <TableCell className={T.tableCellNumeric}>{c.query_count.toLocaleString()}</TableCell>
-                      <TableCell className={cn(T.tableCellNumeric, "text-gh-pink")}>{c.blocked_count.toLocaleString()}</TableCell>
+                      <TableCell className={T.tableCellNumeric}>{c.total_queries.toLocaleString()}</TableCell>
+                      <TableCell className={cn(T.tableCellNumeric, "text-gh-red")}>{c.blocked_queries.toLocaleString()}</TableCell>
                       <TableCell className={T.tableCellMono}>
                         {c.last_seen ? new Date(c.last_seen).toLocaleString() : "—"}
                       </TableCell>
@@ -177,7 +177,7 @@ export function ClientsPage() {
       <Dialog open={editDialog} onOpenChange={setEditDialog}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Edit Client — {editingClient?.ip}</DialogTitle>
+            <DialogTitle>Edit Client — {editingClient?.client_ip}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">

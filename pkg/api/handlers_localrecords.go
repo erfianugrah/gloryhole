@@ -15,7 +15,7 @@ import (
 
 // LocalRecordResponse represents a single local DNS record in API responses
 type LocalRecordResponse struct {
-	ID         string   `json:"id"`          // Unique identifier (domain:type:index)
+	ID         string   `json:"id"` // Unique identifier (domain:type:index)
 	Domain     string   `json:"domain"`
 	Type       string   `json:"type"`
 	Target     string   `json:"target,omitempty"`
@@ -85,23 +85,6 @@ func (s *Server) handleGetLocalRecords(w http.ResponseWriter, r *http.Request) {
 		return records[i].Type < records[j].Type
 	})
 
-	// Check if request wants HTML (from HTMX or browser)
-	if r.Header.Get("HX-Request") == "true" || r.Header.Get("Accept") == "text/html" {
-		// Return HTML partial
-		data := struct {
-			Records []LocalRecordResponse
-		}{
-			Records: records,
-		}
-
-		if err := localRecordsPartialTemplate.Execute(w, data); err != nil {
-			s.logger.Error("Failed to render local records partial", "error", err)
-			http.Error(w, "Internal server error", http.StatusInternalServerError)
-		}
-		return
-	}
-
-	// Return JSON
 	s.writeJSON(w, http.StatusOK, LocalRecordsListResponse{
 		Records: records,
 		Total:   len(records),

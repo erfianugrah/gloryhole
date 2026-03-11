@@ -8,18 +8,11 @@ FROM golang:1.24-alpine AS builder
 ARG VERSION=dev
 ARG BUILD_TIME=unknown
 
-# Install build dependencies (including npm for frontend assets)
+# Install build dependencies (including npm for Astro dashboard)
 RUN apk add --no-cache git ca-certificates tzdata build-base nodejs npm
 
 # Set working directory
 WORKDIR /build
-
-# Copy package files and scripts for npm
-COPY package.json ./
-COPY scripts ./scripts
-
-# Install npm dependencies
-RUN npm install
 
 # Copy go mod files
 COPY go.mod go.sum ./
@@ -28,11 +21,8 @@ COPY go.mod go.sum ./
 RUN go mod download
 RUN go mod verify
 
-# Copy source code and scripts
+# Copy source code
 COPY . .
-
-# Build frontend assets from npm packages
-RUN npm run build:vendor
 
 # Build Astro dashboard (outputs to pkg/api/ui/static/dist/)
 RUN cd pkg/api/ui/dashboard && npm ci && npm run build

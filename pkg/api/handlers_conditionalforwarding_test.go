@@ -79,11 +79,11 @@ func TestHandleGetConditionalForwarding_Empty(t *testing.T) {
 func TestHandleGetConditionalForwarding_WithRules(t *testing.T) {
 	initialRules := []config.ForwardingRule{
 		{
-			Name:     "Corporate VPN",
-			Priority: 90,
-			Domains:  []string{"*.corp.example.com", "*.internal"},
+			Name:      "Corporate VPN",
+			Priority:  90,
+			Domains:   []string{"*.corp.example.com", "*.internal"},
 			Upstreams: []string{"10.0.0.1:53", "10.0.0.2:53"},
-			Enabled:  true,
+			Enabled:   true,
 		},
 		{
 			Name:        "Home Network",
@@ -94,11 +94,11 @@ func TestHandleGetConditionalForwarding_WithRules(t *testing.T) {
 			Enabled:     true,
 		},
 		{
-			Name:       "Low Priority",
-			Priority:   10,
-			Domains:    []string{"*.test.local"},
-			Upstreams:  []string{"8.8.8.8:53"},
-			Enabled:    false,
+			Name:      "Low Priority",
+			Priority:  10,
+			Domains:   []string{"*.test.local"},
+			Upstreams: []string{"8.8.8.8:53"},
+			Enabled:   false,
 		},
 	}
 
@@ -583,11 +583,9 @@ func TestHandleGetConditionalForwarding_HTMLResponse(t *testing.T) {
 	server := createTestServerForConditionalForwarding(t, initialRules)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/conditionalforwarding", nil)
-	req.Header.Set("HX-Request", "true")
 	w := httptest.NewRecorder()
 
 	server.handleGetConditionalForwarding(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
-	// Should return HTML when HX-Request header is present
 }

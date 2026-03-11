@@ -684,7 +684,7 @@ func TestHandleUpdateCache_InvalidPayload(t *testing.T) {
 	}
 }
 
-func TestHandleUpdateLogging_FormHTMX(t *testing.T) {
+func TestHandleUpdateLogging_FormSuccess(t *testing.T) {
 	server, configPath := newConfigTestServer(t, func(cfg *config.Config) {
 		cfg.Logging.Level = "info"
 		cfg.Logging.Format = "text"
@@ -707,7 +707,6 @@ func TestHandleUpdateLogging_FormHTMX(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodPut, "/api/config/logging", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.Header.Set("HX-Request", "true")
 
 	w := httptest.NewRecorder()
 	server.handleUpdateLogging(w, req)
@@ -716,12 +715,12 @@ func TestHandleUpdateLogging_FormHTMX(t *testing.T) {
 		t.Fatalf("expected status 200, got %d", w.Code)
 	}
 
-	if ct := w.Header().Get("Content-Type"); !strings.Contains(ct, "text/html") {
-		t.Fatalf("expected HTML content-type, got %s", ct)
+	if ct := w.Header().Get("Content-Type"); !strings.Contains(ct, "application/json") {
+		t.Fatalf("expected JSON content-type, got %s", ct)
 	}
 
 	if !strings.Contains(w.Body.String(), "Logging settings updated") {
-		t.Fatalf("expected success message in HTMX response, got %s", w.Body.String())
+		t.Fatalf("expected success message in response, got %s", w.Body.String())
 	}
 
 	reloaded, err := config.Load(configPath)
@@ -757,7 +756,6 @@ func TestHandleUpdateCache_FormSuccess(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodPut, "/api/config/cache", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.Header.Set("HX-Request", "true")
 
 	w := httptest.NewRecorder()
 	server.handleUpdateCache(w, req)
@@ -784,7 +782,7 @@ func TestHandleUpdateCache_FormSuccess(t *testing.T) {
 	}
 }
 
-func TestHandleUpdateCache_SaveErrorHTMX(t *testing.T) {
+func TestHandleUpdateCache_SaveError(t *testing.T) {
 	server, _ := newConfigTestServer(t, nil)
 	server.configPath = filepath.Join(t.TempDir(), "missing", "config.yml")
 
@@ -799,13 +797,12 @@ func TestHandleUpdateCache_SaveErrorHTMX(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodPut, "/api/config/cache", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.Header.Set("HX-Request", "true")
 
 	w := httptest.NewRecorder()
 	server.handleUpdateCache(w, req)
 
-	if w.Code != http.StatusOK {
-		t.Fatalf("expected status 200 for HTMX error, got %d", w.Code)
+	if w.Code != http.StatusInternalServerError {
+		t.Fatalf("expected status 500 for save error, got %d", w.Code)
 	}
 	if !strings.Contains(w.Body.String(), "Failed to save configuration") {
 		t.Fatalf("expected failure message, got body: %s", w.Body.String())
@@ -828,13 +825,12 @@ func TestHandleUpdateLogging_SaveError(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodPut, "/api/config/logging", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.Header.Set("HX-Request", "true")
 
 	w := httptest.NewRecorder()
 	server.handleUpdateLogging(w, req)
 
-	if w.Code != http.StatusOK {
-		t.Fatalf("expected status 200 for HTMX error, got %d", w.Code)
+	if w.Code != http.StatusInternalServerError {
+		t.Fatalf("expected status 500 for save error, got %d", w.Code)
 	}
 	if !strings.Contains(w.Body.String(), "Failed to save configuration") {
 		t.Fatalf("expected failure message, got body: %s", w.Body.String())

@@ -106,7 +106,7 @@ export function LocalRecordsPage() {
       </div>
 
       {error && (
-        <div className="rounded-lg border border-gh-pink/30 bg-gh-pink/10 px-4 py-3 text-sm text-gh-pink">{error}</div>
+        <div className="rounded-lg border border-gh-red/30 bg-gh-red/10 px-4 py-3 text-sm text-gh-red">{error}</div>
       )}
 
       <Card>
@@ -142,7 +142,7 @@ export function LocalRecordsPage() {
                   <TableCell className={T.tableCellMono}>{r.value}</TableCell>
                   <TableCell className={T.tableCellNumeric}>{r.ttl}s</TableCell>
                   <TableCell>
-                    <Button variant="ghost" size="icon-sm" onClick={() => handleDelete(r.id)} className="text-gh-pink hover:text-gh-pink">
+                    <Button variant="ghost" size="icon-sm" onClick={() => handleDelete(r.id)} className="text-gh-red hover:text-gh-red">
                       <Trash2 className="h-3.5 w-3.5" />
                     </Button>
                   </TableCell>

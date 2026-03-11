@@ -39,8 +39,8 @@ type Server struct {
 	dnsHandler       *dns.Handler       // DNS handler for DNS-over-HTTPS (DoH) queries
 	startTime        time.Time
 	version          string
-	configPath       string // Path to config file for persistence
-	allowedOrigins   []string     // Allowed CORS origins
+	configPath       string   // Path to config file for persistence
+	allowedOrigins   []string // Allowed CORS origins
 	authMu           sync.RWMutex
 	authEnabled      bool
 	authHeader       string
@@ -70,11 +70,6 @@ type Config struct {
 func New(cfg *Config) *Server {
 	if cfg.Logger == nil {
 		cfg.Logger = slog.Default()
-	}
-
-	// Initialize templates
-	if err := initTemplates(); err != nil {
-		cfg.Logger.Warn("Failed to initialize UI templates", "error", err)
 	}
 
 	s := &Server{
@@ -175,15 +170,12 @@ func New(cfg *Config) *Server {
 	mux.HandleFunc("PUT /api/config/logging", s.handleUpdateLogging)
 	mux.HandleFunc("PUT /api/config/tls", s.handleUpdateTLS)
 
-	// UI routes (add after API routes to avoid conflicts)
-	mux.HandleFunc("GET /api/ui/stats", s.handleStatsPartial)
-	mux.HandleFunc("GET /api/ui/queries", s.handleQueriesPartial)
-	mux.HandleFunc("GET /api/ui/top-domains", s.handleTopDomainsPartial)
-	mux.HandleFunc("GET /api/ui/clients", s.handleClientsPartial)
+	// UI page routes (Astro pre-rendered)
 	mux.HandleFunc("GET /queries", s.handleQueriesPage)
 	mux.HandleFunc("GET /policies", s.handlePoliciesPage)
 	mux.HandleFunc("GET /localrecords", s.handleLocalRecordsPage)
 	mux.HandleFunc("GET /conditionalforwarding", s.handleConditionalForwardingPage)
+	mux.HandleFunc("GET /forwarding", s.handleConditionalForwardingPage)
 	mux.HandleFunc("GET /settings", s.handleSettingsPage)
 	mux.HandleFunc("GET /clients", s.handleClientsPage)
 	mux.HandleFunc("GET /blocklists", s.handleBlocklistsPage)
@@ -204,11 +196,13 @@ func New(cfg *Config) *Server {
 	mux.HandleFunc("GET /api/blocklists", s.handleGetBlocklists)
 	mux.HandleFunc("GET /api/blocklists/check", s.handleCheckBlocklist)
 
-	// Static files
-	if staticFS, err := getStaticFS(); err == nil {
-		mux.Handle("/static/", http.StripPrefix("/static/", http.FileServer(staticFS)))
+	// Astro build output: serve /_astro/* assets and /favicon.svg from dist/
+	if distFS, err := getAstroDistFS(); err == nil {
+		astroFileServer := http.FileServer(http.FS(distFS))
+		mux.Handle("/_astro/", astroFileServer)
+		mux.Handle("/favicon.svg", astroFileServer)
 	} else {
-		cfg.Logger.Warn("Failed to initialize static file server", "error", err)
+		cfg.Logger.Warn("Failed to initialize Astro dist file server", "error", err)
 	}
 
 	// Apply middleware

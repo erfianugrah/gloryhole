@@ -1,30 +1,18 @@
 package api
 
 import (
-	"bytes"
 	"errors"
+	"fmt"
 	"net/http"
 
 	"glory-hole/pkg/config"
 )
 
-const (
-	settingsTemplateUpstreams = "settings-upstreams"
-	settingsTemplateCache     = "settings-cache"
-	settingsTemplateLogging   = "settings-logging"
-
-	flashKeyUpstreams = "upstreams"
-	flashKeyCache     = "cache"
-	flashKeyLogging   = "logging"
-)
-
-// SettingsPageData is the view-model for the Settings page and HTMX partials.
+// SettingsPageData is the view-model for settings configuration endpoints.
 type SettingsPageData struct {
 	Version    string
 	Config     ConfigResponse
 	ConfigPath string
-	Flash      map[string]string
-	Errors     map[string]string
 }
 
 func (s *Server) newSettingsPageData(cfg *config.Config) *SettingsPageData {
@@ -35,31 +23,7 @@ func (s *Server) newSettingsPageData(cfg *config.Config) *SettingsPageData {
 	}
 }
 
-func (s *Server) renderSettingsPartial(w http.ResponseWriter, tmpl string, data *SettingsPageData, status int) {
-	var buf bytes.Buffer
-	if err := settingsTemplate.ExecuteTemplate(&buf, tmpl, data); err != nil {
-		s.logger.Error("Failed to render settings partial", "template", tmpl, "error", err)
-		http.Error(w, "Failed to render template", http.StatusInternalServerError)
-		return
-	}
-
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.WriteHeader(status)
-	_, _ = w.Write(buf.Bytes())
-}
-
-func (s *Server) respondConfigUpdate(w http.ResponseWriter, r *http.Request, tmpl, flashKey, message string, data *SettingsPageData) {
-	if isHTMXRequest(r) && tmpl != "" {
-		if message != "" {
-			if data.Flash == nil {
-				data.Flash = make(map[string]string)
-			}
-			data.Flash[flashKey] = message
-		}
-		s.renderSettingsPartial(w, tmpl, data, http.StatusOK)
-		return
-	}
-
+func (s *Server) respondConfigUpdate(w http.ResponseWriter, _ *http.Request, _, _, message string, data *SettingsPageData) {
 	response := ConfigUpdateResponse{
 		Status:  statusOK,
 		Message: message,
@@ -68,17 +32,7 @@ func (s *Server) respondConfigUpdate(w http.ResponseWriter, r *http.Request, tmp
 	s.writeJSON(w, http.StatusOK, response)
 }
 
-func (s *Server) respondConfigValidationError(w http.ResponseWriter, r *http.Request, tmpl, errorKey, message string, cfg *config.Config, status int) {
-	if isHTMXRequest(r) && tmpl != "" {
-		data := s.newSettingsPageData(cfg)
-		if data.Errors == nil {
-			data.Errors = make(map[string]string)
-		}
-		data.Errors[errorKey] = message
-		s.renderSettingsPartial(w, tmpl, data, status)
-		return
-	}
-
+func (s *Server) respondConfigValidationError(w http.ResponseWriter, _ *http.Request, _, _, message string, _ *config.Config, status int) {
 	s.writeError(w, status, message)
 }
 
@@ -93,6 +47,28 @@ func (s *Server) mutableConfig() (*config.Config, error) {
 	return cfg, nil
 }
 
-func isHTMXRequest(r *http.Request) bool {
-	return r.Header.Get("HX-Request") == "true"
+func (s *Server) persistConfigSection(w http.ResponseWriter, r *http.Request, updated *config.Config, tmpl, errorKey string, current *config.Config) bool {
+	if s.configPath == "" {
+		s.respondConfigValidationError(
+			w, r, tmpl, errorKey,
+			"Configuration path is not set; settings are read-only in this deployment",
+			current,
+			http.StatusServiceUnavailable,
+		)
+		return false
+	}
+
+	if err := config.Save(s.configPath, updated); err != nil {
+		s.logger.Error("Failed to save configuration", "error", err)
+		s.respondConfigValidationError(
+			w, r, tmpl, errorKey,
+			fmt.Sprintf("Failed to save configuration: %v", err),
+			current,
+			http.StatusInternalServerError,
+		)
+		return false
+	}
+
+	*current = *updated
+	return true
 }

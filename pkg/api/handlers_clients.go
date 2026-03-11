@@ -18,15 +18,6 @@ const (
 	maxClientPageSize     = 500
 )
 
-type clientsPageData struct {
-	Version string
-	Clients []*storage.ClientSummary
-	Groups  []*storage.ClientGroup
-	Limit   int
-	Offset  int
-	Page    int
-}
-
 type clientUpdateRequest struct {
 	DisplayName string `json:"display_name"`
 	GroupName   string `json:"group_name"`
@@ -40,45 +31,7 @@ type clientGroupRequest struct {
 }
 
 func (s *Server) handleClientsPage(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	if s.storage == nil {
-		http.Error(w, "Storage not available", http.StatusServiceUnavailable)
-		return
-	}
-
-	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
-	defer cancel()
-
-	clients, err := s.storage.GetClientSummaries(ctx, defaultClientPageSize, 0)
-	if err != nil {
-		s.logger.Error("Failed to fetch client summaries", "error", err)
-		http.Error(w, "Failed to load clients", http.StatusInternalServerError)
-		return
-	}
-
-	groups, err := s.storage.GetClientGroups(ctx)
-	if err != nil {
-		s.logger.Error("Failed to fetch client groups", "error", err)
-		groups = []*storage.ClientGroup{}
-	}
-
-	data := clientsPageData{
-		Version: s.uiVersion(),
-		Clients: clients,
-		Groups:  groups,
-		Limit:   defaultClientPageSize,
-		Offset:  0,
-		Page:    1,
-	}
-
-	if err := clientsTemplate.ExecuteTemplate(w, "clients.html", data); err != nil {
-		s.logger.Error("Failed to render clients template", "error", err)
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-	}
+	s.serveAstroPage(w, r, "clients/index.html")
 }
 
 func (s *Server) handleGetClients(w http.ResponseWriter, r *http.Request) {

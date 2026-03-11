@@ -92,7 +92,7 @@ export function ForwardingPage() {
       </div>
 
       {error && (
-        <div className="rounded-lg border border-gh-pink/30 bg-gh-pink/10 px-4 py-3 text-sm text-gh-pink">{error}</div>
+        <div className="rounded-lg border border-gh-red/30 bg-gh-red/10 px-4 py-3 text-sm text-gh-red">{error}</div>
       )}
 
       <Card>
@@ -111,20 +111,26 @@ export function ForwardingPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Domain / Pattern</TableHead>
+                <TableHead>Name</TableHead>
+                <TableHead>Domain(s)</TableHead>
                 <TableHead>Upstream Server(s)</TableHead>
+                <TableHead className="w-[70px]">Priority</TableHead>
                 <TableHead className="w-[50px]"></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {rules.map((r) => (
                 <TableRow key={r.id}>
-                  <TableCell className={T.tableCellMono}>{r.domain}</TableCell>
+                  <TableCell className={T.tableRowName}>{r.name}</TableCell>
+                  <TableCell className={T.tableCellMono}>
+                    {(r.domains ?? []).join(", ") || "—"}
+                  </TableCell>
                   <TableCell className={T.tableCellMono}>
                     {r.upstreams.join(", ")}
                   </TableCell>
+                  <TableCell className={T.tableCellMono}>{r.priority}</TableCell>
                   <TableCell>
-                    <Button variant="ghost" size="icon-sm" onClick={() => handleDelete(r.id)} className="text-gh-pink hover:text-gh-pink">
+                    <Button variant="ghost" size="icon-sm" onClick={() => handleDelete(r.id)} className="text-gh-red hover:text-gh-red">
                       <Trash2 className="h-3.5 w-3.5" />
                     </Button>
                   </TableCell>

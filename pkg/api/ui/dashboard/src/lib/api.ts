@@ -49,10 +49,27 @@ export interface TimeseriesBucket {
   allowed: number;
 }
 
+// Raw shape from the Go API
+interface TimeseriesBucketRaw {
+  timestamp: string;
+  total_queries: number;
+  blocked_queries: number;
+  cached_queries: number;
+  avg_response_ms: number;
+}
+
 export interface QueryTypeCount {
   type: string;
   count: number;
   percentage: number;
+}
+
+// Raw shape from the Go API
+interface QueryTypeStatRaw {
+  query_type: string;
+  total: number;
+  blocked: number;
+  cached: number;
 }
 
 export interface TopDomain {
@@ -60,7 +77,15 @@ export interface TopDomain {
   query_count: number;
 }
 
+// Raw shape from the Go API
+interface TopDomainRaw {
+  domain: string;
+  queries: number;
+  blocked: boolean;
+}
+
 export interface QueryLog {
+  id: number;
   timestamp: string;
   client_ip: string;
   domain: string;
@@ -70,14 +95,17 @@ export interface QueryLog {
   response_code: number;
   upstream: string;
   response_time_ms: number;
-  upstream_time_ms: number;
+  upstream_response_ms: number;
   block_trace?: BlockTraceEntry[];
 }
 
 export interface BlockTraceEntry {
-  source: string;
-  rule: string;
-  list_name?: string;
+  stage: string;
+  action: string;
+  rule?: string;
+  source?: string;
+  detail?: string;
+  metadata?: Record<string, string>;
 }
 
 export interface Policy {
@@ -102,17 +130,29 @@ export interface LocalRecord {
 
 export interface ConditionalForwardingRule {
   id: string;
-  domain: string;
+  name: string;
+  domains?: string[];
+  client_cidrs?: string[];
+  query_types?: string[];
   upstreams: string[];
+  priority: number;
+  timeout?: string;
+  max_retries?: number;
+  failover: boolean;
+  enabled: boolean;
 }
 
 export interface ClientSummary {
-  ip: string;
-  name: string;
-  group: string;
-  query_count: number;
-  blocked_count: number;
+  client_ip: string;
+  display_name: string;
+  group_name?: string;
+  group_color?: string;
+  notes?: string;
+  total_queries: number;
+  blocked_queries: number;
+  nxdomain_queries: number;
   last_seen: string;
+  first_seen: string;
 }
 
 export interface ClientGroup {
@@ -121,20 +161,19 @@ export interface ClientGroup {
   clients: string[];
 }
 
-export interface BlocklistSource {
-  url: string;
-  name: string;
+export interface BlocklistInfo {
   enabled: boolean;
-  domain_count: number;
-  last_updated: string;
-  last_status: string;
+  auto_update: boolean;
+  update_interval: string;
+  total_domains: number;
+  exact_domains: number;
+  pattern_stats: Record<string, number>;
+  last_updated?: string;
+  sources: string[];
 }
 
-export interface BlocklistInfo {
-  sources: BlocklistSource[];
-  total_domains: number;
-  last_refresh: string;
-}
+// Alias for UI convenience
+export type BlocklistSource = string;
 
 export interface HealthResponse {
   status: string;
@@ -166,27 +205,42 @@ export function fetchStats(since = "24h"): Promise<Stats> {
   return apiFetch<Stats>(`/api/stats?since=${since}`);
 }
 
-export function fetchTimeseries(
+export async function fetchTimeseries(
   since = "24h",
   buckets = 24
 ): Promise<TimeseriesBucket[]> {
-  return apiFetch<TimeseriesBucket[]>(
+  const res = await apiFetch<{ data: TimeseriesBucketRaw[] }>(
     `/api/stats/timeseries?since=${since}&buckets=${buckets}`
   );
+  return (res.data ?? []).map((d) => ({
+    timestamp: d.timestamp,
+    total: d.total_queries,
+    blocked: d.blocked_queries,
+    cached: d.cached_queries,
+    allowed: d.total_queries - d.blocked_queries - d.cached_queries,
+  }));
 }
 
-export function fetchQueryTypes(since = "24h"): Promise<QueryTypeCount[]> {
-  return apiFetch<QueryTypeCount[]>(`/api/stats/query-types?since=${since}`);
+export async function fetchQueryTypes(since = "24h"): Promise<QueryTypeCount[]> {
+  const res = await apiFetch<{ types: QueryTypeStatRaw[] }>(`/api/stats/query-types?since=${since}`);
+  const raw = res.types ?? [];
+  const total = raw.reduce((sum, t) => sum + t.total, 0);
+  return raw.map((t) => ({
+    type: t.query_type,
+    count: t.total,
+    percentage: total > 0 ? (t.total / total) * 100 : 0,
+  }));
 }
 
-export function fetchTopDomains(
+export async function fetchTopDomains(
   limit = 10,
   blocked = false,
   since?: string
 ): Promise<TopDomain[]> {
   let url = `/api/top-domains?limit=${limit}&blocked=${blocked}`;
   if (since) url += `&since=${since}`;
-  return apiFetch<TopDomain[]>(url);
+  const res = await apiFetch<{ domains: TopDomainRaw[] }>(url);
+  return (res.domains ?? []).map((d) => ({ domain: d.domain, query_count: d.queries }));
 }
 
 // ─── Queries ─────────────────────────────────────────────────────────
@@ -201,7 +255,7 @@ export interface QueryFilter {
   since?: string;
 }
 
-export function fetchQueries(filter: QueryFilter = {}): Promise<QueryLog[]> {
+export async function fetchQueries(filter: QueryFilter = {}): Promise<QueryLog[]> {
   const params = new URLSearchParams();
   if (filter.limit) params.set("limit", String(filter.limit));
   if (filter.offset) params.set("offset", String(filter.offset));
@@ -210,13 +264,15 @@ export function fetchQueries(filter: QueryFilter = {}): Promise<QueryLog[]> {
   if (filter.client) params.set("client", filter.client);
   if (filter.domain) params.set("domain", filter.domain);
   if (filter.since) params.set("since", filter.since);
-  return apiFetch<QueryLog[]>(`/api/queries?${params}`);
+  const res = await apiFetch<{ queries: QueryLog[] }>(`/api/queries?${params}`);
+  return res.queries ?? [];
 }
 
 // ─── Policies ────────────────────────────────────────────────────────
 
-export function fetchPolicies(): Promise<Policy[]> {
-  return apiFetch<Policy[]>("/api/policies");
+export async function fetchPolicies(): Promise<Policy[]> {
+  const res = await apiFetch<{ policies: Policy[] }>("/api/policies");
+  return res.policies ?? [];
 }
 
 export function createPolicy(
@@ -255,8 +311,9 @@ export function exportPolicies(): Promise<Policy[]> {
 
 // ─── Local Records ───────────────────────────────────────────────────
 
-export function fetchLocalRecords(): Promise<LocalRecord[]> {
-  return apiFetch<LocalRecord[]>("/api/localrecords");
+export async function fetchLocalRecords(): Promise<LocalRecord[]> {
+  const res = await apiFetch<{ records: LocalRecord[] }>("/api/localrecords");
+  return res.records ?? [];
 }
 
 export function createLocalRecord(
@@ -274,8 +331,9 @@ export function deleteLocalRecord(id: string): Promise<void> {
 
 // ─── Conditional Forwarding ──────────────────────────────────────────
 
-export function fetchForwardingRules(): Promise<ConditionalForwardingRule[]> {
-  return apiFetch<ConditionalForwardingRule[]>("/api/conditionalforwarding");
+export async function fetchForwardingRules(): Promise<ConditionalForwardingRule[]> {
+  const res = await apiFetch<{ rules: ConditionalForwardingRule[] }>("/api/conditionalforwarding");
+  return res.rules ?? [];
 }
 
 export function createForwardingRule(
@@ -295,7 +353,7 @@ export function deleteForwardingRule(id: string): Promise<void> {
 
 // ─── Clients ─────────────────────────────────────────────────────────
 
-export function fetchClients(
+export async function fetchClients(
   limit = 50,
   offset = 0,
   search?: string
@@ -305,7 +363,8 @@ export function fetchClients(
     offset: String(offset),
   });
   if (search) params.set("search", search);
-  return apiFetch<ClientSummary[]>(`/api/clients?${params}`);
+  const res = await apiFetch<{ clients: ClientSummary[] }>(`/api/clients?${params}`);
+  return res.clients ?? [];
 }
 
 export function updateClient(
@@ -318,8 +377,9 @@ export function updateClient(
   });
 }
 
-export function fetchClientGroups(): Promise<ClientGroup[]> {
-  return apiFetch<ClientGroup[]>("/api/client-groups");
+export async function fetchClientGroups(): Promise<ClientGroup[]> {
+  const res = await apiFetch<{ groups: ClientGroup[] }>("/api/client-groups");
+  return res.groups ?? [];
 }
 
 export function createClientGroup(group: ClientGroup): Promise<ClientGroup> {

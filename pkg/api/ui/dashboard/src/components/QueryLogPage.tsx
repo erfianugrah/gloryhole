@@ -30,13 +30,13 @@ import { fetchQueries } from "@/lib/api";
 
 function statusBadge(q: QueryLog) {
   if (q.blocked) {
-    return <Badge className="bg-gh-pink/20 text-gh-pink border-gh-pink/30">Blocked</Badge>;
+    return <Badge className="bg-gh-red/20 text-gh-red border-gh-red/30">Blocked</Badge>;
   }
   if (q.cached) {
     return <Badge className="bg-gh-blue/20 text-gh-blue border-gh-blue/30">Cached</Badge>;
   }
   if (q.response_code === 3) {
-    return <Badge className="bg-gh-orange/20 text-gh-orange border-gh-orange/30">NXDOMAIN</Badge>;
+    return <Badge className="bg-gh-peach/20 text-gh-peach border-gh-peach/30">NXDOMAIN</Badge>;
   }
   return <Badge className="bg-gh-green/20 text-gh-green border-gh-green/30">Allowed</Badge>;
 }
@@ -132,7 +132,7 @@ export function QueryLogPage() {
       </div>
 
       {error && (
-        <div className="rounded-lg border border-gh-pink/30 bg-gh-pink/10 px-4 py-3 text-sm text-gh-pink">
+        <div className="rounded-lg border border-gh-red/30 bg-gh-red/10 px-4 py-3 text-sm text-gh-red">
           {error}
         </div>
       )}
@@ -307,8 +307,8 @@ function QueryDetail({ query }: { query: QueryLog }) {
       <div className="space-y-2">
         <DetailRow label="Upstream" value={query.upstream || "N/A"} mono />
         <DetailRow label="Response Time" value={`${query.response_time_ms.toFixed(2)}ms`} />
-        <DetailRow label="Upstream Time" value={`${query.upstream_time_ms.toFixed(2)}ms`} />
-        {query.blocked && <DetailRow label="Status" value="Blocked" className="text-gh-pink" />}
+        <DetailRow label="Upstream Time" value={`${query.upstream_response_ms.toFixed(2)}ms`} />
+        {query.blocked && <DetailRow label="Status" value="Blocked" className="text-gh-red" />}
         {query.cached && <DetailRow label="Status" value="Cached" className="text-gh-blue" />}
       </div>
 
@@ -323,12 +323,18 @@ function QueryDetail({ query }: { query: QueryLog }) {
                 className="flex items-center gap-2 rounded-md bg-gh-800 px-3 py-1.5 font-data text-xs"
               >
                 <Badge variant="outline" className="text-[10px]">
-                  {entry.source}
+                  {entry.stage}
                 </Badge>
-                <span className="text-muted-foreground">{entry.rule}</span>
-                {entry.list_name && (
-                  <span className="text-gh-pink">[{entry.list_name}]</span>
-                )}
+                <Badge className={
+                  entry.action === "block" || entry.action === "BLOCK"
+                    ? "bg-gh-red/20 text-gh-red border-gh-red/30 text-[10px]"
+                    : "bg-gh-green/20 text-gh-green border-gh-green/30 text-[10px]"
+                }>
+                  {entry.action}
+                </Badge>
+                {entry.rule && <span className="text-muted-foreground">{entry.rule}</span>}
+                {entry.source && <span className="text-gh-red">[{entry.source}]</span>}
+                {entry.detail && <span className="text-muted-foreground/60">{entry.detail}</span>}
               </div>
             ))}
           </div>

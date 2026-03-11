@@ -115,7 +115,7 @@ export function SettingsPage() {
       </div>
 
       {error && (
-        <div className="rounded-lg border border-gh-pink/30 bg-gh-pink/10 px-4 py-3 text-sm text-gh-pink">{error}</div>
+        <div className="rounded-lg border border-gh-red/30 bg-gh-red/10 px-4 py-3 text-sm text-gh-red">{error}</div>
       )}
       {success && (
         <div className="rounded-lg border border-gh-green/30 bg-gh-green/10 px-4 py-3 text-sm text-gh-green">{success}</div>
@@ -180,9 +180,9 @@ export function SettingsPage() {
 
         {/* Danger Zone */}
         <TabsContent value="danger">
-          <Card className="border-gh-pink/30">
+          <Card className="border-gh-red/30">
             <CardHeader>
-              <CardTitle className={cn(T.cardTitle, "text-gh-pink")}>
+              <CardTitle className={cn(T.cardTitle, "text-gh-red")}>
                 <AlertTriangle className="h-4 w-4 inline mr-1" />
                 Danger Zone
               </CardTitle>
