@@ -111,7 +111,7 @@ func TestAuthMiddleware_BypassPaths(t *testing.T) {
 	s := &Server{logger: testLogger()}
 	s.applyAuthConfig(cfg.Auth)
 
-	for _, path := range []string{"/health", "/ready", "/api/health"} {
+	for _, path := range []string{"/health", "/ready", "/api/health", "/dns-query"} {
 		req := httptest.NewRequest(http.MethodGet, path, nil)
 		res := httptest.NewRecorder()
 		called := false

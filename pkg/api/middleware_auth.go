@@ -15,6 +15,7 @@ var authBypassPaths = map[string]struct{}{
 	"/api/health": {},
 	"/login":      {},
 	"/logout":     {},
+	"/dns-query":  {},
 }
 
 func (s *Server) authMiddleware(next http.Handler) http.Handler {
