@@ -104,9 +104,11 @@ type blockPageData struct {
 	Domain string
 }
 
-// blockPageMiddleware intercepts requests to unrecognized hosts and serves
-// the block page instead. This catches browsers visiting blocked domains
-// that resolve to the glory-hole server's IP.
+// blockPageMiddleware intercepts requests for domains that are actually
+// on the blocklist and serves a styled block page instead of passing
+// through to the dashboard. Only triggers when the Host header matches
+// a blocked domain — legitimate dashboard traffic (via IP, localhost,
+// or non-blocked domains like Cloudflare tunnels) passes through.
 func (s *Server) blockPageMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Check dynamically so hot-reload works
@@ -121,30 +123,20 @@ func (s *Server) blockPageMiddleware(next http.Handler) http.Handler {
 			host = host[:idx]
 		}
 
-		// Allow requests to the server's own addresses (dashboard)
-		// localhost, 127.0.0.1, and the configured listen address pass through
-		if host == "" || host == "localhost" || host == "127.0.0.1" || host == "::1" {
+		// Pass through if host is empty, an IP, or a well-known local address
+		if host == "" || host == "localhost" || host == "127.0.0.1" || host == "::1" || net.ParseIP(host) != nil {
 			next.ServeHTTP(w, r)
 			return
 		}
 
-		// Allow API requests (they use the correct host or IP)
-		if strings.HasPrefix(r.URL.Path, "/api/") ||
-			strings.HasPrefix(r.URL.Path, "/_astro/") ||
-			r.URL.Path == "/dns-query" ||
-			r.URL.Path == "/health" ||
-			r.URL.Path == "/ready" {
+		// Only serve block page if the domain is actually on the blocklist.
+		// This prevents false positives for legitimate traffic (e.g., Cloudflare
+		// tunnel domains, reverse proxy hosts).
+		if s.blocklistManager == nil || !s.blocklistManager.Match(host+".").Blocked {
 			next.ServeHTTP(w, r)
 			return
 		}
 
-		// Check if it looks like a blocked domain (not an IP address)
-		if net.ParseIP(host) != nil {
-			next.ServeHTTP(w, r)
-			return
-		}
-
-		// Host is a domain name that resolved to us -- it's likely blocked
 		s.handleBlockPage(w, r)
 	})
 }
