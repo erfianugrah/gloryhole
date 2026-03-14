@@ -316,7 +316,7 @@ func (s *Supervisor) checkPort() error {
 	if err != nil {
 		return nil // Port is free
 	}
-	conn.Close()
+	_ = conn.Close()
 	return fmt.Errorf("port %s already in use by another process", s.listenAddr)
 }
 
