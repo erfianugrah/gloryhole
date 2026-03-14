@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
-import { Search, X, Pencil } from "lucide-react";
-import { Card, CardContent } from "@/components/ui/card";
+import { Search, X, Pencil, Plus, Trash2, Users } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -24,8 +24,14 @@ import {
 import { cn } from "@/lib/utils";
 import { T } from "@/lib/typography";
 import { TablePagination } from "./TablePagination";
-import type { ClientSummary } from "@/lib/api";
-import { fetchClients, updateClient } from "@/lib/api";
+import type { ClientSummary, ClientGroup } from "@/lib/api";
+import {
+  fetchClients,
+  updateClient,
+  fetchClientGroups,
+  createClientGroup,
+  deleteClientGroup,
+} from "@/lib/api";
 
 export function ClientsPage() {
   const [clients, setClients] = useState<ClientSummary[]>([]);
@@ -40,10 +46,19 @@ export function ClientsPage() {
   const [editGroup, setEditGroup] = useState("");
   const [saving, setSaving] = useState(false);
 
+  // Group management state
+  const [groups, setGroups] = useState<ClientGroup[]>([]);
+  const [newGroupName, setNewGroupName] = useState("");
+  const [newGroupDesc, setNewGroupDesc] = useState("");
+
   const loadData = useCallback(async () => {
     try {
-      const data = await fetchClients(pageSize, (page - 1) * pageSize, search || undefined);
+      const [data, grps] = await Promise.all([
+        fetchClients(pageSize, (page - 1) * pageSize, search || undefined),
+        fetchClientGroups(),
+      ]);
       setClients(data);
+      setGroups(grps);
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load clients");
@@ -51,6 +66,27 @@ export function ClientsPage() {
       setLoading(false);
     }
   }, [page, pageSize, search]);
+
+  async function handleCreateGroup() {
+    if (!newGroupName.trim()) return;
+    try {
+      await createClientGroup({ name: newGroupName.trim(), description: newGroupDesc.trim() });
+      setNewGroupName("");
+      setNewGroupDesc("");
+      await loadData();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to create group");
+    }
+  }
+
+  async function handleDeleteGroup(name: string) {
+    try {
+      await deleteClientGroup(name);
+      await loadData();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete group");
+    }
+  }
 
   useEffect(() => { loadData(); }, [loadData]);
   useEffect(() => { setPage(1); }, [search]);
@@ -155,7 +191,7 @@ export function ClientsPage() {
                         {c.last_seen ? new Date(c.last_seen).toLocaleString() : "—"}
                       </TableCell>
                       <TableCell>
-                        <Button variant="ghost" size="icon-sm" onClick={() => openEdit(c)}>
+                        <Button variant="ghost" size="icon-sm" onClick={() => openEdit(c)} aria-label={`Edit client ${c.client_ip}`}>
                           <Pencil className="h-3.5 w-3.5" />
                         </Button>
                       </TableCell>
@@ -177,6 +213,67 @@ export function ClientsPage() {
             />
           </>
         )}
+      </Card>
+
+      {/* Client Groups */}
+      <Card>
+        <CardHeader>
+          <CardTitle className={T.cardTitle}>
+            <Users className="h-4 w-4 inline mr-1.5" />
+            Client Groups
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {groups.length > 0 ? (
+            <div className="flex flex-wrap gap-2">
+              {groups.map((g) => (
+                <div
+                  key={g.name}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-border bg-muted/50 px-3 py-1.5"
+                >
+                  <span className="text-sm font-medium">{g.name}</span>
+                  {g.description && (
+                    <span className={cn(T.mutedSm, "text-[10px]")}>({g.description})</span>
+                  )}
+                  <button
+                    onClick={() => handleDeleteGroup(g.name)}
+                    className="ml-1 text-muted-foreground hover:text-destructive"
+                    aria-label={`Delete group ${g.name}`}
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className={T.mutedSm}>No groups created yet.</p>
+          )}
+
+          <div className="flex items-end gap-2">
+            <div className="space-y-1 flex-1">
+              <Label className={T.formLabel}>Group name</Label>
+              <Input
+                value={newGroupName}
+                onChange={(e) => setNewGroupName(e.target.value)}
+                placeholder="e.g. kids, iot, work"
+                onKeyDown={(e) => e.key === "Enter" && handleCreateGroup()}
+              />
+            </div>
+            <div className="space-y-1 flex-1">
+              <Label className={T.formLabel}>Description (optional)</Label>
+              <Input
+                value={newGroupDesc}
+                onChange={(e) => setNewGroupDesc(e.target.value)}
+                placeholder="e.g. Children's devices"
+                onKeyDown={(e) => e.key === "Enter" && handleCreateGroup()}
+              />
+            </div>
+            <Button size="sm" onClick={handleCreateGroup} disabled={!newGroupName.trim()}>
+              <Plus className="h-3.5 w-3.5 mr-1" />
+              Add
+            </Button>
+          </div>
+        </CardContent>
       </Card>
 
       <Dialog open={editDialog} onOpenChange={setEditDialog}>

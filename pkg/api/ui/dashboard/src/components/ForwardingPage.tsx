@@ -130,7 +130,7 @@ export function ForwardingPage() {
                   </TableCell>
                   <TableCell className={T.tableCellMono}>{r.priority}</TableCell>
                   <TableCell>
-                    <Button variant="ghost" size="icon-sm" onClick={() => handleDelete(r.id)} className="text-gh-red hover:text-gh-red">
+                    <Button variant="ghost" size="icon-sm" onClick={() => handleDelete(r.id)} className="text-gh-red hover:text-gh-red" aria-label={`Delete rule ${r.name}`}>
                       <Trash2 className="h-3.5 w-3.5" />
                     </Button>
                   </TableCell>

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
-import { Plus, Trash2, Pencil, Download, Play } from "lucide-react";
+import { useRef } from "react";
+import { Plus, Trash2, Pencil, Download, Upload, Play } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -163,6 +164,48 @@ export function PoliciesPage() {
     }
   }
 
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  async function handleImport(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text);
+      const imported: Array<{ name: string; logic: string; action: string; action_data?: string; enabled?: boolean }> =
+        Array.isArray(data) ? data : data.policies ?? [];
+
+      if (imported.length === 0) {
+        setError("No policies found in import file");
+        return;
+      }
+
+      let count = 0;
+      for (const p of imported) {
+        if (!p.name || !p.logic || !p.action) continue;
+        await createPolicy({
+          name: p.name,
+          logic: p.logic,
+          action: p.action.toUpperCase(),
+          action_data: p.action_data ?? "",
+          enabled: p.enabled ?? true,
+        });
+        count++;
+      }
+
+      await loadPolicies();
+      setError(null);
+      // Show count inline — no toast needed
+      alert(`Imported ${count} policies`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Import failed — check JSON format");
+    } finally {
+      // Reset the file input so the same file can be re-imported
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  }
+
   async function handleExport() {
     try {
       const data = await exportPolicies();
@@ -186,6 +229,18 @@ export function PoliciesPage() {
           <p className={T.pageDescription}>DNS filtering policies with expression-based rules</p>
         </div>
         <div className="flex items-center gap-2">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".json"
+            className="hidden"
+            onChange={handleImport}
+            aria-label="Import policies from JSON file"
+          />
+          <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()}>
+            <Upload className="h-3.5 w-3.5 mr-1" />
+            Import
+          </Button>
           <Button variant="outline" size="sm" onClick={handleExport}>
             <Download className="h-3.5 w-3.5 mr-1" />
             Export

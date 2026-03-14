@@ -501,6 +501,15 @@ export function updateLoggingConfig(
   });
 }
 
+export function updateTLSConfig(
+  config: Record<string, unknown>
+): Promise<void> {
+  return apiFetch<void>("/api/config/tls", {
+    method: "PUT",
+    body: JSON.stringify(config),
+  });
+}
+
 // ─── System ──────────────────────────────────────────────────────────
 
 export function fetchHealth(): Promise<HealthResponse> {

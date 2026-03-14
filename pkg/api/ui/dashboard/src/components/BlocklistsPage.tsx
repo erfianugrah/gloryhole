@@ -8,6 +8,13 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Table,
   TableBody,
   TableCell,
@@ -40,6 +47,7 @@ export function BlocklistsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [reloading, setReloading] = useState(false);
+  const [disableDuration, setDisableDuration] = useState("indefinite");
   const [checkQuery, setCheckQuery] = useState("");
   const [checkResult, setCheckResult] = useState<{ blocked: boolean; source?: string } | null>(null);
   const [checking, setChecking] = useState(false);
@@ -89,7 +97,8 @@ export function BlocklistsPage() {
   async function handleToggleBlocklist() {
     try {
       if (features?.blocklist_enabled) {
-        await disableBlocklist();
+        const dur = disableDuration === "indefinite" ? undefined : disableDuration;
+        await disableBlocklist(dur);
       } else {
         await enableBlocklist();
       }
@@ -156,10 +165,27 @@ export function BlocklistsPage() {
             <Switch
               checked={features?.blocklist_enabled ?? true}
               onCheckedChange={handleToggleBlocklist}
+              aria-label="Toggle blocklist"
             />
             <Label className="text-xs">
               {features?.blocklist_enabled ? "Enabled" : "Disabled"}
             </Label>
+            {features?.blocklist_enabled && (
+              <Select value={disableDuration} onValueChange={setDisableDuration}>
+                <SelectTrigger className="h-7 w-[130px] text-xs">
+                  <SelectValue placeholder="Duration" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="indefinite">Indefinite</SelectItem>
+                  <SelectItem value="5m">5 minutes</SelectItem>
+                  <SelectItem value="15m">15 minutes</SelectItem>
+                  <SelectItem value="30m">30 minutes</SelectItem>
+                  <SelectItem value="1h">1 hour</SelectItem>
+                  <SelectItem value="6h">6 hours</SelectItem>
+                  <SelectItem value="24h">24 hours</SelectItem>
+                </SelectContent>
+              </Select>
+            )}
           </div>
           <Button size="sm" variant="outline" onClick={handleReload} disabled={reloading}>
             <RefreshCw className={cn("h-3.5 w-3.5 mr-1", reloading && "animate-spin")} />

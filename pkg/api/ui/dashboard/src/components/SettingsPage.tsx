@@ -1,11 +1,19 @@
 import { useState, useEffect, useCallback } from "react";
-import { Save, Trash2, AlertTriangle } from "lucide-react";
+import { Save, Trash2, AlertTriangle, Shield, Key, Lock } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Dialog,
   DialogContent,
@@ -23,6 +31,7 @@ import {
   updateUpstreams,
   updateCacheConfig,
   updateLoggingConfig,
+  updateTLSConfig,
   purgeCache,
   resetStorage,
 } from "@/lib/api";
@@ -33,11 +42,46 @@ export function SettingsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  const [confirmDialog, setConfirmDialog] = useState<{ action: string; title: string; description: string; onConfirm: () => void } | null>(null);
+  const [confirmDialog, setConfirmDialog] = useState<{
+    action: string;
+    title: string;
+    description: string;
+    onConfirm: () => void;
+  } | null>(null);
 
-  // Form state
+  // DNS form state
   const [upstreams, setUpstreams] = useState("");
   const [savingUpstreams, setSavingUpstreams] = useState(false);
+
+  // Cache form state
+  const [cacheEnabled, setCacheEnabled] = useState(true);
+  const [cacheMaxEntries, setCacheMaxEntries] = useState("10000");
+  const [cacheMinTTL, setCacheMinTTL] = useState("60");
+  const [cacheMaxTTL, setCacheMaxTTL] = useState("86400");
+  const [cacheNegTTL, setCacheNegTTL] = useState("300");
+  const [cacheShards, setCacheShards] = useState("0");
+  const [savingCache, setSavingCache] = useState(false);
+
+  // Logging form state
+  const [logLevel, setLogLevel] = useState("info");
+  const [logFormat, setLogFormat] = useState("text");
+  const [logOutput, setLogOutput] = useState("stdout");
+  const [retentionDays, setRetentionDays] = useState("7");
+  const [savingLogging, setSavingLogging] = useState(false);
+
+  // TLS form state
+  const [dotEnabled, setDotEnabled] = useState(false);
+  const [dotAddress, setDotAddress] = useState(":853");
+  const [certFile, setCertFile] = useState("");
+  const [keyFile, setKeyFile] = useState("");
+  const [acmeEnabled, setAcmeEnabled] = useState(false);
+  const [acmeHosts, setAcmeHosts] = useState("");
+  const [savingTLS, setSavingTLS] = useState(false);
+
+  // Auth display state (read-only display, no editing passwords through UI)
+  const [authEnabled, setAuthEnabled] = useState(false);
+  const [authUsername, setAuthUsername] = useState("");
+  const [authHasApiKey, setAuthHasApiKey] = useState(false);
 
   const loadData = useCallback(async () => {
     try {
@@ -45,10 +89,58 @@ export function SettingsPage() {
       setConfig(cfg);
       setHealth(h);
 
-      // Populate form
+      // Populate DNS form
       const dns = cfg.dns as Record<string, unknown>;
       if (dns?.upstreams && Array.isArray(dns.upstreams)) {
         setUpstreams((dns.upstreams as string[]).join("\n"));
+      }
+
+      // Populate cache form
+      const cache = cfg.cache as Record<string, unknown>;
+      if (cache) {
+        setCacheEnabled(cache.enabled as boolean ?? true);
+        setCacheMaxEntries(String(cache.max_entries ?? "10000"));
+        setCacheMinTTL(String(cache.min_ttl_seconds ?? "60"));
+        setCacheMaxTTL(String(cache.max_ttl_seconds ?? "86400"));
+        setCacheNegTTL(String(cache.negative_ttl_seconds ?? "300"));
+        setCacheShards(String(cache.shard_count ?? "0"));
+      }
+
+      // Populate logging form
+      const logging = cfg.logging as Record<string, unknown>;
+      if (logging) {
+        setLogLevel(String(logging.level ?? "info"));
+        setLogFormat(String(logging.format ?? "text"));
+        setLogOutput(String(logging.output ?? "stdout"));
+      }
+      // Retention from database config
+      const server = cfg.server as Record<string, unknown>;
+      if (server?.retention_days) {
+        setRetentionDays(String(server.retention_days));
+      }
+
+      // Populate TLS form
+      const tls = cfg.tls as Record<string, unknown>;
+      if (tls) {
+        setDotEnabled(tls.dot_enabled as boolean ?? false);
+        setDotAddress(String(tls.dot_address ?? ":853"));
+        setCertFile(String(tls.cert_file ?? ""));
+        setKeyFile(String(tls.key_file ?? ""));
+        const acme = tls.acme as Record<string, unknown>;
+        if (acme) {
+          setAcmeEnabled(acme.enabled as boolean ?? false);
+          if (Array.isArray(acme.hosts)) {
+            setAcmeHosts((acme.hosts as string[]).join(", "));
+          }
+        }
+      }
+
+      // Populate auth display
+      const auth = cfg.auth as Record<string, unknown>;
+      if (auth) {
+        setAuthEnabled(auth.enabled as boolean ?? false);
+        setAuthUsername(String(auth.username ?? ""));
+        setAuthHasApiKey(!!auth.has_api_key);
       }
 
       setError(null);
@@ -59,7 +151,9 @@ export function SettingsPage() {
     }
   }, []);
 
-  useEffect(() => { loadData(); }, [loadData]);
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   function showSuccess(msg: string) {
     setSuccess(msg);
@@ -69,7 +163,10 @@ export function SettingsPage() {
   async function handleSaveUpstreams() {
     setSavingUpstreams(true);
     try {
-      const list = upstreams.split("\n").map((s) => s.trim()).filter(Boolean);
+      const list = upstreams
+        .split("\n")
+        .map((s) => s.trim())
+        .filter(Boolean);
       await updateUpstreams(list);
       showSuccess("Upstream servers updated");
       await loadData();
@@ -77,6 +174,68 @@ export function SettingsPage() {
       setError(err instanceof Error ? err.message : "Failed to save upstreams");
     } finally {
       setSavingUpstreams(false);
+    }
+  }
+
+  async function handleSaveCache() {
+    setSavingCache(true);
+    try {
+      await updateCacheConfig({
+        enabled: cacheEnabled,
+        max_entries: parseInt(cacheMaxEntries, 10),
+        min_ttl_seconds: parseInt(cacheMinTTL, 10),
+        max_ttl_seconds: parseInt(cacheMaxTTL, 10),
+        negative_ttl_seconds: parseInt(cacheNegTTL, 10),
+        shard_count: parseInt(cacheShards, 10),
+      });
+      showSuccess("Cache settings updated");
+      await loadData();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save cache settings");
+    } finally {
+      setSavingCache(false);
+    }
+  }
+
+  async function handleSaveLogging() {
+    setSavingLogging(true);
+    try {
+      await updateLoggingConfig({
+        level: logLevel,
+        format: logFormat,
+        output: logOutput,
+      });
+      showSuccess("Logging settings updated");
+      await loadData();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save logging settings");
+    } finally {
+      setSavingLogging(false);
+    }
+  }
+
+  async function handleSaveTLS() {
+    setSavingTLS(true);
+    try {
+      await updateTLSConfig({
+        dot_enabled: dotEnabled,
+        dot_address: dotAddress,
+        cert_file: certFile,
+        key_file: keyFile,
+        acme: {
+          enabled: acmeEnabled,
+          hosts: acmeHosts
+            .split(",")
+            .map((s) => s.trim())
+            .filter(Boolean),
+        },
+      });
+      showSuccess("TLS settings updated (restart required for bind address changes)");
+      await loadData();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save TLS settings");
+    } finally {
+      setSavingTLS(false);
     }
   }
 
@@ -111,20 +270,29 @@ export function SettingsPage() {
     <div className="space-y-6">
       <div>
         <h2 className={T.pageTitle}>Settings</h2>
-        <p className={T.pageDescription}>Server configuration and management</p>
+        <p className={T.pageDescription}>
+          Server configuration and management
+        </p>
       </div>
 
       {error && (
-        <div className="rounded-lg border border-gh-red/30 bg-gh-red/10 px-4 py-3 text-sm text-gh-red">{error}</div>
+        <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+          {error}
+        </div>
       )}
       {success && (
-        <div className="rounded-lg border border-gh-green/30 bg-gh-green/10 px-4 py-3 text-sm text-gh-green">{success}</div>
+        <div className="rounded-lg border border-gh-green/30 bg-gh-green/10 px-4 py-3 text-sm text-gh-green">
+          {success}
+        </div>
       )}
 
       <Tabs defaultValue="dns">
-        <TabsList>
+        <TabsList className="flex-wrap">
           <TabsTrigger value="dns">DNS</TabsTrigger>
           <TabsTrigger value="cache">Cache</TabsTrigger>
+          <TabsTrigger value="logging">Logging</TabsTrigger>
+          <TabsTrigger value="tls">TLS</TabsTrigger>
+          <TabsTrigger value="auth">Authentication</TabsTrigger>
           <TabsTrigger value="danger">Danger Zone</TabsTrigger>
           <TabsTrigger value="about">About</TabsTrigger>
         </TabsList>
@@ -143,10 +311,14 @@ export function SettingsPage() {
                   onChange={(e) => setUpstreams(e.target.value)}
                   rows={5}
                   className="flex w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm font-data shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                  placeholder={"1.1.1.1\n8.8.8.8\n9.9.9.9"}
+                  placeholder={"1.1.1.1:53\n8.8.8.8:53\n9.9.9.9:53"}
                 />
               </div>
-              <Button size="sm" onClick={handleSaveUpstreams} disabled={savingUpstreams}>
+              <Button
+                size="sm"
+                onClick={handleSaveUpstreams}
+                disabled={savingUpstreams}
+              >
                 <Save className="h-3.5 w-3.5 mr-1" />
                 {savingUpstreams ? "Saving..." : "Save"}
               </Button>
@@ -156,49 +328,344 @@ export function SettingsPage() {
 
         {/* Cache */}
         <TabsContent value="cache">
+          <div className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle className={T.cardTitle}>Cache Settings</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-center gap-3">
+                  <Switch
+                    checked={cacheEnabled}
+                    onCheckedChange={setCacheEnabled}
+                    aria-label="Enable DNS cache"
+                  />
+                  <Label className={T.formLabel}>Cache enabled</Label>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <Label className={T.formLabel}>Max entries</Label>
+                    <Input
+                      type="number"
+                      value={cacheMaxEntries}
+                      onChange={(e) => setCacheMaxEntries(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className={T.formLabel}>Shard count</Label>
+                    <Input
+                      type="number"
+                      value={cacheShards}
+                      onChange={(e) => setCacheShards(e.target.value)}
+                      placeholder="0 = non-sharded"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className={T.formLabel}>Min TTL (seconds)</Label>
+                    <Input
+                      type="number"
+                      value={cacheMinTTL}
+                      onChange={(e) => setCacheMinTTL(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className={T.formLabel}>Max TTL (seconds)</Label>
+                    <Input
+                      type="number"
+                      value={cacheMaxTTL}
+                      onChange={(e) => setCacheMaxTTL(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className={T.formLabel}>Negative TTL (seconds)</Label>
+                    <Input
+                      type="number"
+                      value={cacheNegTTL}
+                      onChange={(e) => setCacheNegTTL(e.target.value)}
+                    />
+                  </div>
+                </div>
+                <Button
+                  size="sm"
+                  onClick={handleSaveCache}
+                  disabled={savingCache}
+                >
+                  <Save className="h-3.5 w-3.5 mr-1" />
+                  {savingCache ? "Saving..." : "Save"}
+                </Button>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className={T.cardTitle}>Cache Actions</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <p className={T.mutedSm}>
+                  Purge the DNS cache to clear all cached responses.
+                </p>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() =>
+                    setConfirmDialog({
+                      action: "purge",
+                      title: "Purge DNS Cache",
+                      description:
+                        "This will clear all cached DNS responses. Queries will need to be resolved from upstream until the cache is rebuilt.",
+                      onConfirm: handlePurgeCache,
+                    })
+                  }
+                >
+                  Purge Cache
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+
+        {/* Logging */}
+        <TabsContent value="logging">
           <Card>
             <CardHeader>
-              <CardTitle className={T.cardTitle}>DNS Cache</CardTitle>
+              <CardTitle className={T.cardTitle}>Logging</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <p className={T.mutedSm}>Purge the DNS cache to clear all cached responses.</p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <Label className={T.formLabel}>Log Level</Label>
+                  <Select value={logLevel} onValueChange={setLogLevel}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="debug">Debug</SelectItem>
+                      <SelectItem value="info">Info</SelectItem>
+                      <SelectItem value="warn">Warning</SelectItem>
+                      <SelectItem value="error">Error</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label className={T.formLabel}>Format</Label>
+                  <Select value={logFormat} onValueChange={setLogFormat}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="text">Text</SelectItem>
+                      <SelectItem value="json">JSON</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label className={T.formLabel}>Output</Label>
+                  <Select value={logOutput} onValueChange={setLogOutput}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="stdout">stdout</SelectItem>
+                      <SelectItem value="stderr">stderr</SelectItem>
+                      <SelectItem value="file">File</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
               <Button
                 size="sm"
-                variant="outline"
-                onClick={() => setConfirmDialog({
-                  action: "purge",
-                  title: "Purge DNS Cache",
-                  description: "This will clear all cached DNS responses. Queries will need to be resolved from upstream until the cache is rebuilt.",
-                  onConfirm: handlePurgeCache,
-                })}
+                onClick={handleSaveLogging}
+                disabled={savingLogging}
               >
-                Purge Cache
+                <Save className="h-3.5 w-3.5 mr-1" />
+                {savingLogging ? "Saving..." : "Save"}
               </Button>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* TLS */}
+        <TabsContent value="tls">
+          <Card>
+            <CardHeader>
+              <CardTitle className={T.cardTitle}>
+                <Lock className="h-4 w-4 inline mr-1.5" />
+                DNS-over-TLS (DoT)
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center gap-3">
+                <Switch
+                  checked={dotEnabled}
+                  onCheckedChange={setDotEnabled}
+                  aria-label="Enable DNS-over-TLS"
+                />
+                <Label className={T.formLabel}>DoT enabled</Label>
+              </div>
+
+              {dotEnabled && (
+                <div className="space-y-4 border-l-2 border-border pl-4 ml-1">
+                  <div className="space-y-1">
+                    <Label className={T.formLabel}>Listen Address</Label>
+                    <Input
+                      value={dotAddress}
+                      onChange={(e) => setDotAddress(e.target.value)}
+                      placeholder=":853"
+                    />
+                    <p className={T.mutedSm}>
+                      Requires server restart to take effect.
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                      <Label className={T.formLabel}>Certificate File</Label>
+                      <Input
+                        value={certFile}
+                        onChange={(e) => setCertFile(e.target.value)}
+                        placeholder="/path/to/cert.pem"
+                        className="font-data"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className={T.formLabel}>Key File</Label>
+                      <Input
+                        value={keyFile}
+                        onChange={(e) => setKeyFile(e.target.value)}
+                        placeholder="/path/to/key.pem"
+                        className="font-data"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="border-t border-border pt-4 space-y-3">
+                    <div className="flex items-center gap-3">
+                      <Switch
+                        checked={acmeEnabled}
+                        onCheckedChange={setAcmeEnabled}
+                        aria-label="Enable ACME DNS-01"
+                      />
+                      <Label className={T.formLabel}>
+                        ACME DNS-01 (automatic certificates)
+                      </Label>
+                    </div>
+
+                    {acmeEnabled && (
+                      <div className="space-y-1">
+                        <Label className={T.formLabel}>
+                          Hostnames (comma-separated)
+                        </Label>
+                        <Input
+                          value={acmeHosts}
+                          onChange={(e) => setAcmeHosts(e.target.value)}
+                          placeholder="dot.example.com"
+                        />
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              <Button
+                size="sm"
+                onClick={handleSaveTLS}
+                disabled={savingTLS}
+              >
+                <Save className="h-3.5 w-3.5 mr-1" />
+                {savingTLS ? "Saving..." : "Save"}
+              </Button>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Authentication */}
+        <TabsContent value="auth">
+          <Card>
+            <CardHeader>
+              <CardTitle className={T.cardTitle}>
+                <Shield className="h-4 w-4 inline mr-1.5" />
+                Authentication
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-3">
+                <DetailRow
+                  label="Status"
+                  value={authEnabled ? "Enabled" : "Disabled"}
+                />
+                {authEnabled && (
+                  <>
+                    <DetailRow label="Username" value={authUsername || "N/A"} />
+                    <DetailRow
+                      label="API Key"
+                      value={authHasApiKey ? "Configured" : "Not set"}
+                    />
+                    <DetailRow label="Password" value="Configured (bcrypt)" />
+                  </>
+                )}
+              </div>
+
+              <div className="rounded-lg border border-border bg-muted/50 p-4 space-y-2">
+                <div className="flex items-center gap-2 text-sm font-medium">
+                  <Key className="h-4 w-4" />
+                  Managing credentials
+                </div>
+                <p className={T.mutedSm}>
+                  For security, authentication settings are managed through{" "}
+                  <code className="text-xs font-data bg-muted px-1 py-0.5 rounded">
+                    config.yml
+                  </code>{" "}
+                  or environment variables. To change your password, run:
+                </p>
+                <pre className="text-xs font-data bg-background rounded px-3 py-2 border border-border overflow-x-auto">
+                  glory-hole hash-password &quot;your-new-password&quot;
+                </pre>
+                <p className={T.mutedSm}>
+                  Environment variables:{" "}
+                  <code className="text-xs font-data bg-muted px-1 py-0.5 rounded">
+                    GLORYHOLE_API_KEY
+                  </code>
+                  ,{" "}
+                  <code className="text-xs font-data bg-muted px-1 py-0.5 rounded">
+                    GLORYHOLE_BASIC_USER
+                  </code>
+                  ,{" "}
+                  <code className="text-xs font-data bg-muted px-1 py-0.5 rounded">
+                    GLORYHOLE_BASIC_PASS
+                  </code>
+                </p>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
 
         {/* Danger Zone */}
         <TabsContent value="danger">
-          <Card className="border-gh-red/30">
+          <Card className="border-destructive/30">
             <CardHeader>
-              <CardTitle className={cn(T.cardTitle, "text-gh-red")}>
+              <CardTitle className={cn(T.cardTitle, "text-destructive")}>
                 <AlertTriangle className="h-4 w-4 inline mr-1" />
                 Danger Zone
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
-                <p className={T.mutedSm}>Reset the query log database. This permanently deletes all query history and statistics.</p>
+                <p className={T.mutedSm}>
+                  Reset the query log database. This permanently deletes all
+                  query history and statistics.
+                </p>
                 <Button
                   size="sm"
                   variant="destructive"
-                  onClick={() => setConfirmDialog({
-                    action: "reset",
-                    title: "Reset Query Log Database",
-                    description: "This will permanently delete all query history, statistics, and client data. This action cannot be undone.",
-                    onConfirm: handleResetStorage,
-                  })}
+                  onClick={() =>
+                    setConfirmDialog({
+                      action: "reset",
+                      title: "Reset Query Log Database",
+                      description:
+                        "This will permanently delete all query history, statistics, and client data. This action cannot be undone.",
+                      onConfirm: handleResetStorage,
+                    })
+                  }
                 >
                   <Trash2 className="h-3.5 w-3.5 mr-1" />
                   Reset Database
@@ -228,7 +695,10 @@ export function SettingsPage() {
       </Tabs>
 
       {/* Confirmation Dialog */}
-      <Dialog open={!!confirmDialog} onOpenChange={(open) => !open && setConfirmDialog(null)}>
+      <Dialog
+        open={!!confirmDialog}
+        onOpenChange={(open) => !open && setConfirmDialog(null)}
+      >
         {confirmDialog && (
           <DialogContent>
             <DialogHeader>
@@ -236,7 +706,12 @@ export function SettingsPage() {
               <DialogDescription>{confirmDialog.description}</DialogDescription>
             </DialogHeader>
             <DialogFooter>
-              <Button variant="outline" onClick={() => setConfirmDialog(null)}>Cancel</Button>
+              <Button
+                variant="outline"
+                onClick={() => setConfirmDialog(null)}
+              >
+                Cancel
+              </Button>
               <Button
                 variant="destructive"
                 onClick={() => {

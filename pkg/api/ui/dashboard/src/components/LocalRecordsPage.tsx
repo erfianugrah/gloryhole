@@ -142,7 +142,7 @@ export function LocalRecordsPage() {
                   <TableCell className={T.tableCellMono}>{r.value}</TableCell>
                   <TableCell className={T.tableCellNumeric}>{r.ttl}s</TableCell>
                   <TableCell>
-                    <Button variant="ghost" size="icon-sm" onClick={() => handleDelete(r.id)} className="text-gh-red hover:text-gh-red">
+                    <Button variant="ghost" size="icon-sm" onClick={() => handleDelete(r.id)} className="text-gh-red hover:text-gh-red" aria-label={`Delete record ${r.domain}`}>
                       <Trash2 className="h-3.5 w-3.5" />
                     </Button>
                   </TableCell>
