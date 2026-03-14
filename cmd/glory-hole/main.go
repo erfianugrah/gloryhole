@@ -224,26 +224,16 @@ func main() {
 	// Set config watcher for kill-switch feature (hot-reload access)
 	handler.ConfigWatcher = cfgWatcher
 
-	// Initialize blocklist manager if configured (lock-free, high performance)
+	// Initialize blocklist manager (create early so handler can reference it,
+	// but defer download until after Unbound is ready to avoid DNS resolution failures)
 	var blocklistMgr *blocklist.Manager
 	var dnsCache cache.Interface
 	if len(cfg.Blocklists) > 0 {
 		logger.Info("Initializing blocklist manager", "sources", len(cfg.Blocklists))
 		blocklistMgr = blocklist.NewManager(cfg, logger, metrics, httpClient)
 		blocklistMgr.UpdateConfig(cfg)
-
-		// Start blocklist manager (downloads lists and starts auto-update)
-		err = blocklistMgr.Start(ctx)
-		if err != nil {
-			logger.Error("Failed to start blocklist manager", "error", err)
-			// Continue anyway - server can run without blocklists
-		} else {
-			handler.SetBlocklistManager(blocklistMgr)
-			logger.Info("Blocklist manager started",
-				"domains", blocklistMgr.Size(),
-				"auto_update", cfg.AutoUpdateBlocklists,
-			)
-		}
+		handler.SetBlocklistManager(blocklistMgr)
+		// Download deferred to after Unbound startup (see below)
 	}
 
 	// Migrate whitelist entries to policies (one-time migration)
@@ -281,8 +271,8 @@ func main() {
 					for {
 						cutoff := time.Now().AddDate(0, 0, -retentionDays)
 						cleanupCtx, cleanupCancel := context.WithTimeout(ctx, 5*time.Minute)
-						if err := stor.Cleanup(cleanupCtx, cutoff); err != nil {
-							logger.Error("Retention cleanup failed", "error", err, "retention_days", retentionDays)
+						if cleanupErr := stor.Cleanup(cleanupCtx, cutoff); cleanupErr != nil {
+							logger.Error("Retention cleanup failed", "error", cleanupErr, "retention_days", retentionDays)
 						} else {
 							logger.Debug("Retention cleanup completed", "cutoff", cutoff.Format(time.RFC3339))
 						}
@@ -317,8 +307,8 @@ func main() {
 				defer func() {
 					if queryLogger != nil {
 						logger.Info("Shutting down query logger")
-						if err := queryLogger.Close(); err != nil {
-							logger.Error("Failed to close query logger", "error", err)
+						if closeErr := queryLogger.Close(); closeErr != nil {
+							logger.Error("Failed to close query logger", "error", closeErr)
 						}
 					}
 				}()
@@ -511,11 +501,11 @@ func main() {
 			record.Wildcard = entry.Wildcard
 
 			// Add record to manager
-			if err := localMgr.AddRecord(record); err != nil {
+			if addErr := localMgr.AddRecord(record); addErr != nil {
 				logger.Error("Failed to add local record",
 					"domain", entry.Domain,
 					"type", entry.Type,
-					"error", err,
+					"error", addErr,
 				)
 				continue
 			}
@@ -546,10 +536,10 @@ func main() {
 			Enabled:    entry.Enabled,
 		}
 
-		if err := policyEngine.AddRule(rule); err != nil {
+		if addErr := policyEngine.AddRule(rule); addErr != nil {
 			logger.Error("Failed to add policy rule",
 				"name", entry.Name,
-				"error", err,
+				"error", addErr,
 			)
 			continue
 		}
@@ -569,10 +559,10 @@ func main() {
 
 	// Initialize conditional forwarding rule evaluator
 	if cfg.ConditionalForwarding.Enabled {
-		ruleEvaluator, err := forwarder.NewRuleEvaluator(&cfg.ConditionalForwarding)
-		if err != nil {
+		ruleEvaluator, evalErr := forwarder.NewRuleEvaluator(&cfg.ConditionalForwarding)
+		if evalErr != nil {
 			logger.Error("Failed to initialize conditional forwarding",
-				"error", err,
+				"error", evalErr,
 			)
 		} else {
 			handler.RuleEvaluator = ruleEvaluator
@@ -603,9 +593,9 @@ func main() {
 
 		unboundSupervisor = unbound.NewSupervisor(&cfg.Unbound, logger)
 
-		if err := unboundSupervisor.Start(ctx); err != nil {
+		if startErr := unboundSupervisor.Start(ctx); startErr != nil {
 			logger.Error("Unbound failed to start, falling back to direct forwarding",
-				"error", err,
+				"error", startErr,
 			)
 			unboundSupervisor = nil
 			// Fall through — Glory-Hole continues with configured upstream_dns_servers
@@ -624,6 +614,21 @@ func main() {
 
 			logger.Info("Unbound active, forwarding to local resolver",
 				"addr", unboundAddr,
+			)
+		}
+	}
+
+	// Now that Unbound is ready (if enabled), start the blocklist download.
+	// This avoids the race condition where blocklist download fails because
+	// Unbound hasn't started yet and DNS resolution is unavailable.
+	if blocklistMgr != nil {
+		if blErr := blocklistMgr.Start(ctx); blErr != nil {
+			logger.Error("Failed to start blocklist manager", "error", blErr)
+			// Continue anyway - server can run without blocklists
+		} else {
+			logger.Info("Blocklist manager started",
+				"domains", blocklistMgr.Size(),
+				"auto_update", cfg.AutoUpdateBlocklists,
 			)
 		}
 	}
