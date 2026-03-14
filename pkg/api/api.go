@@ -235,10 +235,8 @@ func New(cfg *Config) *Server {
 	handler = s.loggingMiddleware(handler)
 	handler = s.securityHeadersMiddleware(handler)
 	handler = s.corsMiddleware(handler)
-	// Block page intercept: for requests to unrecognized hosts, serve block page
-	if s.blockPageEnabled {
-		handler = s.blockPageMiddleware(handler)
-	}
+	// Block page intercept: always in chain, checks blockPageEnabled dynamically
+	handler = s.blockPageMiddleware(handler)
 
 	s.handler = handler
 	s.httpServer = &http.Server{

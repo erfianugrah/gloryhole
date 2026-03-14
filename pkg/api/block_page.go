@@ -109,6 +109,12 @@ type blockPageData struct {
 // that resolve to the glory-hole server's IP.
 func (s *Server) blockPageMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Check dynamically so hot-reload works
+		if !s.blockPageEnabled {
+			next.ServeHTTP(w, r)
+			return
+		}
+
 		host := r.Host
 		// Strip port
 		if idx := strings.LastIndex(host, ":"); idx != -1 {
