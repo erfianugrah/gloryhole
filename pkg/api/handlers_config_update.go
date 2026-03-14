@@ -173,6 +173,66 @@ func (s *Server) handleUpdateTLS(w http.ResponseWriter, r *http.Request) {
 	s.respondConfigUpdate(w, r, settingsTemplateTLS, flashKeyTLS, "DoT/TLS settings updated", data)
 }
 
+// handleUpdateBlockPage handles PUT /api/config/block-page
+func (s *Server) handleUpdateBlockPage(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPut {
+		s.writeError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		return
+	}
+
+	cfg, err := s.mutableConfig()
+	if err != nil {
+		s.writeError(w, http.StatusServiceUnavailable, err.Error())
+		return
+	}
+
+	r.Body = http.MaxBytesReader(w, r.Body, maxConfigPayloadSize)
+
+	var payload struct {
+		Enabled bool   `json:"enabled"`
+		BlockIP string `json:"block_ip"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		s.writeError(w, http.StatusBadRequest, "Invalid request body: "+err.Error())
+		return
+	}
+
+	// Validate block IP if enabled
+	if payload.Enabled {
+		if strings.TrimSpace(payload.BlockIP) == "" {
+			s.writeError(w, http.StatusBadRequest, "block_ip is required when block page is enabled")
+			return
+		}
+		if net.ParseIP(strings.TrimSpace(payload.BlockIP)) == nil {
+			s.writeError(w, http.StatusBadRequest, "block_ip must be a valid IP address")
+			return
+		}
+	}
+
+	updated := *cfg
+	updated.BlockPage.Enabled = payload.Enabled
+	updated.BlockPage.BlockIP = strings.TrimSpace(payload.BlockIP)
+
+	if !s.persistConfigSection(w, r, &updated, "", "block_page", cfg) {
+		return
+	}
+
+	// Hot-reload: update the DNS handler's BlockPageIP
+	if s.dnsHandler != nil {
+		if updated.BlockPage.Enabled && updated.BlockPage.BlockIP != "" {
+			s.dnsHandler.BlockPageIP = updated.BlockPage.BlockIP
+		} else {
+			s.dnsHandler.BlockPageIP = ""
+		}
+	}
+
+	// Hot-reload: update the block page middleware flag
+	s.blockPageEnabled = updated.BlockPage.Enabled && updated.BlockPage.BlockIP != ""
+
+	data := s.newSettingsPageData(cfg)
+	s.respondConfigUpdate(w, r, "", "block_page", "Block page settings updated", data)
+}
+
 func parseUpstreamServers(r *http.Request) ([]string, error) {
 	type request struct {
 		Servers []string `json:"servers"`

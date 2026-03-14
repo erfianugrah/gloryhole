@@ -230,17 +230,24 @@ func convertTimeSeriesPoints(points []*storage.TimeSeriesPoint) []TimeSeriesPoin
 
 // ConfigResponse represents the public configuration payload used by the Settings UI
 type ConfigResponse struct {
-	Server               ConfigServerResponse   `json:"server"`
-	Cache                ConfigCacheResponse    `json:"cache"`
-	Policy               ConfigPolicyResponse   `json:"policy"`
-	Storage              ConfigStorageResponse  `json:"storage"`
-	Logging              config.LoggingConfig   `json:"logging"`
-	Telemetry            config.TelemetryConfig `json:"telemetry"`
-	UpstreamDNSServers   []string               `json:"upstream_dns_servers"`
-	Blocklists           []string               `json:"blocklists"`
-	Whitelist            []string               `json:"whitelist"`
-	AutoUpdateBlocklists bool                   `json:"auto_update_blocklists"`
-	UpdateInterval       string                 `json:"update_interval"`
+	Server               ConfigServerResponse    `json:"server"`
+	Cache                ConfigCacheResponse     `json:"cache"`
+	Policy               ConfigPolicyResponse    `json:"policy"`
+	Storage              ConfigStorageResponse   `json:"storage"`
+	BlockPage            ConfigBlockPageResponse `json:"block_page"`
+	Logging              config.LoggingConfig    `json:"logging"`
+	Telemetry            config.TelemetryConfig  `json:"telemetry"`
+	UpstreamDNSServers   []string                `json:"upstream_dns_servers"`
+	Blocklists           []string                `json:"blocklists"`
+	Whitelist            []string                `json:"whitelist"`
+	AutoUpdateBlocklists bool                    `json:"auto_update_blocklists"`
+	UpdateInterval       string                  `json:"update_interval"`
+}
+
+// ConfigBlockPageResponse surfaces block page settings.
+type ConfigBlockPageResponse struct {
+	Enabled bool   `json:"enabled"`
+	BlockIP string `json:"block_ip"`
 }
 
 type ConfigServerResponse struct {
@@ -327,6 +334,10 @@ func convertConfigResponse(cfg *config.Config) ConfigResponse {
 			Backend:       string(cfg.Database.Backend),
 			BufferSize:    cfg.Database.BufferSize,
 			RetentionDays: cfg.Database.RetentionDays,
+		},
+		BlockPage: ConfigBlockPageResponse{
+			Enabled: cfg.BlockPage.Enabled,
+			BlockIP: cfg.BlockPage.BlockIP,
 		},
 		Logging:              cfg.Logging,
 		Telemetry:            cfg.Telemetry,

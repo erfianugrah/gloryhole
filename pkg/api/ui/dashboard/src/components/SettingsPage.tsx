@@ -34,6 +34,7 @@ import {
   updateCacheConfig,
   updateLoggingConfig,
   updateTLSConfig,
+  updateBlockPageConfig,
   purgeCache,
   resetStorage,
 } from "@/lib/api";
@@ -87,6 +88,11 @@ export function SettingsPage() {
   const [authEnabled, setAuthEnabled] = useState(false);
   const [authUsername, setAuthUsername] = useState("");
   const [authHasApiKey, setAuthHasApiKey] = useState(false);
+
+  // Block page form state
+  const [blockPageEnabled, setBlockPageEnabled] = useState(false);
+  const [blockPageIP, setBlockPageIP] = useState("");
+  const [savingBlockPage, setSavingBlockPage] = useState(false);
 
   const loadData = useCallback(async () => {
     try {
@@ -146,6 +152,13 @@ export function SettingsPage() {
         setAuthEnabled(auth.enabled as boolean ?? false);
         setAuthUsername(String(auth.username ?? ""));
         setAuthHasApiKey(!!auth.has_api_key);
+      }
+
+      // Populate block page form
+      const blockPage = cfg.block_page as Record<string, unknown> | undefined;
+      if (blockPage) {
+        setBlockPageEnabled(blockPage.enabled as boolean ?? false);
+        setBlockPageIP(String(blockPage.block_ip ?? ""));
       }
 
       // Check resolver status (non-blocking)
@@ -252,6 +265,22 @@ export function SettingsPage() {
     }
   }
 
+  async function handleSaveBlockPage() {
+    setSavingBlockPage(true);
+    try {
+      await updateBlockPageConfig({
+        enabled: blockPageEnabled,
+        block_ip: blockPageIP,
+      });
+      showSuccess("Block page settings updated");
+      await loadData();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save block page settings");
+    } finally {
+      setSavingBlockPage(false);
+    }
+  }
+
   async function handlePurgeCache() {
     try {
       await purgeCache();
@@ -305,6 +334,7 @@ export function SettingsPage() {
           <TabsTrigger value="cache">Cache</TabsTrigger>
           <TabsTrigger value="logging">Logging</TabsTrigger>
           <TabsTrigger value="tls">TLS</TabsTrigger>
+          <TabsTrigger value="blockpage">Block Page</TabsTrigger>
           <TabsTrigger value="auth">Authentication</TabsTrigger>
           <TabsTrigger value="danger">Danger Zone</TabsTrigger>
           <TabsTrigger value="about">About</TabsTrigger>
@@ -609,6 +639,60 @@ export function SettingsPage() {
               >
                 <Save className="h-3.5 w-3.5 mr-1" />
                 {savingTLS ? "Saving..." : "Save"}
+              </Button>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Block Page */}
+        <TabsContent value="blockpage">
+          <Card>
+            <CardHeader>
+              <CardTitle className={T.cardTitle}>
+                <Shield className="h-4 w-4 inline mr-1.5" />
+                Block Page
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className={T.mutedSm}>
+                When enabled, blocked domains resolve to the configured IP instead of
+                returning NXDOMAIN. The server then shows a styled page explaining
+                why the domain was blocked. Only works for plain HTTP connections.
+              </p>
+              <div className="flex items-center gap-3">
+                <Switch
+                  checked={blockPageEnabled}
+                  onCheckedChange={setBlockPageEnabled}
+                  aria-label="Enable block page"
+                />
+                <Label className={T.formLabel}>Block page enabled</Label>
+              </div>
+
+              {blockPageEnabled && (
+                <div className="space-y-4 border-l-2 border-border pl-4 ml-1">
+                  <div className="space-y-1">
+                    <Label className={T.formLabel}>Block IP Address</Label>
+                    <Input
+                      value={blockPageIP}
+                      onChange={(e) => setBlockPageIP(e.target.value)}
+                      placeholder="10.0.10.10"
+                      className="font-data max-w-xs"
+                    />
+                    <p className={T.muted}>
+                      Must be this server's IP address that clients use to reach it.
+                      Blocked domains will resolve to this IP.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              <Button
+                size="sm"
+                onClick={handleSaveBlockPage}
+                disabled={savingBlockPage}
+              >
+                <Save className="h-3.5 w-3.5 mr-1" />
+                {savingBlockPage ? "Saving..." : "Save"}
               </Button>
             </CardContent>
           </Card>

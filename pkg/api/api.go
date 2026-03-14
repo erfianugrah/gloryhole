@@ -175,6 +175,7 @@ func New(cfg *Config) *Server {
 	mux.HandleFunc("PUT /api/config/cache", s.handleUpdateCache)
 	mux.HandleFunc("PUT /api/config/logging", s.handleUpdateLogging)
 	mux.HandleFunc("PUT /api/config/tls", s.handleUpdateTLS)
+	mux.HandleFunc("PUT /api/config/block-page", s.handleUpdateBlockPage)
 
 	// UI page routes (Astro pre-rendered)
 	mux.HandleFunc("GET /queries", s.handleQueriesPage)

@@ -193,6 +193,7 @@ export interface ConfigResponse {
   dns: Record<string, unknown>;
   blocklist: Record<string, unknown>;
   cache: Record<string, unknown>;
+  block_page?: Record<string, unknown>;
   logging: Record<string, unknown>;
   auth: Record<string, unknown>;
   tls?: Record<string, unknown>;
@@ -507,6 +508,22 @@ export function updateTLSConfig(
   config: Record<string, unknown>
 ): Promise<void> {
   return apiFetch<void>("/api/config/tls", {
+    method: "PUT",
+    body: JSON.stringify(config),
+  });
+}
+
+// ─── Block Page ──────────────────────────────────────────────────
+
+export interface BlockPageConfig {
+  enabled: boolean;
+  block_ip: string;
+}
+
+export function updateBlockPageConfig(
+  config: BlockPageConfig
+): Promise<void> {
+  return apiFetch<void>("/api/config/block-page", {
     method: "PUT",
     body: JSON.stringify(config),
   });
