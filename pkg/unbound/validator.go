@@ -16,8 +16,8 @@ func Validate(cfg *UnboundServerConfig, checkconfBin string) error {
 	}
 	defer os.Remove(tmp.Name())
 
-	if err := WriteConfig(cfg, tmp.Name()); err != nil {
-		return fmt.Errorf("write temp config: %w", err)
+	if writeErr := WriteConfig(cfg, tmp.Name()); writeErr != nil {
+		return fmt.Errorf("write temp config: %w", writeErr)
 	}
 
 	out, err := exec.Command(checkconfBin, tmp.Name()).CombinedOutput()
