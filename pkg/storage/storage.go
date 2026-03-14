@@ -44,18 +44,19 @@ type Storage interface {
 
 // QueryLog represents a single DNS query log entry
 type QueryLog struct {
-	Timestamp      time.Time         `json:"timestamp"`
-	ClientIP       string            `json:"client_ip"`
-	Domain         string            `json:"domain"`
-	QueryType      string            `json:"query_type"`
-	Upstream       string            `json:"upstream,omitempty"`
-	ID             int64             `json:"id"`
-	ResponseCode   int               `json:"response_code"`
-	ResponseTimeMs float64           `json:"response_time_ms"`
-	UpstreamTimeMs float64           `json:"upstream_response_ms"`
-	Blocked        bool              `json:"blocked"`
-	Cached         bool              `json:"cached"`
-	BlockTrace     []BlockTraceEntry `json:"block_trace,omitempty"`
+	Timestamp       time.Time         `json:"timestamp"`
+	ClientIP        string            `json:"client_ip"`
+	Domain          string            `json:"domain"`
+	QueryType       string            `json:"query_type"`
+	Upstream        string            `json:"upstream,omitempty"`
+	ID              int64             `json:"id"`
+	ResponseCode    int               `json:"response_code"`
+	ResponseTimeMs  float64           `json:"response_time_ms"`
+	UpstreamTimeMs  float64           `json:"upstream_response_ms"`
+	Blocked         bool              `json:"blocked"`
+	Cached          bool              `json:"cached"`
+	DNSSECValidated bool              `json:"dnssec_validated,omitempty"`
+	BlockTrace      []BlockTraceEntry `json:"block_trace,omitempty"`
 }
 
 // BlockTraceEntry captures a single decision step explaining how a query was handled.

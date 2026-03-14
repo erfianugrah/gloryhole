@@ -27,14 +27,16 @@ func (s *SQLiteStorage) GetClientSummaries(ctx context.Context, limit, offset in
 		offset = 0
 	}
 
-	// Aggregate client statistics from recent queries for performance
-	// This ensures the query remains fast even with millions of historical queries
+	// Aggregate client statistics from recent queries for performance.
+	// Uses MIN/MAX(timestamp) directly instead of joining back into the
+	// queries table by id — avoids two costly index lookups per client
+	// on large databases.
 	const baseQuery = `
 		WITH aggregated AS (
 			SELECT
 				client_ip,
-				MIN(id) AS first_id,
-				MAX(id) AS last_id,
+				MIN(timestamp) AS first_seen_raw,
+				MAX(timestamp) AS last_seen_raw,
 				COUNT(*) AS total_queries,
 				SUM(CASE WHEN blocked = 1 THEN 1 ELSE 0 END) AS blocked_queries,
 				SUM(CASE WHEN response_code = 3 THEN 1 ELSE 0 END) AS nxdomain_queries
@@ -48,16 +50,14 @@ func (s *SQLiteStorage) GetClientSummaries(ctx context.Context, limit, offset in
 			COALESCE(p.notes, '') AS notes,
 			p.group_name,
 			COALESCE(g.color, '') AS group_color,
-			first_q.timestamp AS first_seen_raw,
-			last_q.timestamp AS last_seen_raw,
+			a.first_seen_raw,
+			a.last_seen_raw,
 			a.total_queries,
 			a.blocked_queries,
 			a.nxdomain_queries
 		FROM aggregated a
 		LEFT JOIN client_profiles p ON p.client_ip = a.client_ip
 		LEFT JOIN client_groups g ON p.group_name = g.name
-		LEFT JOIN queries first_q ON first_q.id = a.first_id
-		LEFT JOIN queries last_q ON last_q.id = a.last_id
 	`
 
 	var builder strings.Builder
@@ -80,7 +80,7 @@ func (s *SQLiteStorage) GetClientSummaries(ctx context.Context, limit, offset in
 	}
 
 	builder.WriteString(`
-		ORDER BY last_q.timestamp DESC
+		ORDER BY a.last_seen_raw DESC
 		LIMIT ? OFFSET ?;
 	`)
 	args = append(args, limit, offset)

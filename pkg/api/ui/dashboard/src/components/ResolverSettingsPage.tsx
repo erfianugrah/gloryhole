@@ -241,6 +241,11 @@ export function ResolverSettingsPage() {
           <Card>
             <CardHeader><CardTitle className={T.cardTitle}>Logging</CardTitle></CardHeader>
             <CardContent className="space-y-4">
+              <p className={T.mutedSm}>
+                These control Unbound's internal logging for debugging recursive resolution.
+                They do <strong>not</strong> affect Glory-Hole's query log — all queries are
+                always logged in the <a href="/queries" className="underline">Query Log</a> regardless of these settings.
+              </p>
               <div className="space-y-1">
                 <Label className={T.formLabel}>Verbosity (0-5)</Label>
                 <Select value={verbosity} onValueChange={setVerbosity}>

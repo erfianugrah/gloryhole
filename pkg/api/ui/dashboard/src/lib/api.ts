@@ -92,6 +92,7 @@ export interface QueryLog {
   query_type: string;
   blocked: boolean;
   cached: boolean;
+  dnssec_validated?: boolean;
   response_code: number;
   upstream: string;
   response_time_ms: number;

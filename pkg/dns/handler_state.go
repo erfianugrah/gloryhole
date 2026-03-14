@@ -10,6 +10,7 @@ import (
 type serveDNSOutcome struct {
 	blocked          bool
 	cached           bool
+	dnssecValidated  bool // AD flag was set in upstream response
 	upstream         string
 	responseCode     int
 	upstreamDuration time.Duration

@@ -296,17 +296,18 @@ func (h *Handler) asyncLogQuery(startTime time.Time, r *dns.Msg, clientIP string
 	}
 
 	queryLog := &storage.QueryLog{
-		Timestamp:      startTime,
-		ClientIP:       clientIP,
-		Domain:         domain,
-		QueryType:      queryType,
-		ResponseCode:   outcome.responseCode,
-		Blocked:        outcome.blocked,
-		Cached:         outcome.cached,
-		ResponseTimeMs: time.Since(startTime).Seconds() * 1000,
-		UpstreamTimeMs: outcome.upstreamDuration.Seconds() * 1000,
-		Upstream:       outcome.upstream,
-		BlockTrace:     trace.Entries(),
+		Timestamp:       startTime,
+		ClientIP:        clientIP,
+		Domain:          domain,
+		QueryType:       queryType,
+		ResponseCode:    outcome.responseCode,
+		Blocked:         outcome.blocked,
+		Cached:          outcome.cached,
+		DNSSECValidated: outcome.dnssecValidated,
+		ResponseTimeMs:  time.Since(startTime).Seconds() * 1000,
+		UpstreamTimeMs:  outcome.upstreamDuration.Seconds() * 1000,
+		Upstream:        outcome.upstream,
+		BlockTrace:      trace.Entries(),
 	}
 
 	// New path: use worker pool (no goroutine spawn)

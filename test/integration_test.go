@@ -293,12 +293,22 @@ func TestIntegration_APIWithDNS(t *testing.T) {
 	go dnsServer.Start(dnsCtx)
 	time.Sleep(100 * time.Millisecond)
 
-	// Setup API server
+	// Setup API server on a random free port (auth disabled for integration tests)
+	apiListener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("Failed to find free port: %v", err)
+	}
+	apiAddr := apiListener.Addr().String()
+	apiListener.Close()
+
 	apiCfg := &api.Config{
-		ListenAddress: "127.0.0.1:18080",
+		ListenAddress: apiAddr,
 		PolicyEngine:  policyEngine,
 		Logger:        logger.Logger,
 		Version:       "test",
+		InitialConfig: &config.Config{
+			Auth: config.AuthConfig{Enabled: false},
+		},
 	}
 
 	apiServer := api.New(apiCfg)
@@ -317,7 +327,7 @@ func TestIntegration_APIWithDNS(t *testing.T) {
 	}
 
 	body, _ := json.Marshal(policyReq)
-	resp, err := http.Post("http://127.0.0.1:18080/api/policies", "application/json",
+	resp, err := http.Post("http://"+apiAddr+"/api/policies", "application/json",
 		bytes.NewReader(body))
 	if err != nil {
 		t.Fatalf("Failed to add policy via API: %v", err)
@@ -343,7 +353,7 @@ func TestIntegration_APIWithDNS(t *testing.T) {
 	}
 
 	// Test 3: Get policies via API
-	getResp, err := http.Get("http://127.0.0.1:18080/api/policies")
+	getResp, err := http.Get("http://" + apiAddr + "/api/policies")
 	if err != nil {
 		t.Fatalf("Failed to get policies: %v", err)
 	}

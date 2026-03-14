@@ -53,6 +53,9 @@ func (h *Handler) handleConditionalForwarding(ctx context.Context, w dns.Respons
 
 	h.recordForwardedQuery(ctx, "policy_forward", qtypeLabel, outcome.upstream)
 
+	// Capture DNSSEC validation status from response
+	outcome.dnssecValidated = resp.AuthenticatedData
+
 	if h.Cache != nil {
 		h.Cache.Set(ctx, r, resp)
 	}
@@ -83,6 +86,9 @@ func (h *Handler) forwardToUpstream(ctx context.Context, w dns.ResponseWriter, r
 	}
 
 	h.recordForwardedQuery(ctx, "default_forward", qtypeLabel, outcome.upstream)
+
+	// Capture DNSSEC validation status from response
+	outcome.dnssecValidated = resp.AuthenticatedData
 
 	if h.Cache != nil {
 		h.Cache.Set(ctx, r, resp)
