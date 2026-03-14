@@ -50,6 +50,7 @@ testdata/
 
 # Deployment
 deploy/
+!deploy/unbound/
 docker-compose*.yml
 Dockerfile
 .dockerignore

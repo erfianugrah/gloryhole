@@ -31,8 +31,20 @@ type Config struct {
 	Logging               LoggingConfig               `yaml:"logging"`
 	Database              storage.Config              `yaml:"database"`
 	Cache                 CacheConfig                 `yaml:"cache"`
+	Unbound               UnboundConfig               `yaml:"unbound"`
 	UpdateInterval        time.Duration               `yaml:"update_interval"`
 	AutoUpdateBlocklists  bool                        `yaml:"auto_update_blocklists"`
+}
+
+// UnboundConfig controls the integrated Unbound recursive resolver.
+type UnboundConfig struct {
+	BinaryPath        string   `yaml:"binary_path"`        // Path to unbound binary (auto-detected if empty)
+	ConfigPath        string   `yaml:"config_path"`        // Path to unbound.conf
+	ControlSocket     string   `yaml:"control_socket"`     // Path to unbound-control socket
+	FallbackUpstreams []string `yaml:"fallback_upstreams"` // Upstreams to use when Unbound is down
+	ListenPort        int      `yaml:"listen_port"`        // Port Unbound listens on (default: 5353)
+	Enabled           bool     `yaml:"enabled"`            // Enable Unbound integration
+	Managed           bool     `yaml:"managed"`            // true = supervise process, false = external
 }
 
 // ForwarderConfig holds DNS forwarder configuration
@@ -449,6 +461,17 @@ func (c *Config) applyDefaults() {
 	}
 	if c.Telemetry.PrometheusPort == 0 {
 		c.Telemetry.PrometheusPort = 9090
+	}
+
+	// Unbound defaults
+	if c.Unbound.ConfigPath == "" {
+		c.Unbound.ConfigPath = "/etc/unbound/unbound.conf"
+	}
+	if c.Unbound.ControlSocket == "" {
+		c.Unbound.ControlSocket = "/var/run/unbound/control.sock"
+	}
+	if c.Unbound.ListenPort == 0 {
+		c.Unbound.ListenPort = 5353
 	}
 
 	c.Auth.normalize()

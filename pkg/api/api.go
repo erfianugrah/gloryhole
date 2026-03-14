@@ -19,51 +19,54 @@ import (
 	"glory-hole/pkg/dns"
 	"glory-hole/pkg/policy"
 	"glory-hole/pkg/storage"
+	"glory-hole/pkg/unbound"
 )
 
 const sessionCookieName = "gh_session"
 
 // Server represents the API server
 type Server struct {
-	handler          http.Handler
-	sessionManager   *sessionManager
-	storage          storage.Storage
-	httpServer       *http.Server
-	logger           *slog.Logger
-	blocklistManager *blocklist.Manager
-	policyEngine     *policy.Engine
-	cache            cache.Interface    // DNS cache for purge operations
-	configWatcher    *config.Watcher    // For kill-switch feature
-	killSwitch       *KillSwitchManager // For duration-based temporary disabling
-	configSnapshot   *config.Config     // Used when watcher is unavailable (tests, static configs)
-	dnsHandler       *dns.Handler       // DNS handler for DNS-over-HTTPS (DoH) queries
-	startTime        time.Time
-	version          string
-	configPath       string   // Path to config file for persistence
-	allowedOrigins   []string // Allowed CORS origins
-	authMu           sync.RWMutex
-	authEnabled      bool
-	authHeader       string
-	apiKey           string
-	basicUser        string
-	basicPass        string // Plaintext password (backward compat)
-	passwordHash     string // Bcrypt hash of password
+	handler           http.Handler
+	sessionManager    *sessionManager
+	storage           storage.Storage
+	httpServer        *http.Server
+	logger            *slog.Logger
+	blocklistManager  *blocklist.Manager
+	policyEngine      *policy.Engine
+	cache             cache.Interface     // DNS cache for purge operations
+	configWatcher     *config.Watcher     // For kill-switch feature
+	killSwitch        *KillSwitchManager  // For duration-based temporary disabling
+	configSnapshot    *config.Config      // Used when watcher is unavailable (tests, static configs)
+	dnsHandler        *dns.Handler        // DNS handler for DNS-over-HTTPS (DoH) queries
+	unboundSupervisor *unbound.Supervisor // Unbound process supervisor (nil if disabled)
+	startTime         time.Time
+	version           string
+	configPath        string   // Path to config file for persistence
+	allowedOrigins    []string // Allowed CORS origins
+	authMu            sync.RWMutex
+	authEnabled       bool
+	authHeader        string
+	apiKey            string
+	basicUser         string
+	basicPass         string // Plaintext password (backward compat)
+	passwordHash      string // Bcrypt hash of password
 }
 
 // Config holds API server configuration
 type Config struct {
-	Storage          storage.Storage
-	BlocklistManager *blocklist.Manager
-	PolicyEngine     *policy.Engine
-	Cache            cache.Interface // DNS cache for purge operations
-	DNSHandler       *dns.Handler    // DNS handler for DNS-over-HTTPS (DoH) queries
-	Logger           *slog.Logger
-	ConfigWatcher    *config.Watcher    // For kill-switch feature
-	KillSwitch       *KillSwitchManager // For duration-based temporary disabling
-	ListenAddress    string
-	Version          string
-	ConfigPath       string // Path to config file
-	InitialConfig    *config.Config
+	Storage           storage.Storage
+	BlocklistManager  *blocklist.Manager
+	PolicyEngine      *policy.Engine
+	Cache             cache.Interface     // DNS cache for purge operations
+	DNSHandler        *dns.Handler        // DNS handler for DNS-over-HTTPS (DoH) queries
+	UnboundSupervisor *unbound.Supervisor // Unbound process supervisor (nil if disabled)
+	Logger            *slog.Logger
+	ConfigWatcher     *config.Watcher    // For kill-switch feature
+	KillSwitch        *KillSwitchManager // For duration-based temporary disabling
+	ListenAddress     string
+	Version           string
+	ConfigPath        string // Path to config file
+	InitialConfig     *config.Config
 }
 
 // New creates a new API server
@@ -73,19 +76,20 @@ func New(cfg *Config) *Server {
 	}
 
 	s := &Server{
-		storage:          cfg.Storage,
-		blocklistManager: cfg.BlocklistManager,
-		policyEngine:     cfg.PolicyEngine,
-		cache:            cfg.Cache,
-		dnsHandler:       cfg.DNSHandler,
-		logger:           cfg.Logger,
-		version:          cfg.Version,
-		configWatcher:    cfg.ConfigWatcher,
-		configPath:       cfg.ConfigPath,
-		killSwitch:       cfg.KillSwitch,
-		configSnapshot:   cfg.InitialConfig,
-		startTime:        time.Now(),
-		sessionManager:   newSessionManager(24 * time.Hour),
+		storage:           cfg.Storage,
+		blocklistManager:  cfg.BlocklistManager,
+		policyEngine:      cfg.PolicyEngine,
+		cache:             cfg.Cache,
+		dnsHandler:        cfg.DNSHandler,
+		unboundSupervisor: cfg.UnboundSupervisor,
+		logger:            cfg.Logger,
+		version:           cfg.Version,
+		configWatcher:     cfg.ConfigWatcher,
+		configPath:        cfg.ConfigPath,
+		killSwitch:        cfg.KillSwitch,
+		configSnapshot:    cfg.InitialConfig,
+		startTime:         time.Now(),
+		sessionManager:    newSessionManager(24 * time.Hour),
 	}
 
 	if cfg.InitialConfig != nil {
@@ -196,6 +200,19 @@ func New(cfg *Config) *Server {
 	mux.HandleFunc("GET /api/blocklists", s.handleGetBlocklists)
 	mux.HandleFunc("GET /api/blocklists/check", s.handleCheckBlocklist)
 	mux.HandleFunc("PUT /api/config/blocklists", s.handleUpdateBlocklistSources)
+
+	// Unbound resolver management
+	// GET /api/unbound/status is NOT guarded — always returns status (even when disabled)
+	mux.HandleFunc("GET /api/unbound/status", s.handleGetUnboundStatus)
+	mux.HandleFunc("GET /api/unbound/stats", s.unboundGuard(s.handleGetUnboundStats))
+	mux.HandleFunc("GET /api/unbound/config", s.unboundGuard(s.handleGetUnboundConfig))
+	mux.HandleFunc("PUT /api/unbound/config/server", s.unboundGuard(s.handleUpdateUnboundServer))
+	mux.HandleFunc("GET /api/unbound/forward-zones", s.unboundGuard(s.handleGetForwardZones))
+	mux.HandleFunc("POST /api/unbound/forward-zones", s.unboundGuard(s.handleAddForwardZone))
+	mux.HandleFunc("PUT /api/unbound/forward-zones/{name}", s.unboundGuard(s.handleUpdateForwardZone))
+	mux.HandleFunc("DELETE /api/unbound/forward-zones/{name}", s.unboundGuard(s.handleDeleteForwardZone))
+	mux.HandleFunc("POST /api/unbound/reload", s.unboundGuard(s.handleUnboundReload))
+	mux.HandleFunc("POST /api/unbound/flush-cache", s.unboundGuard(s.handleUnboundFlushCache))
 
 	// Astro build output: serve /_astro/* assets and /favicon.svg from dist/
 	if distFS, err := getAstroDistFS(); err == nil {
@@ -315,6 +332,11 @@ func (s *Server) SetCache(c cache.Interface) {
 // SetPolicyEngine updates the policy engine reference used by API handlers.
 func (s *Server) SetPolicyEngine(pe *policy.Engine) {
 	s.policyEngine = pe
+}
+
+// SetUnboundSupervisor updates the Unbound supervisor reference.
+func (s *Server) SetUnboundSupervisor(sup *unbound.Supervisor) {
+	s.unboundSupervisor = sup
 }
 
 // SetLogger updates the server logger reference.

@@ -1,0 +1,89 @@
+# Smoke test config — high ephemeral ports, no auth, minimal features
+server:
+  listen_address: "0.0.0.0:15353"
+  web_ui_address: "0.0.0.0:18080"
+  udp_enabled: true
+  tcp_enabled: true
+  dot_enabled: false
+  enable_blocklist: true
+  enable_policies: true
+  decision_trace: true
+
+auth:
+  enabled: false
+
+upstream_dns_servers:
+  - "1.1.1.1:53"
+  - "8.8.8.8:53"
+
+blocklists:
+  - "https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts"
+
+whitelist: []
+
+local_records:
+  enabled: true
+  records:
+    - domain: "test.local"
+      type: "A"
+      ips: ["10.99.99.1"]
+      ttl: 300
+
+policy:
+  enabled: true
+  rules:
+    - name: "Block bad.example.com"
+      logic: 'Domain == "bad.example.com"'
+      action: "BLOCK"
+      enabled: true
+
+database:
+  enabled: true
+  backend: "sqlite"
+  sqlite:
+    path: "./glory-hole-smoke.db"
+    busy_timeout: 5000
+    wal_mode: true
+    cache_size: 4096
+    mmap_size: 268435456
+  buffer_size: 500
+  flush_interval: 5s
+  batch_size: 100
+  retention_days: 7
+  statistics:
+    enabled: true
+    aggregation_interval: 1h
+
+cache:
+  enabled: true
+  max_entries: 5000
+  min_ttl: 60s
+  max_ttl: 24h
+  negative_ttl: 5m
+  blocked_ttl: 1s
+  shard_count: 0
+
+logging:
+  level: "info"
+  format: "text"
+  output: "stdout"
+
+telemetry:
+  enabled: true
+  service_name: "glory-hole-smoke"
+  prometheus_enabled: true
+  prometheus_port: 19090
+
+update_interval: 24h
+auto_update_blocklists: false
+
+unbound:
+  enabled: true
+  managed: true
+  binary_path: ""
+  config_path: /etc/unbound/unbound.conf
+  listen_port: 5353
+  control_socket: /var/run/unbound/control.sock
+  fallback_upstreams:
+    - 1.1.1.1:53
+    - 8.8.8.8:53

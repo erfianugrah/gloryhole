@@ -25,6 +25,7 @@ import (
 	"glory-hole/pkg/resolver"
 	"glory-hole/pkg/storage"
 	"glory-hole/pkg/telemetry"
+	"glory-hole/pkg/unbound"
 
 	"golang.org/x/crypto/bcrypt"
 )
@@ -556,24 +557,61 @@ func main() {
 	killSwitch := api.NewKillSwitchManager(logger.Logger) // Get underlying slog.Logger
 	handler.SetKillSwitch(killSwitch)
 
+	// Initialize Unbound recursive resolver (optional)
+	var unboundSupervisor *unbound.Supervisor
+
+	if cfg.Unbound.Enabled && cfg.Unbound.Managed {
+		logger.Info("Starting Unbound recursive resolver",
+			"port", cfg.Unbound.ListenPort,
+			"config", cfg.Unbound.ConfigPath,
+		)
+
+		unboundSupervisor = unbound.NewSupervisor(&cfg.Unbound, logger)
+
+		if err := unboundSupervisor.Start(ctx); err != nil {
+			logger.Error("Unbound failed to start, falling back to direct forwarding",
+				"error", err,
+			)
+			unboundSupervisor = nil
+			// Fall through — Glory-Hole continues with configured upstream_dns_servers
+		} else {
+			// Override upstreams to point at local Unbound
+			unboundAddr := unboundSupervisor.ListenAddr()
+			cfg.UpstreamDNSServers = []string{unboundAddr}
+
+			// Glory-Hole's cache stays enabled — it provides:
+			// - API/UI cache purge support
+			// - Prometheus cache metrics
+			// - Blocklist-aware caching (SetBlocked with custom TTLs)
+			// - Policy decisions are never cached (by design)
+			// Unbound validates DNSSEC before returning, so cached responses
+			// were already validated at insertion time.
+
+			logger.Info("Unbound active, forwarding to local resolver",
+				"addr", unboundAddr,
+			)
+		}
+	}
+
 	// Create DNS server
 	server := dns.NewServer(cfg, handler, logger, metrics)
 	dnsCache = handler.Cache
 
 	// Create API server
 	apiServer := api.New(&api.Config{
-		ListenAddress:    cfg.Server.WebUIAddress,
-		Storage:          stor,
-		BlocklistManager: blocklistMgr,
-		PolicyEngine:     policyEngine,
-		Cache:            handler.Cache, // DNS cache for purge operations
-		DNSHandler:       handler,       // DNS handler for DNS-over-HTTPS (DoH) queries
-		Logger:           logger.Logger, // Get underlying slog.Logger
-		Version:          version,
-		InitialConfig:    cfg,         // Pass initial config for auth/CORS setup
-		ConfigWatcher:    cfgWatcher,  // For kill-switch feature
-		ConfigPath:       *configPath, // For persisting kill-switch changes
-		KillSwitch:       killSwitch,  // For duration-based temporary disabling
+		ListenAddress:     cfg.Server.WebUIAddress,
+		Storage:           stor,
+		BlocklistManager:  blocklistMgr,
+		PolicyEngine:      policyEngine,
+		Cache:             handler.Cache,     // DNS cache for purge operations
+		DNSHandler:        handler,           // DNS handler for DNS-over-HTTPS (DoH) queries
+		UnboundSupervisor: unboundSupervisor, // Unbound process supervisor (nil if disabled)
+		Logger:            logger.Logger,     // Get underlying slog.Logger
+		Version:           version,
+		InitialConfig:     cfg,         // Pass initial config for auth/CORS setup
+		ConfigWatcher:     cfgWatcher,  // For kill-switch feature
+		ConfigPath:        *configPath, // For persisting kill-switch changes
+		KillSwitch:        killSwitch,  // For duration-based temporary disabling
 	})
 	apiServer.SetCache(dnsCache)
 
@@ -901,6 +939,14 @@ func main() {
 		// Shutdown API server
 		if err := apiServer.Shutdown(shutdownCtx); err != nil {
 			logger.Error("Error during API server shutdown", "error", err)
+		}
+
+		// Shutdown Unbound resolver
+		if unboundSupervisor != nil {
+			logger.Info("Stopping Unbound resolver")
+			if err := unboundSupervisor.Stop(); err != nil {
+				logger.Error("Error during Unbound shutdown", "error", err)
+			}
 		}
 
 		// Shutdown blocklist manager

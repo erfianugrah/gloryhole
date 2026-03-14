@@ -25,6 +25,12 @@ if [ "$(id -u)" = "0" ]; then
         /var/log/glory-hole \
         2>/dev/null || true
 
+    # Fix ownership on Unbound directories (config, runtime socket, root key)
+    chown -R "${GLORY_UID}:${GLORY_GID}" \
+        /etc/unbound \
+        /var/run/unbound \
+        2>/dev/null || true
+
     # Grant NET_BIND_SERVICE on the binary so it can bind port 53 after dropping root
     setcap 'cap_net_bind_service=+ep' /usr/local/bin/glory-hole 2>/dev/null || true
 

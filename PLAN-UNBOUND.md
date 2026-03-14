@@ -37,24 +37,27 @@ Unbound instead of external upstreams.
 - DNS-over-TLS upstream
 
 ### What gets disabled when Unbound is active
-- **Glory-Hole's DNS cache** — Unbound's cache is DNSSEC-aware, handles
-  negative caching properly, and respects TTL semantics. Running two caches
-  causes correctness issues (stale DNSSEC signatures, TTL drift, double memory).
 - **Simple domain-only conditional forwarding rules** — migrated to Unbound
   forward-zones. Glory-Hole conditional forwarding remains for CIDR/qtype rules.
+- Glory-Hole's cache and policy engine remain fully active.
 
 ---
 
 ## Decisions
 
-### Cache: Unbound is the sole cache
-When Unbound is enabled, Glory-Hole's cache is disabled. Reasons:
-- Glory-Hole's cache sits before forwarding in the pipeline. If it caches a
-  response, Unbound never sees subsequent queries — its cache stays cold.
-- Glory-Hole's cache has no DNSSEC awareness. It would serve responses with
-  expired DNSSEC signatures.
-- Two caches doubles memory usage for no benefit.
-- Unbound's cache is battle-tested and DNSSEC-correct.
+### Cache: Glory-Hole's cache stays active
+When Unbound is enabled, Glory-Hole's cache remains the primary cache. Reasons:
+- Glory-Hole's cache is purgeable via API (`/api/cache/purge`) and UI.
+- Cache stats are already wired into Prometheus metrics and the dashboard.
+- Blocklist-aware caching: `SetBlocked()` uses custom TTLs that Unbound
+  has no concept of.
+- Policy decisions are never cached (by design) — this invariant is already
+  enforced in the handler.
+- DNSSEC correctness is maintained: Unbound validates DNSSEC *before*
+  returning the response, so cached entries were validated at insertion time.
+  TTLs from upstream are respected, so entries expire at the same time.
+- Unbound's own cache acts as a warm L2 behind Glory-Hole for recursive
+  queries that miss both caches. This is beneficial, not redundant.
 
 ### Blocklists: Stay in Glory-Hole only
 Blocking stays in Glory-Hole's pipeline (policy engine + blocklist manager).
@@ -142,20 +145,75 @@ other component behaves:
 **Goal**: Unbound runs as a supervised subprocess, Glory-Hole forwards to it.
 Users get recursive resolution + DNSSEC out of the box with zero config.
 
-#### 1.1 Dockerfile changes
+#### 1.1 Dockerfile changes — Build Unbound from source
 
-Both `Dockerfile` (dev) and `Dockerfile.release` (CI):
+Both `Dockerfile` (dev) and `Dockerfile.release` (CI) add an Unbound build
+stage. Building from source gives us exact version pinning, a static binary
+with no runtime shared library dependencies, and a smaller final image.
+
+**Unbound build stage** (runs in parallel with Go build):
 
 ```dockerfile
-# Runtime stage additions:
-RUN apk add --no-cache unbound unbound-libs
-RUN mkdir -p /etc/unbound /var/run/unbound \
-    && chown glory-hole:glory-hole /etc/unbound /var/run/unbound
+# Stage: Build Unbound from source
+FROM alpine:3.21 AS unbound-builder
+
+ARG UNBOUND_VERSION=1.24.2
+
+RUN apk add --no-cache build-base openssl-dev libexpat expat-dev libevent-dev curl
+
+RUN curl -fsSL "https://nlnetlabs.nl/downloads/unbound/unbound-${UNBOUND_VERSION}.tar.gz" \
+        -o unbound.tar.gz && \
+    tar xzf unbound.tar.gz
+
+WORKDIR /unbound-${UNBOUND_VERSION}
+
+RUN ./configure \
+        --prefix=/opt/unbound \
+        --with-libevent \
+        --with-ssl \
+        --disable-shared \
+        --disable-flto \
+        --without-pythonmodule \
+        --without-pyunbound && \
+    make -j$(nproc) && \
+    make install
+
+# Fetch fresh root hints
+RUN curl -fsSL https://www.internic.net/domain/named.root \
+        -o /opt/unbound/etc/unbound/root.hints
 ```
 
-**Image size impact**: `unbound` + `unbound-libs` on Alpine adds ~3-4MB
-(compressed). Current image is ~35MB. Acceptable overhead for the value
-(DNSSEC + recursion).
+**Runtime stage additions** (in both Dockerfiles):
+
+```dockerfile
+# Copy Unbound static binaries from build stage
+COPY --from=unbound-builder /opt/unbound/sbin/unbound /usr/local/bin/unbound
+COPY --from=unbound-builder /opt/unbound/sbin/unbound-control /usr/local/bin/unbound-control
+COPY --from=unbound-builder /opt/unbound/sbin/unbound-checkconf /usr/local/bin/unbound-checkconf
+COPY --from=unbound-builder /opt/unbound/sbin/unbound-anchor /usr/local/bin/unbound-anchor
+
+# Copy default config and root hints
+COPY deploy/unbound/unbound.conf /etc/unbound/unbound.conf
+COPY --from=unbound-builder /opt/unbound/etc/unbound/root.hints /etc/unbound/root.hints
+
+# Create Unbound runtime directories
+RUN mkdir -p /etc/unbound/custom.conf.d /var/run/unbound && \
+    chown -R glory-hole:glory-hole /etc/unbound /var/run/unbound
+```
+
+**Build characteristics**:
+- Dynamically linked against `libssl`, `libevent`, `libexpat` (shared libs
+  added to runtime stage via `apk add libevent libexpat` — OpenSSL is already
+  present from `ca-certificates`).
+- Compile time: ~60-90s on CI runners.
+- Binary size: ~5-6MB (unbound + unbound-control + unbound-checkconf + unbound-anchor).
+- Runtime deps added to final image: `libevent` (~0.5MB) + `libexpat` (~0.2MB).
+- Total image size delta: ~7MB (binaries + shared libs + root.hints + config).
+- Compare to `apk add unbound`: ~15-20MB (pulls full package + all transitive deps).
+
+**Version pinning**: `UNBOUND_VERSION` is a build arg, pinned in the
+Dockerfile. NLnet Labs publishes signed tarballs at a predictable URL.
+Update the version in one place when upgrading.
 
 **No `setcap` needed for Unbound**: It binds only to 127.0.0.1:5353
 (unprivileged port, localhost only). Only Glory-Hole needs `cap_net_bind_service`
@@ -295,9 +353,9 @@ if cfg.Unbound.Enabled && cfg.Unbound.Managed {
         logger.Error("Unbound failed to start", "error", err)
         // Fallback: keep upstream_dns_servers and cache as-is
     } else {
-        // Override upstreams and disable cache
+        // Override upstreams — cache stays active for API purge, metrics,
+        // and blocklist-aware caching
         cfg.UpstreamDNSServers = []string{ubCfg.ListenAddr}
-        cfg.Cache.Enabled = false
         logger.Info("Unbound active, forwarding to local resolver",
             "addr", ubCfg.ListenAddr)
     }

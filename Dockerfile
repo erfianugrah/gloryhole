@@ -1,7 +1,35 @@
 # Glory-Hole DNS Server
 # Multi-stage Docker build for production deployment
 
-# Stage 1: Build
+# Stage 1a: Build Unbound from source (runs in parallel with Go build)
+FROM alpine:3.21 AS unbound-builder
+
+ARG UNBOUND_VERSION=1.24.2
+
+RUN apk add --no-cache build-base openssl-dev libexpat expat-dev libevent-dev curl
+
+RUN curl -fsSL "https://nlnetlabs.nl/downloads/unbound/unbound-${UNBOUND_VERSION}.tar.gz" \
+        -o unbound.tar.gz && \
+    tar xzf unbound.tar.gz
+
+WORKDIR /unbound-${UNBOUND_VERSION}
+
+RUN ./configure \
+        --prefix=/opt/unbound \
+        --with-libevent \
+        --with-ssl \
+        --disable-shared \
+        --disable-flto \
+        --without-pythonmodule \
+        --without-pyunbound && \
+    make -j$(nproc) && \
+    make install
+
+# Fetch fresh root hints
+RUN curl -fsSL https://www.internic.net/domain/named.root \
+        -o /opt/unbound/etc/unbound/root.hints
+
+# Stage 1b: Build Glory-Hole
 FROM golang:1.24-alpine AS builder
 
 # Accept build arguments
@@ -54,6 +82,8 @@ RUN apk --no-cache add \
 	sqlite \
 	su-exec \
 	libcap \
+	libevent \
+	libexpat \
 	&& rm -rf /var/cache/apk/*
 
 # Create non-root user
@@ -63,6 +93,21 @@ RUN addgroup -g 1000 glory-hole && \
 # Create necessary directories
 RUN mkdir -p /etc/glory-hole /var/lib/glory-hole /var/log/glory-hole && \
 	chown -R glory-hole:glory-hole /etc/glory-hole /var/lib/glory-hole /var/log/glory-hole
+
+# Copy Unbound static binaries from build stage
+COPY --from=unbound-builder /opt/unbound/sbin/unbound /usr/local/bin/unbound
+COPY --from=unbound-builder /opt/unbound/sbin/unbound-control /usr/local/bin/unbound-control
+COPY --from=unbound-builder /opt/unbound/sbin/unbound-checkconf /usr/local/bin/unbound-checkconf
+COPY --from=unbound-builder /opt/unbound/sbin/unbound-anchor /usr/local/bin/unbound-anchor
+
+# Copy default Unbound config and root hints
+COPY deploy/unbound/unbound.conf /etc/unbound/unbound.conf
+COPY --from=unbound-builder /opt/unbound/etc/unbound/root.hints /etc/unbound/root.hints
+
+# Create Unbound runtime directories and bootstrap DNSSEC root key
+RUN mkdir -p /etc/unbound/custom.conf.d /var/run/unbound && \
+	/usr/local/bin/unbound-anchor -a /etc/unbound/root.key || true && \
+	chown -R glory-hole:glory-hole /etc/unbound /var/run/unbound
 
 # Copy binary from builder
 COPY --from=builder /build/glory-hole /usr/local/bin/glory-hole
