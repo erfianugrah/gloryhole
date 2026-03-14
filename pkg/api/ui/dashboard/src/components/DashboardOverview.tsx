@@ -21,6 +21,9 @@ import {
   Cpu,
   HardDrive,
   Thermometer,
+  Server,
+  Shield,
+  Gauge,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -38,12 +41,16 @@ import type {
   TimeseriesBucket,
   QueryTypeCount,
   TopDomain,
+  UnboundStatus,
+  UnboundStats,
 } from "@/lib/api";
 import {
   fetchStats,
   fetchTimeseries,
   fetchQueryTypes,
   fetchTopDomains,
+  fetchUnboundStatus,
+  fetchUnboundStats,
 } from "@/lib/api";
 
 // ─── Helpers ────────────────────────────────────────────────────────
@@ -97,6 +104,10 @@ export function DashboardOverview() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Resolver state (conditionally loaded)
+  const [resolverStatus, setResolverStatus] = useState<UnboundStatus | null>(null);
+  const [resolverStats, setResolverStats] = useState<UnboundStats | null>(null);
+
   const buckets = TIME_RANGES.find((r) => r.value === range)?.buckets ?? 24;
 
   const loadData = useCallback(async () => {
@@ -113,6 +124,21 @@ export function DashboardOverview() {
       setQueryTypes(qt);
       setTopAllowed(ta);
       setTopBlocked(tb);
+
+      // Load resolver stats if enabled (non-blocking)
+      try {
+        const rs = await fetchUnboundStatus();
+        setResolverStatus(rs);
+        if (rs.enabled && rs.state === "running") {
+          const rst = await fetchUnboundStats();
+          setResolverStats(rst);
+        }
+      } catch {
+        // Resolver not available — hide cards silently
+        setResolverStatus(null);
+        setResolverStats(null);
+      }
+
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load data");
@@ -221,6 +247,33 @@ export function DashboardOverview() {
               }
             />
           )}
+        </div>
+      )}
+
+      {/* Resolver Metrics (shown when Unbound is enabled) */}
+      {resolverStatus?.enabled && resolverStatus.state === "running" && resolverStats && (
+        <div className="grid gap-4 md:grid-cols-3">
+          <StatCard
+            icon={<Server className="h-4 w-4" />}
+            label="Resolver"
+            value={resolverStatus.state === "running" ? "Running" : resolverStatus.state}
+            sub="DNSSEC active"
+            color="text-gh-green"
+          />
+          <StatCard
+            icon={<Gauge className="h-4 w-4" />}
+            label="Resolver Cache"
+            value={`${resolverStats.cache_hit_rate.toFixed(1)}%`}
+            sub={`${resolverStats.cache_hits.toLocaleString()} hits`}
+            color="text-gh-blue"
+          />
+          <StatCard
+            icon={<Shield className="h-4 w-4" />}
+            label="Avg Recursion"
+            value={formatMs(resolverStats.avg_recursion_ms)}
+            sub={`${resolverStats.total_queries.toLocaleString()} recursive queries`}
+            color="text-gh-cyan"
+          />
         </div>
       )}
 

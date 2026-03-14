@@ -882,12 +882,55 @@ func main() {
 			}
 		}
 
+		// Hot-reload Unbound resolver config
+		if !equalUnboundConfig(&cfg.Unbound, &newCfg.Unbound) {
+			logger.Info("Unbound configuration changed")
+
+			// Case 1: Unbound disabled → enabled
+			if !cfg.Unbound.Enabled && newCfg.Unbound.Enabled && newCfg.Unbound.Managed {
+				logger.Info("Enabling Unbound resolver")
+				sup := unbound.NewSupervisor(&newCfg.Unbound, logger)
+				if err := sup.Start(ctx); err != nil {
+					logger.Error("Failed to start Unbound", "error", err)
+				} else {
+					unboundSupervisor = sup
+					newCfg.UpstreamDNSServers = []string{sup.ListenAddr()}
+					handler.SetForwarder(forwarder.NewForwarder(newCfg, logger))
+					apiServer.SetUnboundSupervisor(sup)
+					logger.Info("Unbound started via hot-reload", "addr", sup.ListenAddr())
+				}
+			}
+
+			// Case 2: Unbound enabled → disabled
+			if cfg.Unbound.Enabled && !newCfg.Unbound.Enabled {
+				logger.Info("Disabling Unbound resolver")
+				if unboundSupervisor != nil {
+					_ = unboundSupervisor.Stop()
+					unboundSupervisor = nil
+				}
+				apiServer.SetUnboundSupervisor(nil)
+				// Restore original upstreams from new config
+				handler.SetForwarder(forwarder.NewForwarder(newCfg, logger))
+				logger.Info("Unbound stopped, reverted to direct forwarding",
+					"upstreams", newCfg.UpstreamDNSServers)
+			}
+
+			// Case 3: Still enabled but config changed (port, socket, etc.)
+			if cfg.Unbound.Enabled && newCfg.Unbound.Enabled && unboundSupervisor != nil {
+				if cfg.Unbound.ListenPort != newCfg.Unbound.ListenPort {
+					logger.Warn("Unbound listen port changed — requires restart to take effect",
+						"old", cfg.Unbound.ListenPort, "new", newCfg.Unbound.ListenPort)
+				}
+			}
+		}
+
 		// Update the cfg reference for next comparison
 		cfg = newCfg
 
 		// Note: Some config changes still require server restart:
 		// - ListenAddress (DNS/API bind addresses)
 		// - Database settings (connection strings)
+		// - Unbound listen port changes
 		// These will take effect on next server restart
 	})
 
@@ -1039,6 +1082,17 @@ func equalConditionalForwardingConfig(a, b *config.ConditionalForwardingConfig) 
 		}
 	}
 	return true
+}
+
+// equalUnboundConfig compares two Unbound configurations
+func equalUnboundConfig(a, b *config.UnboundConfig) bool {
+	return a.Enabled == b.Enabled &&
+		a.Managed == b.Managed &&
+		a.ListenPort == b.ListenPort &&
+		a.BinaryPath == b.BinaryPath &&
+		a.ConfigPath == b.ConfigPath &&
+		a.ControlSocket == b.ControlSocket &&
+		equalStringSlice(a.FallbackUpstreams, b.FallbackUpstreams)
 }
 
 // equalStringSlice compares two string slices

@@ -88,6 +88,25 @@ jobs:
         version: v2.6.2
         args: --verbose --output.text.print-issued-lines=false
 
+  # Docker build verification — ensures the full image builds including Unbound
+  docker-build:
+    name: Docker Build
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v6
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Build Docker image (no push)
+      uses: docker/build-push-action@v6
+      with:
+        context: .
+        push: false
+        tags: glory-hole:ci-test
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
   # Security scans run in parallel with build-and-test and lint
   security:
     name: Security Scans
