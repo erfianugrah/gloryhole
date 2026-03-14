@@ -560,12 +560,12 @@ func (i *PiholeImporter) WriteConfig(cfg *config.Config) error {
 	var output strings.Builder
 	output.WriteString("# Glory-Hole Configuration\n")
 	output.WriteString("# Imported from Pi-hole\n")
-	output.WriteString(fmt.Sprintf("# Import date: %s\n", time.Now().Format(time.RFC3339)))
+	fmt.Fprintf(&output, "# Import date: %s\n", time.Now().Format(time.RFC3339))
 	output.WriteString("\n")
 	if i.zipPath != "" {
-		output.WriteString(fmt.Sprintf("# Import source: %s\n", filepath.Base(i.zipPath)))
+		fmt.Fprintf(&output, "# Import source: %s\n", filepath.Base(i.zipPath))
 	} else {
-		output.WriteString(fmt.Sprintf("# Import source: %s\n", i.gravityDB))
+		fmt.Fprintf(&output, "# Import source: %s\n", i.gravityDB)
 	}
 	output.WriteString("\n")
 	output.Write(data)
