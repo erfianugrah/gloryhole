@@ -1,8 +1,11 @@
 [Unit]
 Description=Glory-Hole DNS Server
-Documentation=https://github.com/yourusername/glory-hole
+Documentation=https://github.com/erfianugrah/glory-hole
 After=network-online.target
 Wants=network-online.target
+# If using external Unbound (unbound.managed: false), uncomment:
+# Wants=unbound.service
+# After=unbound.service
 
 [Service]
 Type=simple
@@ -18,7 +21,9 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths=/var/lib/glory-hole
+# /var/lib/glory-hole: database, /etc/glory-hole: config persistence
+# /etc/unbound + /var/run/unbound: when unbound.managed=true
+ReadWritePaths=/var/lib/glory-hole /etc/glory-hole /etc/unbound /var/run/unbound
 ProtectKernelTunables=true
 ProtectKernelModules=true
 ProtectControlGroups=true

@@ -157,3 +157,18 @@ func (s *Server) handleConditionalForwardingPage(w http.ResponseWriter, r *http.
 func (s *Server) handleSettingsPage(w http.ResponseWriter, r *http.Request) {
 	s.serveAstroPage(w, r, "settings/index.html")
 }
+
+// handleResolverPage serves the Unbound resolver overview page (Astro pre-rendered).
+func (s *Server) handleResolverPage(w http.ResponseWriter, r *http.Request) {
+	s.serveAstroPage(w, r, "resolver/index.html")
+}
+
+// handleResolverSettingsPage serves the resolver settings page (Astro pre-rendered).
+func (s *Server) handleResolverSettingsPage(w http.ResponseWriter, r *http.Request) {
+	s.serveAstroPage(w, r, "resolver/settings/index.html")
+}
+
+// handleResolverZonesPage serves the resolver zones page (Astro pre-rendered).
+func (s *Server) handleResolverZonesPage(w http.ResponseWriter, r *http.Request) {
+	s.serveAstroPage(w, r, "resolver/zones/index.html")
+}

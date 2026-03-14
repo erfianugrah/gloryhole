@@ -96,7 +96,34 @@ func (s *Supervisor) CheckconfBin() string {
 	return s.checkconfBin
 }
 
+// SyncLocalData pushes local DNS records to Unbound via unbound-control.
+// This is called when local records change in Glory-Hole's config.
+func (s *Supervisor) SyncLocalData(records []LocalDataEntry) error {
+	// First remove all existing local data
+	_ = s.runControl("local_zones_remove")
+
+	// Add each record
+	for _, r := range records {
+		if err := s.runControl("local_zone", r.Zone, "transparent"); err != nil {
+			s.logger.Warn("Failed to add local zone", "zone", r.Zone, "error", err)
+		}
+		if err := s.runControl("local_data", r.RR); err != nil {
+			s.logger.Warn("Failed to add local data", "rr", r.RR, "error", err)
+		}
+	}
+
+	return nil
+}
+
+// LocalDataEntry represents a local DNS record for Unbound sync.
+type LocalDataEntry struct {
+	Zone string // e.g. "nas.local."
+	RR   string // e.g. "nas.local. A 10.0.0.5"
+}
+
 // Start begins the Unbound process and waits for readiness.
+// In managed mode, starts and supervises the child process.
+// In external mode (managed: false), just verifies connectivity.
 func (s *Supervisor) Start(ctx context.Context) error {
 	s.mu.Lock()
 	if s.state == StateRunning || s.state == StateStarting {
@@ -106,10 +133,14 @@ func (s *Supervisor) Start(ctx context.Context) error {
 	s.state = StateStarting
 	s.mu.Unlock()
 
-	// Auto-detect binary paths
+	// Auto-detect binary paths (best-effort for external mode)
 	if err := s.detectBinaries(); err != nil {
-		s.setState(StateFailed, err)
-		return fmt.Errorf("unbound binaries not found: %w", err)
+		if s.cfg.Managed {
+			s.setState(StateFailed, err)
+			return fmt.Errorf("unbound binaries not found: %w", err)
+		}
+		// External mode: binaries are optional (only needed for stats/control)
+		s.logger.Warn("Unbound binaries not found (external mode, stats may be unavailable)", "error", err)
 	}
 
 	// Initialize default server config if not already set
@@ -118,6 +149,32 @@ func (s *Supervisor) Start(ctx context.Context) error {
 		s.serverConfig = DefaultServerConfig(s.cfg.ListenPort, s.cfg.ControlSocket)
 	}
 	s.mu.Unlock()
+
+	if !s.cfg.Managed {
+		// External mode: just verify the port is reachable
+		if s.probe() {
+			s.setState(StateRunning, nil)
+			s.logger.Info("Unbound external resolver connected",
+				"addr", s.listenAddr,
+			)
+		} else {
+			s.setState(StateDegraded, fmt.Errorf("cannot reach unbound at %s", s.listenAddr))
+			s.logger.Warn("Unbound external resolver not reachable, will retry via health checks",
+				"addr", s.listenAddr,
+			)
+		}
+
+		// Start health monitor even in external mode
+		healthCtx, healthCancel := context.WithCancel(ctx)
+		s.mu.Lock()
+		s.cancelHealth = healthCancel
+		s.mu.Unlock()
+		go s.healthLoop(healthCtx)
+
+		return nil
+	}
+
+	// --- Managed mode below ---
 
 	// Bootstrap DNSSEC root trust anchor (idempotent)
 	s.bootstrapAnchor()
@@ -410,6 +467,12 @@ func (s *Supervisor) healthLoop(ctx context.Context) {
 }
 
 func (s *Supervisor) handleCrash(ctx context.Context) {
+	// External mode: don't try to restart, just mark degraded
+	if !s.cfg.Managed {
+		s.setState(StateDegraded, fmt.Errorf("external unbound unreachable at %s", s.listenAddr))
+		return
+	}
+
 	s.mu.Lock()
 	now := time.Now()
 

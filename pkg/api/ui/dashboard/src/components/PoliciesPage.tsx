@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback } from "react";
-import { useRef } from "react";
-import { Plus, Trash2, Pencil, Download, Upload, Play } from "lucide-react";
+import { useRef, useState as useStateAlias } from "react";
+import { Plus, Trash2, Pencil, Download, Upload, Play, Wand2 } from "lucide-react";
+import { ConditionEditor, emptyTree, treeToExpression } from "./ConditionEditor";
+import type { ConditionTree } from "./ConditionEditor";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -62,6 +64,8 @@ export function PoliciesPage() {
   const [formEnabled, setFormEnabled] = useState(true);
   const [saving, setSaving] = useState(false);
   const [testDomain, setTestDomain] = useState("");
+  const [showVisualBuilder, setShowVisualBuilder] = useState(false);
+  const [conditionTree, setConditionTree] = useState<ConditionTree>(emptyTree());
 
   const loadData = useCallback(async () => {
     try {
@@ -381,13 +385,47 @@ export function PoliciesPage() {
             </div>
 
             <div className="space-y-2">
-              <Label className={T.formLabel}>Logic Expression</Label>
-              <Textarea
-                value={formLogic}
-                onChange={(e) => { setFormLogic(e.target.value); setTestResult(null); }}
-                placeholder='domain matches "*.ads.example.com"'
-                className="font-data min-h-[80px]"
-              />
+              <div className="flex items-center justify-between">
+                <Label className={T.formLabel}>Logic Expression</Label>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setShowVisualBuilder(!showVisualBuilder);
+                    if (!showVisualBuilder) {
+                      setConditionTree(emptyTree());
+                    }
+                  }}
+                  className="h-6 text-xs px-2"
+                >
+                  <Wand2 className="h-3 w-3 mr-1" />
+                  {showVisualBuilder ? "Text editor" : "Visual builder"}
+                </Button>
+              </div>
+
+              {showVisualBuilder ? (
+                <div className="space-y-2">
+                  <ConditionEditor
+                    tree={conditionTree}
+                    onChange={(tree) => {
+                      setConditionTree(tree);
+                      setFormLogic(treeToExpression(tree));
+                      setTestResult(null);
+                    }}
+                  />
+                  <div className="rounded-md border border-border bg-muted/50 p-2">
+                    <p className="text-[10px] text-muted-foreground mb-1">Generated expression:</p>
+                    <code className="text-xs font-data text-foreground break-all">{formLogic || "—"}</code>
+                  </div>
+                </div>
+              ) : (
+                <Textarea
+                  value={formLogic}
+                  onChange={(e) => { setFormLogic(e.target.value); setTestResult(null); }}
+                  placeholder='Domain == "ads.example.com" || DomainMatches(Domain, "tracking")'
+                  className="font-data min-h-[80px]"
+                />
+              )}
             </div>
 
             {(formAction === "REDIRECT" || formAction === "FORWARD") && (

@@ -523,3 +523,130 @@ export function purgeCache(): Promise<void> {
 export function resetStorage(): Promise<void> {
   return apiFetch<void>("/api/storage/reset", { method: "POST" });
 }
+
+// ─── Unbound Resolver ────────────────────────────────────────────────
+
+export interface UnboundStatus {
+  enabled: boolean;
+  managed: boolean;
+  state: "stopped" | "starting" | "running" | "degraded" | "failed";
+  error?: string;
+  listen_addr?: string;
+}
+
+export interface UnboundStats {
+  total_queries: number;
+  cache_hits: number;
+  cache_miss: number;
+  cache_hit_rate: number;
+  avg_recursion_ms: number;
+  msg_cache_count: number;
+  rrset_cache_count: number;
+  mem_total_bytes: number;
+  uptime_seconds: number;
+  query_types: Record<string, number>;
+  response_codes: Record<string, number>;
+}
+
+export interface UnboundServerBlock {
+  interface: string;
+  port: number;
+  msg_cache_size: string;
+  rrset_cache_size: string;
+  key_cache_size: string;
+  cache_min_ttl: number;
+  cache_max_negative_ttl: number;
+  module_config: string;
+  harden_glue: boolean;
+  harden_dnssec_stripped: boolean;
+  harden_below_nxdomain: boolean;
+  harden_algo_downgrade: boolean;
+  qname_minimisation: boolean;
+  aggressive_nsec: boolean;
+  num_threads: number;
+  edns_buffer_size: number;
+  serve_expired: boolean;
+  serve_expired_ttl: number;
+  prefetch: boolean;
+  prefetch_key: boolean;
+  verbosity: number;
+  log_queries: boolean;
+  log_replies: boolean;
+  log_servfail: boolean;
+  hide_identity: boolean;
+  hide_version: boolean;
+  minimal_responses: boolean;
+  extended_statistics: boolean;
+}
+
+export interface UnboundForwardZone {
+  name: string;
+  forward_addrs: string[];
+  forward_first?: boolean;
+  forward_tls_upstream?: boolean;
+}
+
+export interface UnboundConfig {
+  server: UnboundServerBlock;
+  forward_zones: UnboundForwardZone[];
+  stub_zones: Array<{ name: string; stub_addrs: string[] }>;
+}
+
+export function fetchUnboundStatus(): Promise<UnboundStatus> {
+  return apiFetch<UnboundStatus>("/api/unbound/status");
+}
+
+export function fetchUnboundStats(): Promise<UnboundStats> {
+  return apiFetch<UnboundStats>("/api/unbound/stats");
+}
+
+export function fetchUnboundConfig(): Promise<UnboundConfig> {
+  return apiFetch<UnboundConfig>("/api/unbound/config");
+}
+
+export function updateUnboundServer(
+  config: Partial<UnboundServerBlock>
+): Promise<UnboundServerBlock> {
+  return apiFetch<UnboundServerBlock>("/api/unbound/config/server", {
+    method: "PUT",
+    body: JSON.stringify(config),
+  });
+}
+
+export function fetchForwardZones(): Promise<UnboundForwardZone[]> {
+  return apiFetch<UnboundForwardZone[]>("/api/unbound/forward-zones");
+}
+
+export function createForwardZone(
+  zone: UnboundForwardZone
+): Promise<UnboundForwardZone> {
+  return apiFetch<UnboundForwardZone>("/api/unbound/forward-zones", {
+    method: "POST",
+    body: JSON.stringify(zone),
+  });
+}
+
+export function updateForwardZone(
+  name: string,
+  zone: Partial<UnboundForwardZone>
+): Promise<UnboundForwardZone[]> {
+  return apiFetch<UnboundForwardZone[]>(
+    `/api/unbound/forward-zones/${encodeURIComponent(name)}`,
+    { method: "PUT", body: JSON.stringify(zone) }
+  );
+}
+
+export function deleteForwardZone(name: string): Promise<void> {
+  return apiFetch<void>(
+    `/api/unbound/forward-zones/${encodeURIComponent(name)}`,
+    { method: "DELETE" }
+  );
+}
+
+export function reloadUnbound(): Promise<void> {
+  return apiFetch<void>("/api/unbound/reload", { method: "POST" });
+}
+
+export function flushUnboundCache(): Promise<void> {
+  return apiFetch<void>("/api/unbound/flush-cache", { method: "POST" });
+}
