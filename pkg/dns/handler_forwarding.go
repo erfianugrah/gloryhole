@@ -56,6 +56,16 @@ func (h *Handler) handleConditionalForwarding(ctx context.Context, w dns.Respons
 	// Capture DNSSEC validation status from response
 	outcome.dnssecValidated = resp.AuthenticatedData
 
+	// Extract Extended DNS Error (RFC 8914) from upstream response
+	if edeCode, edeText, hasEDE := ExtractEDE(resp); hasEDE {
+		codeName := EDECodeToString(edeCode)
+		if edeText != "" {
+			outcome.upstreamError = codeName + ": " + edeText
+		} else {
+			outcome.upstreamError = codeName
+		}
+	}
+
 	if h.Cache != nil {
 		h.Cache.Set(ctx, r, resp)
 	}
@@ -89,6 +99,16 @@ func (h *Handler) forwardToUpstream(ctx context.Context, w dns.ResponseWriter, r
 
 	// Capture DNSSEC validation status from response
 	outcome.dnssecValidated = resp.AuthenticatedData
+
+	// Extract Extended DNS Error (RFC 8914) from upstream response
+	if edeCode, edeText, hasEDE := ExtractEDE(resp); hasEDE {
+		codeName := EDECodeToString(edeCode)
+		if edeText != "" {
+			outcome.upstreamError = codeName + ": " + edeText
+		} else {
+			outcome.upstreamError = codeName
+		}
+	}
 
 	if h.Cache != nil {
 		h.Cache.Set(ctx, r, resp)

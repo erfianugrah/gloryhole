@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback } from "react";
-import { Search, X, ChevronDown, ChevronUp } from "lucide-react";
-import { Card, CardContent } from "@/components/ui/card";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { Search, X, ChevronRight, ChevronsDownUp, RefreshCw } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -28,6 +28,15 @@ import { fetchQueries } from "@/lib/api";
 
 // ─── Helpers ────────────────────────────────────────────────────────
 
+const RCODE_NAMES: Record<number, string> = {
+  0: "NOERROR",
+  1: "FORMERR",
+  2: "SERVFAIL",
+  3: "NXDOMAIN",
+  4: "NOTIMP",
+  5: "REFUSED",
+};
+
 function statusBadge(q: QueryLog) {
   if (q.blocked) {
     return <Badge className="bg-gh-red/20 text-gh-red border-gh-red/30">Blocked</Badge>;
@@ -35,8 +44,18 @@ function statusBadge(q: QueryLog) {
   if (q.cached) {
     return <Badge className="bg-gh-blue/20 text-gh-blue border-gh-blue/30">Cached</Badge>;
   }
+  if (q.response_code === 2) {
+    return <Badge className="bg-gh-red/20 text-gh-red border-gh-red/30">SERVFAIL</Badge>;
+  }
+  if (q.response_code === 5) {
+    return <Badge className="bg-gh-peach/20 text-gh-peach border-gh-peach/30">REFUSED</Badge>;
+  }
   if (q.response_code === 3) {
     return <Badge className="bg-gh-peach/20 text-gh-peach border-gh-peach/30">NXDOMAIN</Badge>;
+  }
+  if (q.response_code !== 0 && q.response_code != null) {
+    const name = RCODE_NAMES[q.response_code] ?? `RCODE ${q.response_code}`;
+    return <Badge className="bg-gh-peach/20 text-gh-peach border-gh-peach/30">{name}</Badge>;
   }
   return <Badge className="bg-gh-green/20 text-gh-green border-gh-green/30">Allowed</Badge>;
 }
@@ -73,6 +92,14 @@ const TIME_RANGES = [
   { value: "168h", label: "Last 7d" },
 ] as const;
 
+const AUTO_REFRESH_OPTIONS = [
+  { value: 0, label: "Off" },
+  { value: 5, label: "5s" },
+  { value: 10, label: "10s" },
+  { value: 30, label: "30s" },
+  { value: 60, label: "60s" },
+] as const;
+
 // ─── Component ──────────────────────────────────────────────────────
 
 export function QueryLogPage() {
@@ -86,7 +113,22 @@ export function QueryLogPage() {
   const [range, setRange] = useState("24h");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(50);
-  const [expandedRow, setExpandedRow] = useState<number | null>(null);
+
+  // Multi-row expansion
+  const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
+
+  // Auto-refresh
+  const [refreshInterval, setRefreshInterval] = useState(5);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const toggleExpanded = (id: number) => {
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
 
   const loadData = useCallback(async () => {
     try {
@@ -112,11 +154,16 @@ export function QueryLogPage() {
     loadData();
   }, [loadData]);
 
-  // Auto-refresh every 6s
+  // Auto-refresh interval
   useEffect(() => {
-    const interval = setInterval(loadData, 6000);
-    return () => clearInterval(interval);
-  }, [loadData]);
+    if (intervalRef.current) clearInterval(intervalRef.current);
+    if (refreshInterval > 0) {
+      intervalRef.current = setInterval(loadData, refreshInterval * 1000);
+    }
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
+  }, [loadData, refreshInterval]);
 
   // Reset page when filters change
   useEffect(() => {
@@ -191,6 +238,36 @@ export function QueryLogPage() {
                 ))}
               </SelectContent>
             </Select>
+
+            {/* Auto-refresh selector + manual refresh */}
+            <div className="ml-auto flex items-center gap-2">
+              <span className={T.formLabel}>Refresh</span>
+              <div className="flex rounded-md border border-border">
+                {AUTO_REFRESH_OPTIONS.map((opt, idx) => (
+                  <button
+                    key={opt.value}
+                    onClick={() => setRefreshInterval(opt.value)}
+                    className={cn(
+                      "px-2.5 py-1 text-xs font-data transition-colors",
+                      refreshInterval === opt.value
+                        ? "bg-gh-green/20 text-gh-green"
+                        : "text-muted-foreground hover:text-foreground hover:bg-muted",
+                      idx !== 0 && "border-l border-border",
+                    )}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+              <button
+                onClick={() => loadData()}
+                disabled={loading}
+                className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-50"
+              >
+                <RefreshCw className={cn("h-3.5 w-3.5", loading && "animate-spin")} />
+                Refresh
+              </button>
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -205,16 +282,33 @@ export function QueryLogPage() {
           </CardContent>
         ) : (
           <>
+            {/* Collapse-all header */}
+            {expandedIds.size > 0 && (
+              <CardHeader className="py-2 px-4">
+                <div className="flex items-center justify-end">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 text-xs text-muted-foreground hover:text-foreground"
+                    onClick={() => setExpandedIds(new Set())}
+                    title="Collapse all expanded rows"
+                  >
+                    <ChevronsDownUp className="h-3 w-3 mr-1" />
+                    Collapse ({expandedIds.size})
+                  </Button>
+                </div>
+              </CardHeader>
+            )}
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-[30px]"></TableHead>
                   <TableHead className="w-[100px]">Time</TableHead>
                   <TableHead className="w-[120px]">Client</TableHead>
                   <TableHead>Domain</TableHead>
                   <TableHead className="w-[60px]">Type</TableHead>
                   <TableHead className="w-[90px]">Status</TableHead>
                   <TableHead className="w-[80px] text-right">Latency</TableHead>
-                  <TableHead className="w-[30px]"></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -225,53 +319,57 @@ export function QueryLogPage() {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  queries.map((q, i) => (
-                    <>
-                      <TableRow
-                        key={i}
-                        className="cursor-pointer"
-                        onClick={() => setExpandedRow(expandedRow === i ? null : i)}
-                      >
-                        <TableCell>
-                          <div className={T.tableCellMono}>
-                            {formatTime(q.timestamp)}
-                          </div>
-                          <div className={cn(T.muted, "text-[10px]")}>
-                            {formatDate(q.timestamp)}
-                          </div>
-                        </TableCell>
-                        <TableCell className={T.tableCellMono}>
-                          {q.client_ip}
-                        </TableCell>
-                        <TableCell className={cn(T.tableCellMono, "max-w-[300px] truncate")}>
-                          {q.domain}
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="outline" className="text-[10px]">
-                            {q.query_type}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>{statusBadge(q)}</TableCell>
-                        <TableCell className={T.tableCellNumeric}>
-                          {q.response_time_ms.toFixed(1)}ms
-                        </TableCell>
-                        <TableCell>
-                          {expandedRow === i ? (
-                            <ChevronUp className="h-3 w-3 text-muted-foreground" />
-                          ) : (
-                            <ChevronDown className="h-3 w-3 text-muted-foreground" />
-                          )}
-                        </TableCell>
-                      </TableRow>
-                      {expandedRow === i && (
-                        <TableRow key={`${i}-detail`}>
-                          <TableCell colSpan={7} className="bg-gh-950/50 px-6 py-4">
-                            <QueryDetail query={q} />
+                  queries.map((q, i) => {
+                    const isExpanded = expandedIds.has(i);
+                    return (
+                      <>
+                        <TableRow
+                          key={i}
+                          className="cursor-pointer"
+                          onClick={() => toggleExpanded(i)}
+                        >
+                          <TableCell className="w-6 px-2">
+                            <ChevronRight
+                              className={cn(
+                                "h-3.5 w-3.5 text-muted-foreground transition-transform duration-150",
+                                isExpanded && "rotate-90",
+                              )}
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <div className={T.tableCellMono}>
+                              {formatTime(q.timestamp)}
+                            </div>
+                            <div className={cn(T.muted, "text-[10px]")}>
+                              {formatDate(q.timestamp)}
+                            </div>
+                          </TableCell>
+                          <TableCell className={T.tableCellMono}>
+                            {q.client_ip}
+                          </TableCell>
+                          <TableCell className={cn(T.tableCellMono, "max-w-[300px] truncate")}>
+                            {q.domain}
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className="text-[10px]">
+                              {q.query_type}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>{statusBadge(q)}</TableCell>
+                          <TableCell className={T.tableCellNumeric}>
+                            {q.response_time_ms.toFixed(1)}ms
                           </TableCell>
                         </TableRow>
-                      )}
-                    </>
-                  ))
+                        {isExpanded && (
+                          <TableRow key={`${i}-detail`}>
+                            <TableCell colSpan={7} className="bg-gh-950/50 px-6 py-4">
+                              <QueryDetail query={q} />
+                            </TableCell>
+                          </TableRow>
+                        )}
+                      </>
+                    );
+                  })
                 )}
               </TableBody>
             </Table>
@@ -296,13 +394,19 @@ export function QueryLogPage() {
 // ─── Query Detail ───────────────────────────────────────────────────
 
 function QueryDetail({ query }: { query: QueryLog }) {
+  const rcodeName = RCODE_NAMES[query.response_code] ?? `RCODE ${query.response_code}`;
+
   return (
     <div className="grid gap-4 md:grid-cols-2 text-xs">
       <div className="space-y-2">
         <DetailRow label="Domain" value={query.domain} mono />
         <DetailRow label="Query Type" value={query.query_type} />
         <DetailRow label="Client" value={query.client_ip} mono />
-        <DetailRow label="Response Code" value={String(query.response_code)} />
+        <DetailRow
+          label="Response Code"
+          value={`${query.response_code} (${rcodeName})`}
+          className={query.response_code !== 0 ? "text-gh-red" : ""}
+        />
       </div>
       <div className="space-y-2">
         <DetailRow label="Upstream" value={query.upstream || "N/A"} mono />
@@ -311,6 +415,9 @@ function QueryDetail({ query }: { query: QueryLog }) {
         {query.blocked && <DetailRow label="Status" value="Blocked" className="text-gh-red" />}
         {query.cached && <DetailRow label="Status" value="Cached" className="text-gh-blue" />}
         <DetailRow label="DNSSEC" value={query.dnssec_validated ? "Validated" : "No"} className={query.dnssec_validated ? "text-gh-green" : ""} />
+        {query.upstream_error && (
+          <DetailRow label="Upstream Error" value={query.upstream_error} className="text-gh-red" />
+        )}
       </div>
 
       {/* Block Trace */}

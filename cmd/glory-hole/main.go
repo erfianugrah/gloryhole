@@ -216,6 +216,10 @@ func main() {
 	// Create DNS handler
 	handler := dns.NewHandler()
 	handler.SetDecisionTrace(cfg.Server.DecisionTrace)
+	if cfg.BlockPage.Enabled && cfg.BlockPage.BlockIP != "" {
+		handler.BlockPageIP = cfg.BlockPage.BlockIP
+		logger.Info("Block page enabled", "block_ip", cfg.BlockPage.BlockIP)
+	}
 
 	// Set config watcher for kill-switch feature (hot-reload access)
 	handler.ConfigWatcher = cfgWatcher

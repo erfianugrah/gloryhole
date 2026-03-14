@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.17.0] - 2026-03-14
+
+### Added
+- **Block page**: configurable HTTP block page served when blocked domains resolve to the server's IP, showing the user why the domain was blocked instead of a generic browser error
+- **Extended DNS Errors (EDE, RFC 8914)**: Unbound now returns structured error info (e.g., "DNSSEC Bogus", "Signature Expired") which glory-hole extracts and stores in query logs
+- **Upstream error enrichment**: new `upstream_error` field in query logs captures EDE text from Unbound, surfaced in the query log detail view
+- **DNSSEC validated field**: `dnssec_validated` now persisted in the database and exposed in the API response
+- **Query log auto-refresh**: configurable polling interval (off, 5s, 10s, 30s, 60s) with manual refresh button
+- **Multi-row expansion**: multiple query log rows can be expanded simultaneously (previously only one at a time)
+- **Collapse all**: button to collapse all expanded query log rows at once, showing count of expanded rows
+- **SERVFAIL/REFUSED badges**: query log status column now shows distinct badges for SERVFAIL, REFUSED, NXDOMAIN, and other error rcodes instead of showing "Allowed" for all non-blocked queries
+
+### Changed
+- Unbound config template now enables `ede: yes` and `ede-serve-expired: yes` for richer error diagnostics
+- Query log detail view shows human-readable rcode names (e.g., "2 (SERVFAIL)") with red highlighting for errors
+- Database migration v11 adds `upstream_error` and `dnssec_validated` columns to queries table
+
 ## [0.15.0] - 2026-03-14
 
 ### Added

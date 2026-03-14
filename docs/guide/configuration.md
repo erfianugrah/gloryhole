@@ -458,6 +458,23 @@ cache:
   enabled: false
 ```
 
+## Block Page Configuration
+
+When enabled, blocked domains resolve to the server's own IP instead of returning NXDOMAIN. The web UI HTTP server then serves a styled block page telling the user why the domain was blocked.
+
+> **Note:** This only works for plain HTTP. HTTPS connections will show a certificate error before the block page can be displayed.
+
+```yaml
+block_page:
+  enabled: true
+  block_ip: "10.0.10.10"  # Must be the IP clients use to reach this server
+```
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `enabled` | bool | `false` | Enable block page serving |
+| `block_ip` | string | `""` | IP address to return for blocked domains (must be this server's reachable IP) |
+
 ## Database Configuration
 
 Configure query logging and statistics storage.

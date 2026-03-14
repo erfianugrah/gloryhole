@@ -111,8 +111,8 @@ func NewSQLiteStorage(cfg *Config, metrics MetricsRecorder) (Storage, error) {
 	// Prepare statements
 	stmtInsert, err := db.Prepare(`
 		INSERT INTO queries
-		(timestamp, client_ip, domain, query_type, response_code, blocked, cached, response_time_ms, upstream, upstream_time_ms, block_trace)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		(timestamp, client_ip, domain, query_type, response_code, blocked, cached, response_time_ms, upstream, upstream_time_ms, block_trace, upstream_error, dnssec_validated)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`)
 	if err != nil {
 		_ = db.Close()
@@ -328,6 +328,8 @@ func (s *SQLiteStorage) flushBatch(queries []*QueryLog) error {
 			query.Upstream,
 			query.UpstreamTimeMs,
 			traceValue,
+			query.UpstreamError,
+			query.DNSSECValidated,
 		)
 		if err != nil {
 			return fmt.Errorf("%w: %v", ErrQueryFailed, err)
@@ -640,7 +642,8 @@ func (s *SQLiteStorage) GetRecentQueries(ctx context.Context, limit, offset int)
 
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, timestamp, client_ip, domain, query_type, response_code,
-		       blocked, cached, response_time_ms, upstream, upstream_time_ms, block_trace
+		       blocked, cached, response_time_ms, upstream, upstream_time_ms, block_trace,
+		       upstream_error, dnssec_validated
 		FROM queries
 		ORDER BY timestamp DESC
 		LIMIT ? OFFSET ?
@@ -664,7 +667,8 @@ func (s *SQLiteStorage) GetQueriesByDomain(ctx context.Context, domain string, l
 
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, timestamp, client_ip, domain, query_type, response_code,
-		       blocked, cached, response_time_ms, upstream, upstream_time_ms, block_trace
+		       blocked, cached, response_time_ms, upstream, upstream_time_ms, block_trace,
+		       upstream_error, dnssec_validated
 		FROM queries
 		WHERE domain = ?
 		ORDER BY timestamp DESC
@@ -689,7 +693,8 @@ func (s *SQLiteStorage) GetQueriesByClientIP(ctx context.Context, clientIP strin
 
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, timestamp, client_ip, domain, query_type, response_code,
-		       blocked, cached, response_time_ms, upstream, upstream_time_ms, block_trace
+		       blocked, cached, response_time_ms, upstream, upstream_time_ms, block_trace,
+		       upstream_error, dnssec_validated
 		FROM queries
 		WHERE client_ip = ?
 		ORDER BY timestamp DESC
@@ -1090,7 +1095,8 @@ func (s *SQLiteStorage) GetQueriesFiltered(ctx context.Context, filter QueryFilt
 
 	query := `
 		SELECT id, timestamp, client_ip, domain, query_type, response_code,
-		       blocked, cached, response_time_ms, upstream, upstream_time_ms, block_trace
+		       blocked, cached, response_time_ms, upstream, upstream_time_ms, block_trace,
+		       upstream_error, dnssec_validated
 		FROM queries
 	`
 	conditions := make([]string, 0)
@@ -1420,6 +1426,7 @@ func scanQueryLogs(rows *sql.Rows) ([]*QueryLog, error) {
 		var q QueryLog
 		var upstream sql.NullString
 		var trace sql.NullString
+		var upstreamError sql.NullString
 
 		err := rows.Scan(
 			&q.ID,
@@ -1434,6 +1441,8 @@ func scanQueryLogs(rows *sql.Rows) ([]*QueryLog, error) {
 			&upstream,
 			&q.UpstreamTimeMs,
 			&trace,
+			&upstreamError,
+			&q.DNSSECValidated,
 		)
 		if err != nil {
 			return nil, err
@@ -1441,6 +1450,9 @@ func scanQueryLogs(rows *sql.Rows) ([]*QueryLog, error) {
 
 		if upstream.Valid {
 			q.Upstream = upstream.String
+		}
+		if upstreamError.Valid {
+			q.UpstreamError = upstreamError.String
 		}
 
 		entries, err := decodeBlockTrace(trace)

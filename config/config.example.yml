@@ -334,6 +334,17 @@ policy:
       action: "block"
       enabled: false  # disabled by default
 
+# Block Page (optional)
+# When enabled, blocked domains resolve to the configured IP instead of NXDOMAIN.
+# The web UI server then serves a styled block page for any request whose Host
+# header is a domain name (i.e., not the dashboard itself).
+# This lets users see *why* a domain was blocked instead of a generic browser error.
+# Note: only works for HTTP; HTTPS will show a certificate error before the page.
+block_page:
+  enabled: false                 # Set true to serve block pages
+  block_ip: ""                   # IP to return for blocked domains (must be this server's IP)
+                                 # Example: "10.0.10.10" (the IP clients use to reach glory-hole)
+
 # Integrated Unbound Recursive Resolver (optional)
 # When enabled, Glory-Hole starts Unbound as a supervised child process
 # for recursive resolution and DNSSEC validation. Queries are forwarded

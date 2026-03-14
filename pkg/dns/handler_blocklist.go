@@ -69,8 +69,24 @@ func (h *Handler) handleLegacyBlocklistPath(ctx context.Context, w dns.ResponseW
 		})
 
 		outcome.blocked = true
-		outcome.responseCode = dns.RcodeNameError
-		msg.SetRcode(r, dns.RcodeNameError)
+		// If block page is configured, return the block page IP instead of NXDOMAIN
+		if h.BlockPageIP != "" {
+			blockIP := net.ParseIP(h.BlockPageIP)
+			if blockIP != nil && (qtype == dns.TypeA || qtype == dns.TypeAAAA) {
+				outcome.responseCode = dns.RcodeSuccess
+				if qtype == dns.TypeA && blockIP.To4() != nil {
+					addARecord(msg, domain, blockIP, 60)
+				} else if qtype == dns.TypeAAAA && blockIP.To4() == nil {
+					addAAAARecord(msg, domain, blockIP, 60)
+				}
+			} else {
+				outcome.responseCode = dns.RcodeNameError
+				msg.SetRcode(r, dns.RcodeNameError)
+			}
+		} else {
+			outcome.responseCode = dns.RcodeNameError
+			msg.SetRcode(r, dns.RcodeNameError)
+		}
 
 		// Cache blocked response WITH trace so subsequent cache hits show WHY it was blocked.
 		// Cached decisions are cleared when blocklist is toggled ON to prevent stale decisions.
@@ -100,8 +116,28 @@ func (h *Handler) handleLegacyBlocklistPath(ctx context.Context, w dns.ResponseW
 
 func (h *Handler) handleBlockedDomain(ctx context.Context, w dns.ResponseWriter, r, msg *dns.Msg, qtypeLabel string, trace *blockTraceRecorder, outcome *serveDNSOutcome, match blocklist.MatchResult) bool {
 	outcome.blocked = true
-	outcome.responseCode = dns.RcodeNameError
-	msg.SetRcode(r, dns.RcodeNameError)
+
+	// If block page is configured, return the block page IP instead of NXDOMAIN
+	// so the browser can show a friendly block page instead of a generic error.
+	if h.BlockPageIP != "" && len(r.Question) > 0 {
+		qtype := r.Question[0].Qtype
+		domain := r.Question[0].Name
+		blockIP := net.ParseIP(h.BlockPageIP)
+		if blockIP != nil && (qtype == dns.TypeA || qtype == dns.TypeAAAA) {
+			outcome.responseCode = dns.RcodeSuccess
+			if qtype == dns.TypeA && blockIP.To4() != nil {
+				addARecord(msg, domain, blockIP, 60)
+			} else if qtype == dns.TypeAAAA && blockIP.To4() == nil {
+				addAAAARecord(msg, domain, blockIP, 60)
+			}
+		} else {
+			outcome.responseCode = dns.RcodeNameError
+			msg.SetRcode(r, dns.RcodeNameError)
+		}
+	} else {
+		outcome.responseCode = dns.RcodeNameError
+		msg.SetRcode(r, dns.RcodeNameError)
+	}
 
 	sourceLabel := blocklistTraceSource(match)
 	if sourceLabel == "" {

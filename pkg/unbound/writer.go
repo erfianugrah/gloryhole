@@ -57,6 +57,8 @@ server:
     aggressive-nsec: {{ yesno .Server.AggressiveNSEC }}
     val-clean-additional: yes
     val-permissive-mode: no
+    ede: yes
+    ede-serve-expired: yes
 {{- range .Server.DomainInsecure }}
     domain-insecure: "{{ . }}"
 {{- end }}

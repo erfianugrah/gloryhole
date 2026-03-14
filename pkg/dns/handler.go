@@ -82,6 +82,7 @@ type Handler struct {
 	ConfigWatcher    *config.Watcher   // For kill-switch feature (hot-reload config access)
 	KillSwitch       KillSwitchChecker // For duration-based temporary disabling
 	DecisionTrace    bool
+	BlockPageIP      string // If set, blocked domains resolve to this IP instead of NXDOMAIN
 	Metrics          *telemetry.Metrics
 	Logger           *logging.Logger
 	lookupMu         sync.RWMutex
@@ -307,6 +308,7 @@ func (h *Handler) asyncLogQuery(startTime time.Time, r *dns.Msg, clientIP string
 		ResponseTimeMs:  time.Since(startTime).Seconds() * 1000,
 		UpstreamTimeMs:  outcome.upstreamDuration.Seconds() * 1000,
 		Upstream:        outcome.upstream,
+		UpstreamError:   outcome.upstreamError,
 		BlockTrace:      trace.Entries(),
 	}
 

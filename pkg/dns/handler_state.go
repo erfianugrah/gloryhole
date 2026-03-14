@@ -12,6 +12,7 @@ type serveDNSOutcome struct {
 	cached           bool
 	dnssecValidated  bool // AD flag was set in upstream response
 	upstream         string
+	upstreamError    string // EDE (Extended DNS Error) text from upstream
 	responseCode     int
 	upstreamDuration time.Duration
 }
@@ -35,7 +36,8 @@ func releaseOutcome(o *serveDNSOutcome) {
 	if o == nil {
 		return
 	}
-	// Clear string to avoid holding references
+	// Clear strings to avoid holding references
 	o.upstream = ""
+	o.upstreamError = ""
 	outcomePool.Put(o)
 }

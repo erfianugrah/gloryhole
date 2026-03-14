@@ -43,6 +43,7 @@ type Server struct {
 	version           string
 	configPath        string   // Path to config file for persistence
 	allowedOrigins    []string // Allowed CORS origins
+	blockPageEnabled  bool     // Serve block page for unrecognized hosts
 	authMu            sync.RWMutex
 	authEnabled       bool
 	authHeader        string
@@ -94,6 +95,7 @@ func New(cfg *Config) *Server {
 
 	if cfg.InitialConfig != nil {
 		s.applyAuthConfig(cfg.InitialConfig.Auth)
+		s.blockPageEnabled = cfg.InitialConfig.BlockPage.Enabled && cfg.InitialConfig.BlockPage.BlockIP != ""
 
 		// Set allowed CORS origins (defaults to empty = no cross-origin requests)
 		s.allowedOrigins = cfg.InitialConfig.Server.CORSAllowedOrigins
@@ -232,6 +234,10 @@ func New(cfg *Config) *Server {
 	handler = s.loggingMiddleware(handler)
 	handler = s.securityHeadersMiddleware(handler)
 	handler = s.corsMiddleware(handler)
+	// Block page intercept: for requests to unrecognized hosts, serve block page
+	if s.blockPageEnabled {
+		handler = s.blockPageMiddleware(handler)
+	}
 
 	s.handler = handler
 	s.httpServer = &http.Server{

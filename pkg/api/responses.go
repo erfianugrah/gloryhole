@@ -61,18 +61,20 @@ type TimeSeriesPointResponse struct {
 
 // QueryResponse represents a single DNS query log entry
 type QueryResponse struct {
-	Timestamp      string                    `json:"timestamp"`
-	ClientIP       string                    `json:"client_ip"`
-	Domain         string                    `json:"domain"`
-	QueryType      string                    `json:"query_type"`
-	Upstream       string                    `json:"upstream,omitempty"`
-	ID             int64                     `json:"id"`
-	ResponseCode   int                       `json:"response_code"`
-	ResponseTimeMs float64                   `json:"response_time_ms"`
-	UpstreamTimeMs float64                   `json:"upstream_response_ms"`
-	Blocked        bool                      `json:"blocked"`
-	Cached         bool                      `json:"cached"`
-	BlockTrace     []storage.BlockTraceEntry `json:"block_trace,omitempty"`
+	Timestamp       string                    `json:"timestamp"`
+	ClientIP        string                    `json:"client_ip"`
+	Domain          string                    `json:"domain"`
+	QueryType       string                    `json:"query_type"`
+	Upstream        string                    `json:"upstream,omitempty"`
+	UpstreamError   string                    `json:"upstream_error,omitempty"`
+	ID              int64                     `json:"id"`
+	ResponseCode    int                       `json:"response_code"`
+	ResponseTimeMs  float64                   `json:"response_time_ms"`
+	UpstreamTimeMs  float64                   `json:"upstream_response_ms"`
+	Blocked         bool                      `json:"blocked"`
+	Cached          bool                      `json:"cached"`
+	DNSSECValidated bool                      `json:"dnssec_validated"`
+	BlockTrace      []storage.BlockTraceEntry `json:"block_trace,omitempty"`
 }
 
 // QueriesResponse represents paginated query results
@@ -157,18 +159,20 @@ type TraceStatisticsResponse struct {
 // convertQueryLog converts storage.QueryLog to QueryResponse
 func convertQueryLog(q *storage.QueryLog) QueryResponse {
 	return QueryResponse{
-		ID:             q.ID,
-		Timestamp:      q.Timestamp.Format(time.RFC3339),
-		ClientIP:       q.ClientIP,
-		Domain:         q.Domain,
-		QueryType:      q.QueryType,
-		ResponseCode:   q.ResponseCode,
-		Blocked:        q.Blocked,
-		Cached:         q.Cached,
-		ResponseTimeMs: q.ResponseTimeMs,
-		UpstreamTimeMs: q.UpstreamTimeMs,
-		Upstream:       q.Upstream,
-		BlockTrace:     q.BlockTrace,
+		ID:              q.ID,
+		Timestamp:       q.Timestamp.Format(time.RFC3339),
+		ClientIP:        q.ClientIP,
+		Domain:          q.Domain,
+		QueryType:       q.QueryType,
+		ResponseCode:    q.ResponseCode,
+		Blocked:         q.Blocked,
+		Cached:          q.Cached,
+		DNSSECValidated: q.DNSSECValidated,
+		ResponseTimeMs:  q.ResponseTimeMs,
+		UpstreamTimeMs:  q.UpstreamTimeMs,
+		Upstream:        q.Upstream,
+		UpstreamError:   q.UpstreamError,
+		BlockTrace:      q.BlockTrace,
 	}
 }
 
@@ -226,17 +230,17 @@ func convertTimeSeriesPoints(points []*storage.TimeSeriesPoint) []TimeSeriesPoin
 
 // ConfigResponse represents the public configuration payload used by the Settings UI
 type ConfigResponse struct {
-	Server               ConfigServerResponse    `json:"server"`
-	Cache                ConfigCacheResponse     `json:"cache"`
-	Policy               ConfigPolicyResponse    `json:"policy"`
-	Storage              ConfigStorageResponse   `json:"storage"`
-	Logging              config.LoggingConfig    `json:"logging"`
-	Telemetry            config.TelemetryConfig  `json:"telemetry"`
-	UpstreamDNSServers   []string                `json:"upstream_dns_servers"`
-	Blocklists           []string                `json:"blocklists"`
-	Whitelist            []string                `json:"whitelist"`
-	AutoUpdateBlocklists bool                    `json:"auto_update_blocklists"`
-	UpdateInterval       string                  `json:"update_interval"`
+	Server               ConfigServerResponse   `json:"server"`
+	Cache                ConfigCacheResponse    `json:"cache"`
+	Policy               ConfigPolicyResponse   `json:"policy"`
+	Storage              ConfigStorageResponse  `json:"storage"`
+	Logging              config.LoggingConfig   `json:"logging"`
+	Telemetry            config.TelemetryConfig `json:"telemetry"`
+	UpstreamDNSServers   []string               `json:"upstream_dns_servers"`
+	Blocklists           []string               `json:"blocklists"`
+	Whitelist            []string               `json:"whitelist"`
+	AutoUpdateBlocklists bool                   `json:"auto_update_blocklists"`
+	UpdateInterval       string                 `json:"update_interval"`
 }
 
 type ConfigServerResponse struct {

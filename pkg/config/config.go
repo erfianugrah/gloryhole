@@ -31,6 +31,7 @@ type Config struct {
 	Logging               LoggingConfig               `yaml:"logging"`
 	Database              storage.Config              `yaml:"database"`
 	Cache                 CacheConfig                 `yaml:"cache"`
+	BlockPage             BlockPageConfig             `yaml:"block_page"`
 	Unbound               UnboundConfig               `yaml:"unbound"`
 	UpdateInterval        time.Duration               `yaml:"update_interval"`
 	AutoUpdateBlocklists  bool                        `yaml:"auto_update_blocklists"`
@@ -155,6 +156,15 @@ func (a *AuthConfig) migratePasswordToHash() {
 	}
 	a.PasswordHash = string(hash)
 	a.Password = "" // Clear plaintext
+}
+
+// BlockPageConfig controls the HTTP block page served for blocked domains.
+// When enabled, blocked domains resolve to BlockIP instead of NXDOMAIN,
+// and the web UI server responds with a styled block page for any
+// unrecognized Host header.
+type BlockPageConfig struct {
+	Enabled bool   `yaml:"enabled"`  // Enable block page (default: false)
+	BlockIP string `yaml:"block_ip"` // IP to return for blocked domains (must be the server's own IP)
 }
 
 // CacheConfig holds cache settings

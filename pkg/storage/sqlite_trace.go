@@ -111,7 +111,8 @@ func (s *SQLiteStorage) GetQueriesWithTraceFilter(ctx context.Context, filter Tr
 	// Start with base query
 	query := `
 		SELECT id, timestamp, client_ip, domain, query_type, response_code,
-		       blocked, cached, response_time_ms, upstream, upstream_time_ms, block_trace
+		       blocked, cached, response_time_ms, upstream, upstream_time_ms, block_trace,
+		       upstream_error, dnssec_validated
 		FROM queries
 		WHERE blocked = 1 AND block_trace IS NOT NULL
 		ORDER BY timestamp DESC

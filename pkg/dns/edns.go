@@ -109,3 +109,79 @@ func HandleEDNS0(req *dns.Msg, resp *dns.Msg) {
 	ednsInfo := GetEDNSInfo(req)
 	SetEDNS0(resp, ednsInfo)
 }
+
+// ExtractEDE extracts the Extended DNS Error (RFC 8914) from a DNS response.
+// Returns the info code, human-readable text, and whether EDE was present.
+func ExtractEDE(resp *dns.Msg) (uint16, string, bool) {
+	if resp == nil {
+		return 0, "", false
+	}
+	opt := resp.IsEdns0()
+	if opt == nil {
+		return 0, "", false
+	}
+	for _, o := range opt.Option {
+		if ede, ok := o.(*dns.EDNS0_EDE); ok {
+			return ede.InfoCode, ede.ExtraText, true
+		}
+	}
+	return 0, "", false
+}
+
+// EDECodeToString returns a human-readable name for an EDE info code (RFC 8914).
+func EDECodeToString(code uint16) string {
+	switch code {
+	case 0:
+		return "Other"
+	case 1:
+		return "Unsupported DNSKEY Algorithm"
+	case 2:
+		return "Unsupported DS Digest Type"
+	case 3:
+		return "Stale Answer"
+	case 4:
+		return "Forged Answer"
+	case 5:
+		return "DNSSEC Indeterminate"
+	case 6:
+		return "DNSSEC Bogus"
+	case 7:
+		return "Signature Expired"
+	case 8:
+		return "Signature Not Yet Valid"
+	case 9:
+		return "DNSKEY Missing"
+	case 10:
+		return "RRSIGs Missing"
+	case 11:
+		return "No Zone Key Bit Set"
+	case 12:
+		return "NSEC Missing"
+	case 13:
+		return "Cached Error"
+	case 14:
+		return "Not Ready"
+	case 15:
+		return "Blocked"
+	case 16:
+		return "Censored"
+	case 17:
+		return "Filtered"
+	case 18:
+		return "Prohibited"
+	case 19:
+		return "Stale NXDOMAIN Answer"
+	case 20:
+		return "Not Authoritative"
+	case 21:
+		return "Not Supported"
+	case 22:
+		return "No Reachable Authority"
+	case 23:
+		return "Network Error"
+	case 24:
+		return "Invalid Data"
+	default:
+		return "Unknown"
+	}
+}

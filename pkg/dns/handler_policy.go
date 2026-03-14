@@ -51,8 +51,26 @@ func (h *Handler) handlePolicies(ctx context.Context, w dns.ResponseWriter, r, m
 
 func (h *Handler) handlePolicyBlock(ctx context.Context, w dns.ResponseWriter, r, msg *dns.Msg, rule *policy.Rule, domain, clientIP, qtypeLabel string, trace *blockTraceRecorder, outcome *serveDNSOutcome) bool {
 	outcome.blocked = true
-	outcome.responseCode = dns.RcodeNameError
-	msg.SetRcode(r, dns.RcodeNameError)
+
+	// If block page is configured, return the block page IP instead of NXDOMAIN
+	if h.BlockPageIP != "" && len(r.Question) > 0 {
+		qtype := r.Question[0].Qtype
+		blockIP := net.ParseIP(h.BlockPageIP)
+		if blockIP != nil && (qtype == dns.TypeA || qtype == dns.TypeAAAA) {
+			outcome.responseCode = dns.RcodeSuccess
+			if qtype == dns.TypeA && blockIP.To4() != nil {
+				addARecord(msg, domain, blockIP, 60)
+			} else if qtype == dns.TypeAAAA && blockIP.To4() == nil {
+				addAAAARecord(msg, domain, blockIP, 60)
+			}
+		} else {
+			outcome.responseCode = dns.RcodeNameError
+			msg.SetRcode(r, dns.RcodeNameError)
+		}
+	} else {
+		outcome.responseCode = dns.RcodeNameError
+		msg.SetRcode(r, dns.RcodeNameError)
+	}
 
 	// Record trace BEFORE response - this appears in query logs
 	trace.Record(traceStagePolicy, string(rule.Action), func(entry *storage.BlockTraceEntry) {
@@ -139,6 +157,17 @@ func (h *Handler) handlePolicyAllow(ctx context.Context, w dns.ResponseWriter, r
 	}
 
 	h.recordForwardedQuery(ctx, "policy_allow", qtypeLabel, outcome.upstream)
+
+	// Capture DNSSEC and EDE from upstream response
+	outcome.dnssecValidated = resp.AuthenticatedData
+	if edeCode, edeText, hasEDE := ExtractEDE(resp); hasEDE {
+		codeName := EDECodeToString(edeCode)
+		if edeText != "" {
+			outcome.upstreamError = codeName + ": " + edeText
+		} else {
+			outcome.upstreamError = codeName
+		}
+	}
 
 	if h.Cache != nil {
 		h.Cache.Set(ctx, r, resp)
@@ -261,6 +290,17 @@ func (h *Handler) handlePolicyForward(ctx context.Context, w dns.ResponseWriter,
 	}
 
 	h.recordForwardedQuery(ctx, "conditional_rule", qtypeLabel, outcome.upstream)
+
+	// Capture DNSSEC and EDE from upstream response
+	outcome.dnssecValidated = resp.AuthenticatedData
+	if edeCode, edeText, hasEDE := ExtractEDE(resp); hasEDE {
+		codeName := EDECodeToString(edeCode)
+		if edeText != "" {
+			outcome.upstreamError = codeName + ": " + edeText
+		} else {
+			outcome.upstreamError = codeName
+		}
+	}
 
 	if h.Cache != nil {
 		h.Cache.Set(ctx, r, resp)

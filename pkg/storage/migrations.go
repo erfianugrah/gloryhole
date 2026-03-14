@@ -224,6 +224,14 @@ var migrations = []Migration{
 			DROP INDEX IF EXISTS idx_queries_query_type;
 		`,
 	},
+	{
+		Version:     11,
+		Description: "Add upstream_error and dnssec_validated columns to queries",
+		SQL: `
+			ALTER TABLE queries ADD COLUMN upstream_error TEXT;
+			ALTER TABLE queries ADD COLUMN dnssec_validated BOOLEAN NOT NULL DEFAULT 0;
+		`,
+	},
 }
 
 // getMigrations returns all migrations sorted by version

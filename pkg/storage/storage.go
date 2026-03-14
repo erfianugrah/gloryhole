@@ -49,6 +49,7 @@ type QueryLog struct {
 	Domain          string            `json:"domain"`
 	QueryType       string            `json:"query_type"`
 	Upstream        string            `json:"upstream,omitempty"`
+	UpstreamError   string            `json:"upstream_error,omitempty"`
 	ID              int64             `json:"id"`
 	ResponseCode    int               `json:"response_code"`
 	ResponseTimeMs  float64           `json:"response_time_ms"`
