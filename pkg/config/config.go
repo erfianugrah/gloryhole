@@ -38,13 +38,12 @@ type Config struct {
 
 // UnboundConfig controls the integrated Unbound recursive resolver.
 type UnboundConfig struct {
-	BinaryPath        string   `yaml:"binary_path"`        // Path to unbound binary (auto-detected if empty)
-	ConfigPath        string   `yaml:"config_path"`        // Path to unbound.conf
-	ControlSocket     string   `yaml:"control_socket"`     // Path to unbound-control socket
-	FallbackUpstreams []string `yaml:"fallback_upstreams"` // Upstreams to use when Unbound is down
-	ListenPort        int      `yaml:"listen_port"`        // Port Unbound listens on (default: 5353)
-	Enabled           bool     `yaml:"enabled"`            // Enable Unbound integration
-	Managed           bool     `yaml:"managed"`            // true = supervise process, false = external
+	BinaryPath    string `yaml:"binary_path"`    // Path to unbound binary (auto-detected if empty)
+	ConfigPath    string `yaml:"config_path"`    // Path to unbound.conf
+	ControlSocket string `yaml:"control_socket"` // Path to unbound-control socket
+	ListenPort    int    `yaml:"listen_port"`    // Port Unbound listens on (default: 5353)
+	Enabled       bool   `yaml:"enabled"`        // Enable Unbound integration
+	Managed       bool   `yaml:"managed"`        // true = supervise process, false = external
 }
 
 // ForwarderConfig holds DNS forwarder configuration

@@ -84,6 +84,3 @@ unbound:
   config_path: /etc/unbound/unbound.conf
   listen_port: 5353
   control_socket: /var/run/unbound/control.sock
-  fallback_upstreams:
-    - 1.1.1.1:53
-    - 8.8.8.8:53

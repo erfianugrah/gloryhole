@@ -101,9 +101,6 @@ unbound:
   enabled: false               # Set true for recursive resolution + DNSSEC
   managed: true                # true = supervise process, false = external
   listen_port: 5353
-  fallback_upstreams:          # Used if Unbound fails to start
-    - "1.1.1.1:53"
-    - "8.8.8.8:53"
 
 blocklists:
   - "https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/ultimate.txt"

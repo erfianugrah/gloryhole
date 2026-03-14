@@ -1095,8 +1095,7 @@ func equalUnboundConfig(a, b *config.UnboundConfig) bool {
 		a.ListenPort == b.ListenPort &&
 		a.BinaryPath == b.BinaryPath &&
 		a.ConfigPath == b.ConfigPath &&
-		a.ControlSocket == b.ControlSocket &&
-		equalStringSlice(a.FallbackUpstreams, b.FallbackUpstreams)
+		a.ControlSocket == b.ControlSocket
 }
 
 // equalStringSlice compares two string slices
