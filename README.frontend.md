@@ -2,121 +2,85 @@
 
 ## Overview
 
-The Glory-Hole UI uses npm to manage frontend dependencies. All external libraries (HTMX, Chart.js, fonts) are installed via npm and copied to the static directory during build.
+The Glory-Hole dashboard is built with **Astro 6 + React 19 + shadcn/ui + Tailwind v4**. It compiles to static HTML/JS/CSS files that are embedded into the Go binary via `go:embed`. All fonts, icons, and assets are bundled -- zero external CDN or Google Fonts requests at runtime.
 
-## Dependencies
+## Architecture
 
-Frontend dependencies are defined in `package.json`:
+```
+pkg/api/ui/dashboard/          # Astro project root
+├── astro.config.mjs           # Static output, React integration, Tailwind v4
+├── package.json               # Dependencies: astro, react, radix, recharts, lucide
+├── tsconfig.json              # Strict mode, @/* path alias
+├── src/
+│   ├── styles/globals.css     # Tailwind v4 @theme{} + custom utilities
+│   ├── layouts/DashboardLayout.astro
+│   ├── pages/                 # 12 Astro pages (SSG)
+│   ├── components/            # React components + shadcn/ui primitives
+│   ├── hooks/                 # use-pagination
+│   └── lib/                   # API client, utils, typography
+└── dist/                      # Build output (NOT committed)
 
-- **htmx.org** (1.9.12) - HTMX library for dynamic HTML
-- **idiomorph** (0.3.0) - Morphing algorithm for HTMX
-- **chart.js** (4.4.5) - Charts and graphs
-- **@fontsource/jetbrains-mono** - JetBrains Mono font (monospace)
-- **@fontsource/space-grotesk** - Space Grotesk font (body text)
+pkg/api/ui/static/dist/        # Astro outDir — embedded by Go
+```
 
-## Build Process
-
-### Automatic Build
-
-The Makefile automatically handles the frontend build:
+## Build
 
 ```bash
-make build        # Installs npm deps, builds frontend, then builds Go binary
-make clean        # Removes all build artifacts including node_modules
-make npm-install  # Only install npm dependencies
-make npm-build    # Only build frontend assets
+# Full build (UI + Go binary)
+make build
+
+# UI only
+make ui
+
+# Development
+cd pkg/api/ui/dashboard && npm run dev
 ```
 
-### Manual Build
-
-If you need to build frontend assets manually:
-
-```bash
-npm install                # Install dependencies
-npm run build:vendor       # Copy vendor files to static directories
-```
-
-## Output Structure
-
-After building, the following files are generated:
-
-```
-pkg/api/ui/static/
-├── js/
-│   └── vendor/
-│       ├── htmx.min.js           (48 KB)
-│       ├── idiomorph-ext.min.js  (8.4 KB)
-│       └── chart.umd.min.js      (209 KB)
-└── fonts/
-    ├── jetbrains-mono-latin-*.woff2  (4 files, ~84 KB total)
-    ├── space-grotesk-latin-*.woff2   (4 files, ~52 KB total)
-    └── fonts.css                      (font-face declarations)
-```
-
-Total size: **~401 KB** (compared to 801 KB with TTF files)
-
-## Go Embedding
-
-These files are embedded into the Go binary at compile time using `go:embed`:
+The `make build` target runs `npm ci && npm run build` in the dashboard directory before compiling the Go binary. The Astro build outputs to `pkg/api/ui/static/dist/`, which is embedded via:
 
 ```go
-//go:embed ui/static/*
+//go:embed all:ui/static
 var staticFS embed.FS
 ```
 
-The binary remains self-contained with zero runtime dependencies.
+## Pages (12)
+
+| Page | Path | Component |
+|------|------|-----------|
+| Dashboard | `/` | `DashboardOverview.tsx` |
+| Query Log | `/queries` | `QueryLogPage.tsx` |
+| Policies | `/policies` | `PoliciesPage.tsx` |
+| Local Records | `/localrecords` | `LocalRecordsPage.tsx` |
+| Forwarding | `/forwarding` | `ForwardingPage.tsx` |
+| Blocklists | `/blocklists` | `BlocklistsPage.tsx` |
+| Clients | `/clients` | `ClientsPage.tsx` |
+| Settings | `/settings` | `SettingsPage.tsx` (7 tabs) |
+| Resolver Overview | `/resolver` | `ResolverOverviewPage.tsx` |
+| Resolver Settings | `/resolver/settings` | `ResolverSettingsPage.tsx` |
+| Resolver Zones | `/resolver/zones` | `ResolverZonesPage.tsx` |
+| Login | `/login` | Standalone (no layout) |
+
+## Bundle Size
+
+- **JS + CSS gzipped**: ~248KB (target: <500KB)
+- **Fonts**: ~136KB (JetBrains Mono + Space Grotesk, latin woff2 only)
+- **Total dist/**: ~1.5MB uncompressed
+
+## Key Dependencies
+
+- `astro` 6.x — static site generator with React islands
+- `react` 19.x — interactive components via `client:load`
+- `@radix-ui/*` — accessible primitives (dialog, select, switch, tabs, tooltip)
+- `recharts` — React charting (area, bar, pie)
+- `lucide-react` — tree-shakeable icons
+- `tailwindcss` 4.x — CSS-first config via Vite plugin
+- `@fontsource/jetbrains-mono`, `@fontsource/space-grotesk` — self-hosted fonts
 
 ## Development Workflow
 
-1. **First time setup:**
-   ```bash
-   make build
-   ```
+1. Start the Go server: `make dev`
+2. In another terminal: `cd pkg/api/ui/dashboard && npm run dev`
+3. The Astro dev server proxies `/api/*` to the Go server (configure in `astro.config.mjs`)
+4. Changes hot-reload in the browser
 
-2. **Update dependencies:**
-   ```bash
-   # Edit package.json, then:
-   make clean
-   make build
-   ```
-
-3. **Add new vendor library:**
-   - Add to `package.json` dependencies
-   - Update `scripts/copy-vendor.js` to copy the files
-   - Run `make build`
-
-## Why npm?
-
-Using npm provides several benefits over manual CDN downloads:
-
-- **Version management**: Lock specific versions with package.json
-- **Reproducible builds**: package-lock.json ensures consistent builds
-- **Easy updates**: `npm update` to get latest compatible versions
-- **Better fonts**: @fontsource provides optimized woff2 files (smaller, faster)
-- **No external dependencies at runtime**: Everything embedded in Go binary
-
-## CI/CD Integration
-
-The Makefile integrates seamlessly with CI/CD:
-
-```yaml
-# Example GitHub Actions
-- name: Build
-  run: make build
-
-# npm install and frontend build happen automatically
-```
-
-## Troubleshooting
-
-**Error: "npm: command not found"**
-- Install Node.js: https://nodejs.org/
-
-**Error: "Module not found"**
-- Run `npm install` first
-- Check `package.json` for correct dependencies
-
-**Fonts not loading:**
-- Verify files in `pkg/api/ui/static/fonts/`
-- Check browser console for 404 errors
-- Rebuild: `make clean && make build`
+For production, always run `make build` which builds the UI first, then compiles everything into the Go binary.

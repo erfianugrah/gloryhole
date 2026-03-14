@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-03-14
+
+### Added
+- **Integrated Unbound 1.24.2 recursive resolver**: compiled from source in Docker multi-stage build, supervised as a child process with health monitoring, crash restart with exponential backoff, and graceful fallback to direct forwarding
+- **DNSSEC validation**: AD flag on signed domains, SERVFAIL on bogus domains, root trust anchor bootstrapped at image build time
+- **Unbound REST API**: 11 endpoints under `/api/unbound/*` for status, stats, config, forward zone CRUD, reload, and cache flush
+- **Unbound config model**: typed Go structs, text/template serializer generating valid unbound.conf, unbound-checkconf validation wrapper
+- **External mode**: `unbound.managed: false` for user-managed Unbound instances (systemd, etc.)
+- **3 resolver UI pages**: overview (status cards, cache stats, query types), settings (6 tabbed config sections), zones (forward zone CRUD with TLS/forward-first options)
+- **Dashboard resolver integration**: resolver stat cards (status, cache hit rate, avg recursion latency) on main overview when Unbound is enabled
+- **Visual condition editor**: recursive AND/OR/NOT tree builder for policy expressions with 5 fields and 7 operators, toggleable between visual and text modes
+- **Policy JSON import**: file picker import supporting both array and `{policies: [...]}` format
+- **Client group CRUD**: create/delete groups on Clients page with inline badge display
+- **Blocklist disable duration**: selector for timed disable (5m, 15m, 30m, 1h, 6h, 24h, indefinite)
+- **Settings tabs**: Logging (level/format/output), TLS (DoT enable, cert paths, ACME DNS-01), Authentication (read-only status with CLI instructions), Cache (full config: max entries, TTLs, shards)
+- **Hot-reload for Unbound config**: OnChange callback handles enable/disable toggle at runtime
+- **CI Docker build job**: verifies full image builds including Unbound from-source stage
+- ARIA labels on all icon-only buttons and switch components
+- `updateTLSConfig()` API client function for TLS settings management
+
+### Changed
+- Dashboard now uses Astro 6 + React 19 + shadcn/ui (12 pages, 248KB gzipped bundle)
+- Docker image includes Unbound binaries (~83MB total, up from ~55MB)
+- Dockerfile uses parallel multi-stage build (Unbound + Go compile concurrently)
+- `deploy/systemd/glory-hole.service` updated with Unbound directory paths
+- README updated with Unbound documentation and architecture changes
+
+### Fixed
+- `.dockerignore` now allows `deploy/unbound/` through the `deploy/` exclusion
+- `docker-entrypoint.sh` sets ownership on `/etc/unbound` and `/var/run/unbound`
+
 ## [0.13.1] - 2026-02-04
 
 ### Changed

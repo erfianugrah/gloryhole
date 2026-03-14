@@ -74,7 +74,7 @@ What you expected to happen.
 What actually happened.
 
 **Environment:**
-- Glory-Hole version: [e.g., 0.6.0]
+- Glory-Hole version: [e.g., 0.15.0]
 - OS: [e.g., Ubuntu 22.04]
 - Go version: [e.g., 1.25.4]
 - Configuration: [relevant config.yml sections]

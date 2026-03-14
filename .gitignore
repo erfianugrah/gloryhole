@@ -45,21 +45,21 @@ pkg/api/ui/dashboard/.astro/
 .DS_Store
 
 # Build output
-/glory-hole # The executable in root directory
+# The executable in root directory
+/glory-hole
 
 # Configuration files that might contain sensitive info or be user-specific
 /config.yml
 
 # Claude Code artifacts
 .claude/
+CLAUDE.md
 cf-docs
 *glory-hole.db*
-CLAUDE.md
 coverage.out
 /pihole/
 config.personal.yml
 test-output.txt
-AGENTS.md
 .gocache
 .gopath
 .gomodcache/

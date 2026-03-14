@@ -4,17 +4,18 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/erfianugrah/gloryhole)](https://goreportcard.com/report/github.com/erfianugrah/gloryhole)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-Glory-Hole is a self-contained DNS resolver that combines blocklists, an expression-based policy engine, local-zone management, rate limiting, telemetry, and a responsive Web UI in a single Go binary. It now includes native Cloudflare DNS-01 certificate issuance for DoT alongside HTTP-01 autocert and manual PEMs.
+Glory-Hole is a self-contained DNS server that combines ad-blocking, an expression-based policy engine, local-zone management, and a modern Astro + React dashboard in a single Go binary. Optional integrated Unbound resolver provides recursive resolution with DNSSEC validation out of the box.
 
 ## Highlights
 
 - Multi-threaded UDP/TCP DNS server with hot reloading via `pkg/config/watcher`.
+- **Integrated Unbound 1.24.2** recursive resolver with DNSSEC validation, built from source and supervised as a child process. Zero-config: set `unbound.enabled: true`.
 - Blocklist manager that downloads, de-duplicates, and atomically swaps sources (exact + wildcard + regex patterns) with optional auto-updates.
-- Expr-powered policy engine that can BLOCK/ALLOW/REDIRECT/FORWARD queries per domain, client, or schedule.
+- Expr-powered policy engine that can BLOCK/ALLOW/REDIRECT/FORWARD queries per domain, client, or schedule. Visual condition tree builder in the UI.
 - Authoritative local records (A/AAAA/CNAME/TXT/MX/PTR/SRV/NS/SOA/CAA) plus conditional forwarding, whitelist patterns, and kill-switches.
 - LRU/sharded DNS cache, per-client token-bucket rate limiting, query logging with SQLite, and OpenTelemetry + Prometheus metrics.
-- REST API + HTMX Web UI for live stats, query log, policies, blocklists, client roster, and feature toggles, plus a Pi-hole import tool for fast migrations.
-- Guided policy builder with on-the-fly rule tester, JSON export, and live query latency breakdowns (total vs upstream) to quickly debug bottlenecks.
+- **Astro 6 + React 19 + shadcn/ui dashboard** with 12 pages: overview, query log, policies, local records, forwarding, blocklists, clients, settings (7 tabs), and 3 resolver management pages. 248KB gzipped bundle with self-hosted fonts (zero external requests).
+- REST API with 50+ endpoints for full programmatic control, plus a Pi-hole import tool for fast migrations.
 
 ## Architecture Overview
 
@@ -22,9 +23,10 @@ Glory-Hole is a self-contained DNS resolver that combines blocklists, an express
 | --- | --- | --- |
 | Entry point | `cmd/glory-hole` | CLI flags (`--config`, `--version`, `--health-check`, `import-pihole`) and lifecycle wiring. |
 | Core DNS | `pkg/dns`, `pkg/forwarder`, `pkg/cache`, `pkg/ratelimit` | Request processing pipeline, upstream forwarding, caching, rate limiting, decision traces. |
+| Resolver | `pkg/unbound` | Integrated Unbound recursive resolver — process supervisor, config model, template serializer, stats parser. |
 | Filtering | `pkg/blocklist`, `pkg/pattern`, `pkg/policy`, `pkg/localrecords` | Blocklist manager, whitelist/pattern matcher, expression rules, local authority. |
 | Config & storage | `pkg/config`, `pkg/storage`, `pkg/resolver` | YAML config + watcher, SQLite-backed query log/statistics, shared DNS resolver for HTTP clients. |
-| API & UI | `pkg/api` | REST/JSON endpoints, HTMX UI templates, kill-switch controller, health checks. |
+| API & UI | `pkg/api` | REST/JSON endpoints, Astro/React dashboard (12 pages), kill-switch controller, health checks. |
 | Telemetry & logging | `pkg/telemetry`, `pkg/logging` | OpenTelemetry meter, Prometheus exporter, structured slog logger factory. |
 
 Docs, deployment assets, and examples live under `docs/`, `deploy/`, `examples/`, and `test/` per the [repository guidelines](AGENTS.md).
@@ -93,6 +95,15 @@ server:
 upstream_dns_servers:
   - "1.1.1.1:53"
   - "8.8.8.8:53"
+
+# Integrated Unbound recursive resolver (optional)
+unbound:
+  enabled: false               # Set true for recursive resolution + DNSSEC
+  managed: true                # true = supervise process, false = external
+  listen_port: 5353
+  fallback_upstreams:          # Used if Unbound fails to start
+    - "1.1.1.1:53"
+    - "8.8.8.8:53"
 
 blocklists:
   - "https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/ultimate.txt"
@@ -225,9 +236,10 @@ Refer to `config/config.example.yml` and `docs/guide/configuration.md` for exhau
 
 ### Web UI & REST API
 
-- The API listens on `server.web_ui_address` (default `:8080`) and exposes `/api/health`, `/api/stats`, `/api/queries`, `/api/top-domains`, `/api/policies`, `/api/features`, `/api/cache/purge`, etc. HTMX endpoints under `/api/ui/*` feed the dashboard.
-- Pages: `/` (dashboard with live charts + system metrics), `/queries` (filters, traces, total/upstream latency), `/policies` (guided builder + export + inline tester), `/settings`, `/clients`, and `/blocklists` (source inventory plus tester). UI actions include policy CRUD, blocklist reloads, cache flush, JSON export, client annotations/groups, and feature kill-switches with temporary disable timers.
-- CORS is enabled for API routes so you can embed metrics elsewhere.
+- **Astro 6 + React 19 + shadcn/ui dashboard** with 12 pages, all statically built and embedded in the Go binary. Self-hosted fonts (JetBrains Mono + Space Grotesk), zero external requests at runtime.
+- Pages: `/` (dashboard with live charts, system metrics, resolver status), `/queries` (filters, traces, latency), `/policies` (visual condition builder + expression tester + JSON import/export), `/settings` (7 tabs: DNS, Cache, Logging, TLS, Auth, Danger Zone, About), `/clients` (with group management), `/blocklists` (source management + domain checker + timed disable), `/localrecords`, `/forwarding`, and 3 resolver pages (`/resolver`, `/resolver/settings`, `/resolver/zones`).
+- REST API: 50+ endpoints including `/api/unbound/*` for resolver management (status, stats, config, forward zone CRUD, reload, flush).
+- CORS is configurable for API routes so you can embed metrics elsewhere.
 
 ### Pi-hole Import Tool
 
@@ -257,14 +269,16 @@ Use `--dry-run` to preview changes or `--validate=false` to skip config validati
 
 ## Repository Layout
 
-- `cmd/glory-hole/` – main program and Pi-hole importer CLI.
-- `pkg/*` – application packages (API, DNS handler, cache, policy engine, blocklist manager, telemetry, storage, resolver, etc.).
-- `config/` – sample configs (`config.example.yml`) and defaults.
-- `deploy/` – Docker, Kubernetes, Prometheus, Grafana assets.
-- `docs/`, `cf-docs/`, `examples/` – guides, architecture notes, policy examples.
-- `scripts/` – helper utilities.
-- `test/` – integration/load tests and fixtures.
-- `bin/` – build output (ignored from VCS).
+- `cmd/glory-hole/` -- main program and Pi-hole importer CLI.
+- `pkg/api/` -- REST API, Astro dashboard (`pkg/api/ui/dashboard/`), middleware.
+- `pkg/dns/`, `pkg/forwarder/`, `pkg/cache/` -- DNS server, upstream forwarding, caching.
+- `pkg/unbound/` -- Unbound recursive resolver integration (supervisor, config model, stats).
+- `pkg/blocklist/`, `pkg/policy/`, `pkg/localrecords/` -- filtering pipeline.
+- `pkg/config/`, `pkg/storage/`, `pkg/telemetry/`, `pkg/logging/` -- config, SQLite, observability.
+- `config/` -- sample configs (`config.example.yml`) and test configs.
+- `deploy/` -- Docker, Kubernetes, Prometheus, Grafana, Unbound, systemd assets.
+- `docs/`, `examples/`, `test/` -- guides, policy examples, integration tests.
+- `bin/` -- build output (ignored from VCS).
 
 ## License
 

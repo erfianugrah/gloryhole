@@ -334,6 +334,21 @@ policy:
       action: "block"
       enabled: false  # disabled by default
 
+# Integrated Unbound Recursive Resolver (optional)
+# When enabled, Glory-Hole starts Unbound as a supervised child process
+# for recursive resolution and DNSSEC validation. Queries are forwarded
+# to Unbound on localhost:5353 instead of external upstream servers.
+unbound:
+  enabled: false                 # Set true for recursive resolution + DNSSEC
+  managed: true                  # true = supervise process, false = external (user-managed)
+  binary_path: ""                # Auto-detected from PATH if empty
+  config_path: "/etc/unbound/unbound.conf"
+  listen_port: 5353              # Port Unbound listens on (loopback only)
+  control_socket: "/var/run/unbound/control.sock"
+  fallback_upstreams:            # Used when Unbound fails to start
+    - "1.1.1.1:53"
+    - "8.8.8.8:53"
+
 # Telemetry (OpenTelemetry)
 telemetry:
   enabled: true
