@@ -1,0 +1,76 @@
+name: Unbound Builder Cache
+
+# Builds and caches multi-arch Unbound builder images to GHCR.
+# These are used by Dockerfile.release to avoid recompiling Unbound
+# from source on every release (saves ~8 minutes on arm64 QEMU).
+#
+# Runs on:
+# - Manual trigger (workflow_dispatch)
+# - Changes to the Unbound version in Dockerfiles
+
+on:
+  workflow_dispatch:
+    inputs:
+      unbound_version:
+        description: 'Unbound version to build'
+        required: true
+        default: '1.24.2'
+  push:
+    branches: [main]
+    paths:
+      - 'deploy/unbound/**'
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  CACHE_IMAGE: ghcr.io/${{ github.repository }}/unbound-builder
+
+jobs:
+  build-cache:
+    name: Build Unbound (${{ matrix.platform }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      matrix:
+        include:
+          - platform: linux/amd64
+            runner: ubuntu-latest
+          - platform: linux/arm64
+            runner: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Determine version
+        id: version
+        run: |
+          if [ -n "${{ inputs.unbound_version }}" ]; then
+            echo "version=${{ inputs.unbound_version }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=1.24.2" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build and push Unbound builder
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile
+          target: unbound-builder
+          platforms: ${{ matrix.platform }}
+          push: true
+          tags: |
+            ${{ env.CACHE_IMAGE }}:${{ steps.version.outputs.version }}-${{ matrix.platform == 'linux/amd64' && 'amd64' || 'arm64' }}
+          build-args: |
+            UNBOUND_VERSION=${{ steps.version.outputs.version }}
+          cache-from: type=gha,scope=unbound-${{ matrix.platform }}
+          cache-to: type=gha,scope=unbound-${{ matrix.platform }},mode=max

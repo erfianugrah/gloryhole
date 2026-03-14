@@ -98,14 +98,15 @@ jobs:
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
 
-    - name: Build Docker image (no push)
+    - name: Build Docker image (no push, amd64 only)
       uses: docker/build-push-action@v6
       with:
         context: .
         push: false
         tags: glory-hole:ci-test
-        cache-from: type=gha
-        cache-to: type=gha,mode=max
+        platforms: linux/amd64
+        cache-from: type=gha,scope=docker-ci
+        cache-to: type=gha,scope=docker-ci,mode=max
 
   # Security scans run in parallel with build-and-test and lint
   security:
