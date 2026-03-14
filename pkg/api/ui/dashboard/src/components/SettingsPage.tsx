@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
-import { Save, Trash2, AlertTriangle, Shield, Key, Lock } from "lucide-react";
+import { Save, Trash2, AlertTriangle, Shield, Key, Lock, Server } from "lucide-react";
+import type { UnboundStatus } from "@/lib/api";
+import { fetchUnboundStatus } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -48,6 +50,9 @@ export function SettingsPage() {
     description: string;
     onConfirm: () => void;
   } | null>(null);
+
+  // Resolver status (to show notices when Unbound is active)
+  const [resolverActive, setResolverActive] = useState(false);
 
   // DNS form state
   const [upstreams, setUpstreams] = useState("");
@@ -141,6 +146,14 @@ export function SettingsPage() {
         setAuthEnabled(auth.enabled as boolean ?? false);
         setAuthUsername(String(auth.username ?? ""));
         setAuthHasApiKey(!!auth.has_api_key);
+      }
+
+      // Check resolver status (non-blocking)
+      try {
+        const rs = await fetchUnboundStatus();
+        setResolverActive(rs.enabled && rs.state === "running");
+      } catch {
+        setResolverActive(false);
       }
 
       setError(null);
@@ -299,6 +312,15 @@ export function SettingsPage() {
 
         {/* DNS */}
         <TabsContent value="dns">
+          {resolverActive && (
+            <div className="rounded-lg border border-gh-blue/30 bg-gh-blue/10 px-4 py-3 text-sm text-gh-blue mb-4 flex items-center gap-2">
+              <Server className="h-4 w-4 flex-shrink-0" />
+              <span>
+                Upstream resolution is handled by the <a href="/resolver" className="underline font-medium">Unbound resolver</a>.
+                These servers are used as fallback if Unbound is unavailable.
+              </span>
+            </div>
+          )}
           <Card>
             <CardHeader>
               <CardTitle className={T.cardTitle}>Upstream DNS Servers</CardTitle>
@@ -329,6 +351,17 @@ export function SettingsPage() {
         {/* Cache */}
         <TabsContent value="cache">
           <div className="space-y-4">
+            {resolverActive && (
+              <div className="rounded-lg border border-gh-blue/30 bg-gh-blue/10 px-4 py-3 text-sm text-gh-blue flex items-center gap-2">
+                <Server className="h-4 w-4 flex-shrink-0" />
+                <span>
+                  Two-layer caching is active. These settings control Glory-Hole's L1 cache.
+                  Unbound's L2 cache is configured in{" "}
+                  <a href="/resolver/settings" className="underline font-medium">Resolver Settings</a>.
+                  Purging below clears both caches.
+                </span>
+              </div>
+            )}
             <Card>
               <CardHeader>
                 <CardTitle className={T.cardTitle}>Cache Settings</CardTitle>
@@ -402,7 +435,9 @@ export function SettingsPage() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <p className={T.mutedSm}>
-                  Purge the DNS cache to clear all cached responses.
+                  {resolverActive
+                    ? "Purge both Glory-Hole and Unbound caches to clear all cached responses."
+                    : "Purge the DNS cache to clear all cached responses."}
                 </p>
                 <Button
                   size="sm"
@@ -411,8 +446,9 @@ export function SettingsPage() {
                     setConfirmDialog({
                       action: "purge",
                       title: "Purge DNS Cache",
-                      description:
-                        "This will clear all cached DNS responses. Queries will need to be resolved from upstream until the cache is rebuilt.",
+                      description: resolverActive
+                        ? "This will clear both Glory-Hole's L1 cache and Unbound's L2 cache. All queries will need fresh recursive resolution until the caches are rebuilt."
+                        : "This will clear all cached DNS responses. Queries will need to be resolved from upstream until the cache is rebuilt.",
                       onConfirm: handlePurgeCache,
                     })
                   }

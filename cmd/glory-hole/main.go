@@ -187,6 +187,10 @@ func main() {
 		"build_time", buildTime,
 	)
 
+	// Always use the build-time version for telemetry, not the config file value.
+	// This ensures Prometheus/OTel labels match the actual binary version.
+	cfg.Telemetry.ServiceVersion = version
+
 	// Initialize telemetry
 	telem, err := telemetry.New(ctx, &cfg.Telemetry, logger)
 	if err != nil {

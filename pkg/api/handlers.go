@@ -443,10 +443,23 @@ func (s *Server) handleCachePurge(w http.ResponseWriter, r *http.Request) {
 	statsBefore := s.cache.Stats()
 	entriesBefore := statsBefore.Entries
 
-	// Clear the cache
+	// Clear Glory-Hole's L1 cache
 	s.cache.Clear()
 
-	s.logger.Info("DNS cache purged", "entries_cleared", entriesBefore)
+	// Also flush Unbound's L2 cache if active
+	unboundFlushed := false
+	if s.unboundSupervisor != nil {
+		if err := s.unboundSupervisor.FlushCache(); err != nil {
+			s.logger.Warn("Failed to flush Unbound cache", "error", err)
+		} else {
+			unboundFlushed = true
+		}
+	}
+
+	s.logger.Info("DNS cache purged",
+		"entries_cleared", entriesBefore,
+		"unbound_flushed", unboundFlushed,
+	)
 
 	response := CachePurgeResponse{
 		Status:         "ok",

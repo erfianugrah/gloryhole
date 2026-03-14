@@ -152,8 +152,12 @@ export function ResolverSettingsPage() {
 
         <TabsContent value="cache">
           <Card>
-            <CardHeader><CardTitle className={T.cardTitle}>Cache</CardTitle></CardHeader>
+            <CardHeader><CardTitle className={T.cardTitle}>Cache (L2)</CardTitle></CardHeader>
             <CardContent className="space-y-4">
+              <p className={T.mutedSm}>
+                Unbound's cache acts as L2 behind Glory-Hole's main cache.
+                To purge both caches at once, use <a href="/settings" className="underline">Settings &gt; Cache &gt; Purge</a>.
+              </p>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <FormField label="Message cache size" value={msgCache} onChange={setMsgCache} placeholder="32m" />
                 <FormField label="RRSet cache size" value={rrsetCache} onChange={setRrsetCache} placeholder="64m" />

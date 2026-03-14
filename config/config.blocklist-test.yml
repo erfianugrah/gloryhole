@@ -72,10 +72,12 @@ logging:
   output: "stdout"
   add_source: false      # Disable for performance
 
+unbound:
+  enabled: false
+
 telemetry:
   enabled: true
   service_name: "glory-hole-test"
-  service_version: "dev"
   prometheus_enabled: true
   prometheus_port: 9090
   tracing_enabled: false

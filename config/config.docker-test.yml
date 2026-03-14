@@ -23,6 +23,9 @@ cache:
   min_ttl: 60s
   max_ttl: 24h
 
+unbound:
+  enabled: false
+
 logging:
   level: "info"
   format: "text"
