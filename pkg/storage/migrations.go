@@ -171,6 +171,59 @@ var migrations = []Migration{
 			CREATE INDEX IF NOT EXISTS idx_queries_timestamp_agg ON queries(timestamp, blocked, cached);
 		`,
 	},
+	{
+		Version:     10,
+		Description: "Add summary tables for O(1) analytics, drop redundant indexes",
+		SQL: `
+			-- Client statistics summary table, updated incrementally on each batch insert.
+			-- Replaces the expensive GROUP BY client_ip aggregation over millions of rows.
+			CREATE TABLE IF NOT EXISTS client_stats (
+				client_ip TEXT PRIMARY KEY,
+				total_queries INTEGER DEFAULT 0,
+				blocked_queries INTEGER DEFAULT 0,
+				nxdomain_queries INTEGER DEFAULT 0,
+				first_seen TEXT,
+				last_seen TEXT
+			);
+
+			-- Hourly statistics summary table, updated incrementally.
+			-- Replaces expensive COUNT(DISTINCT) aggregations over the queries table.
+			CREATE TABLE IF NOT EXISTS hourly_stats (
+				hour TEXT PRIMARY KEY,
+				total_queries INTEGER DEFAULT 0,
+				blocked_queries INTEGER DEFAULT 0,
+				cached_queries INTEGER DEFAULT 0,
+				nxdomain_queries INTEGER DEFAULT 0,
+				total_response_time_ms REAL DEFAULT 0,
+				unique_domains INTEGER DEFAULT 0,
+				unique_clients INTEGER DEFAULT 0
+			);
+
+			-- Seed client_stats from existing data (one-time backfill).
+			-- This may take a few minutes on large databases.
+			INSERT OR IGNORE INTO client_stats
+				(client_ip, total_queries, blocked_queries, nxdomain_queries, first_seen, last_seen)
+			SELECT
+				client_ip,
+				COUNT(*),
+				SUM(CASE WHEN blocked = 1 THEN 1 ELSE 0 END),
+				SUM(CASE WHEN response_code = 3 THEN 1 ELSE 0 END),
+				MIN(timestamp),
+				MAX(timestamp)
+			FROM queries
+			GROUP BY client_ip;
+
+			-- Drop redundant single-column indexes that are covered by composite indexes.
+			-- Reduces write amplification from 17x to 10x (41% improvement).
+			DROP INDEX IF EXISTS idx_queries_blocked;
+			DROP INDEX IF EXISTS idx_queries_cached;
+			DROP INDEX IF EXISTS idx_queries_domain;
+			DROP INDEX IF EXISTS idx_queries_client_ip;
+			DROP INDEX IF EXISTS idx_queries_client_ip_id;
+			DROP INDEX IF EXISTS idx_queries_domain_response_time;
+			DROP INDEX IF EXISTS idx_queries_query_type;
+		`,
+	},
 }
 
 // getMigrations returns all migrations sorted by version

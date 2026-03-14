@@ -862,6 +862,14 @@ func TestSQLiteStorage_ClientSummaries(t *testing.T) {
 		}
 	}
 
+	// Seed client_stats summary table (normally done by flushBatch → updateClientStats)
+	if _, err := sqlStorage.db.Exec(`
+		INSERT INTO client_stats (client_ip, total_queries, blocked_queries, nxdomain_queries, first_seen, last_seen)
+		VALUES ('192.168.1.10', 2, 1, 1, ?, ?), ('192.168.1.20', 1, 0, 1, ?, ?)
+	`, FormatTimestamp(now), FormatTimestamp(now), FormatTimestamp(now), FormatTimestamp(now)); err != nil {
+		t.Fatalf("failed to seed client_stats: %v", err)
+	}
+
 	if _, err := sqlStorage.db.Exec(`INSERT INTO client_groups (name, description, color) VALUES ('Kids', 'Kid devices', '#f472b6')`); err != nil {
 		t.Fatalf("failed to insert client group: %v", err)
 	}

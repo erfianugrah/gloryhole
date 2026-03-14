@@ -63,14 +63,13 @@ func (s *Server) handleReadiness(w http.ResponseWriter, r *http.Request) {
 
 	// Check storage (optional - degraded mode allowed)
 	if s.storage != nil {
-		// Try a quick ping to storage
 		ctx, cancel := context.WithTimeout(r.Context(), 1*time.Second)
 		defer cancel()
 
-		// Just try to get statistics to verify storage is responsive
-		if _, err := s.storage.GetStatistics(ctx, time.Now().Add(-1*time.Hour)); err != nil {
+		// Use Ping() for a lightweight check instead of GetStatistics()
+		// which scans millions of rows and routinely times out on large databases.
+		if err := s.storage.Ping(ctx); err != nil {
 			checks["storage"] = "degraded"
-			// Don't mark as not ready - we can operate without storage
 		} else {
 			checks["storage"] = statusOK
 		}

@@ -267,6 +267,33 @@ func main() {
 				"retention_days", cfg.Database.RetentionDays,
 			)
 
+			// Start retention cleanup goroutine
+			if cfg.Database.RetentionDays > 0 {
+				retentionDays := cfg.Database.RetentionDays
+				go func() {
+					// Run immediately on startup, then every hour
+					ticker := time.NewTicker(1 * time.Hour)
+					defer ticker.Stop()
+					for {
+						cutoff := time.Now().AddDate(0, 0, -retentionDays)
+						cleanupCtx, cleanupCancel := context.WithTimeout(ctx, 5*time.Minute)
+						if err := stor.Cleanup(cleanupCtx, cutoff); err != nil {
+							logger.Error("Retention cleanup failed", "error", err, "retention_days", retentionDays)
+						} else {
+							logger.Debug("Retention cleanup completed", "cutoff", cutoff.Format(time.RFC3339))
+						}
+						cleanupCancel()
+
+						select {
+						case <-ticker.C:
+						case <-ctx.Done():
+							return
+						}
+					}
+				}()
+				logger.Info("Retention cleanup scheduled", "retention_days", retentionDays, "interval", "1h")
+			}
+
 			// Initialize query logger worker pool (if enabled)
 			if cfg.Server.QueryLogger.Enabled || (cfg.Server.QueryLogger.BufferSize == 0 && cfg.Server.QueryLogger.Workers == 0) {
 				// Apply defaults if not configured

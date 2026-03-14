@@ -27,36 +27,22 @@ func (s *SQLiteStorage) GetClientSummaries(ctx context.Context, limit, offset in
 		offset = 0
 	}
 
-	// Aggregate client statistics from recent queries for performance.
-	// Uses MIN/MAX(timestamp) directly instead of joining back into the
-	// queries table by id — avoids two costly index lookups per client
-	// on large databases.
+	// Read from the pre-aggregated client_stats summary table.
+	// Updated incrementally on every batch insert — O(clients) not O(queries).
 	const baseQuery = `
-		WITH aggregated AS (
-			SELECT
-				client_ip,
-				MIN(timestamp) AS first_seen_raw,
-				MAX(timestamp) AS last_seen_raw,
-				COUNT(*) AS total_queries,
-				SUM(CASE WHEN blocked = 1 THEN 1 ELSE 0 END) AS blocked_queries,
-				SUM(CASE WHEN response_code = 3 THEN 1 ELSE 0 END) AS nxdomain_queries
-			FROM queries
-			WHERE timestamp >= datetime('now', '-30 days')
-			GROUP BY client_ip
-		)
 		SELECT
-			a.client_ip,
-			COALESCE(p.display_name, a.client_ip) AS display_name,
+			cs.client_ip,
+			COALESCE(p.display_name, cs.client_ip) AS display_name,
 			COALESCE(p.notes, '') AS notes,
 			p.group_name,
 			COALESCE(g.color, '') AS group_color,
-			a.first_seen_raw,
-			a.last_seen_raw,
-			a.total_queries,
-			a.blocked_queries,
-			a.nxdomain_queries
-		FROM aggregated a
-		LEFT JOIN client_profiles p ON p.client_ip = a.client_ip
+			cs.first_seen,
+			cs.last_seen,
+			cs.total_queries,
+			cs.blocked_queries,
+			cs.nxdomain_queries
+		FROM client_stats cs
+		LEFT JOIN client_profiles p ON p.client_ip = cs.client_ip
 		LEFT JOIN client_groups g ON p.group_name = g.name
 	`
 
@@ -69,7 +55,7 @@ func (s *SQLiteStorage) GetClientSummaries(ctx context.Context, limit, offset in
 		pattern := "%" + searchTerm + "%"
 		builder.WriteString(`
 		WHERE
-			LOWER(a.client_ip) LIKE ?
+			LOWER(cs.client_ip) LIKE ?
 			OR LOWER(COALESCE(p.display_name, '')) LIKE ?
 			OR LOWER(COALESCE(p.notes, '')) LIKE ?
 			OR LOWER(COALESCE(p.group_name, '')) LIKE ?
@@ -80,7 +66,7 @@ func (s *SQLiteStorage) GetClientSummaries(ctx context.Context, limit, offset in
 	}
 
 	builder.WriteString(`
-		ORDER BY a.last_seen_raw DESC
+		ORDER BY cs.last_seen DESC
 		LIMIT ? OFFSET ?;
 	`)
 	args = append(args, limit, offset)

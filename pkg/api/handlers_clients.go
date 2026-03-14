@@ -48,6 +48,7 @@ func (s *Server) handleGetClients(w http.ResponseWriter, r *http.Request) {
 	limit := parsePositiveInt(r.URL.Query().Get("limit"), defaultClientPageSize, maxClientPageSize)
 	offset := parseNonNegativeInt(r.URL.Query().Get("offset"), 0)
 
+	// Reads from pre-aggregated client_stats table — fast even on large databases.
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
 

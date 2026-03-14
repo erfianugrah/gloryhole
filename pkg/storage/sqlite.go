@@ -65,9 +65,11 @@ func NewSQLiteStorage(cfg *Config, metrics MetricsRecorder) (Storage, error) {
 		return nil, fmt.Errorf("%w: %v", ErrConnectionFailed, err)
 	}
 
-	// Configure connection pool
-	db.SetMaxOpenConns(1) // SQLite works best with single connection
-	db.SetMaxIdleConns(1)
+	// Configure connection pool.
+	// WAL mode allows concurrent readers with a single writer.
+	// Multiple read connections improve throughput for dashboard/API queries.
+	db.SetMaxOpenConns(4)
+	db.SetMaxIdleConns(4)
 	db.SetConnMaxLifetime(0)
 
 	// Test connection
@@ -367,12 +369,14 @@ func (s *SQLiteStorage) flushBatch(queries []*QueryLog) error {
 }
 
 // domainStatsWorker processes domain stats updates from a channel.
-// This avoids spawning a goroutine per batch and provides controlled concurrency.
+// Also updates client_stats and hourly_stats summary tables.
 func (s *SQLiteStorage) domainStatsWorker() {
 	defer s.wg.Done()
 
 	for batch := range s.domainStatsCh {
 		s.updateDomainStats(batch)
+		s.updateClientStats(batch)
+		s.updateHourlyStats(batch)
 	}
 }
 
@@ -451,6 +455,177 @@ func (s *SQLiteStorage) updateDomainStats(queries []*QueryLog) {
 
 	if err = tx.Commit(); err != nil {
 		slog.Default().Error("Failed to commit domain stats transaction", "error", err)
+	}
+}
+
+// updateClientStats incrementally updates the client_stats summary table.
+// Uses the same UPSERT pattern as updateDomainStats.
+func (s *SQLiteStorage) updateClientStats(queries []*QueryLog) {
+	if len(queries) == 0 {
+		return
+	}
+
+	type clientUpdate struct {
+		total    int
+		blocked  int
+		nxdomain int
+		first    time.Time
+		last     time.Time
+	}
+
+	updates := make(map[string]*clientUpdate)
+	for _, q := range queries {
+		if u, ok := updates[q.ClientIP]; ok {
+			u.total++
+			if q.Blocked {
+				u.blocked++
+			}
+			if q.ResponseCode == 3 {
+				u.nxdomain++
+			}
+			if q.Timestamp.Before(u.first) {
+				u.first = q.Timestamp
+			}
+			if q.Timestamp.After(u.last) {
+				u.last = q.Timestamp
+			}
+		} else {
+			u := &clientUpdate{total: 1, first: q.Timestamp, last: q.Timestamp}
+			if q.Blocked {
+				u.blocked = 1
+			}
+			if q.ResponseCode == 3 {
+				u.nxdomain = 1
+			}
+			updates[q.ClientIP] = u
+		}
+	}
+
+	tx, err := s.db.Begin()
+	if err != nil {
+		slog.Default().Error("Failed to begin client stats transaction", "error", err)
+		return
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	stmt, err := tx.Prepare(`
+		INSERT INTO client_stats (client_ip, total_queries, blocked_queries, nxdomain_queries, first_seen, last_seen)
+		VALUES (?, ?, ?, ?, ?, ?)
+		ON CONFLICT(client_ip) DO UPDATE SET
+			total_queries = total_queries + excluded.total_queries,
+			blocked_queries = blocked_queries + excluded.blocked_queries,
+			nxdomain_queries = nxdomain_queries + excluded.nxdomain_queries,
+			first_seen = MIN(first_seen, excluded.first_seen),
+			last_seen = MAX(last_seen, excluded.last_seen)
+	`)
+	if err != nil {
+		slog.Default().Error("Failed to prepare client stats statement", "error", err)
+		return
+	}
+	defer func() { _ = stmt.Close() }()
+
+	for ip, u := range updates {
+		_, err = stmt.Exec(ip, u.total, u.blocked, u.nxdomain,
+			FormatTimestamp(u.first), FormatTimestamp(u.last))
+		if err != nil {
+			slog.Default().Error("Failed to update client stats", "error", err, "client", ip)
+		}
+	}
+
+	if err = tx.Commit(); err != nil {
+		slog.Default().Error("Failed to commit client stats transaction", "error", err)
+	}
+}
+
+// updateHourlyStats incrementally updates the hourly_stats summary table.
+func (s *SQLiteStorage) updateHourlyStats(queries []*QueryLog) {
+	if len(queries) == 0 {
+		return
+	}
+
+	type hourUpdate struct {
+		total        int
+		blocked      int
+		cached       int
+		nxdomain     int
+		responseTime float64
+		domains      map[string]struct{}
+		clients      map[string]struct{}
+	}
+
+	updates := make(map[string]*hourUpdate)
+	for _, q := range queries {
+		hour := q.Timestamp.Truncate(time.Hour).Format("2006-01-02 15:04:05")
+		if u, ok := updates[hour]; ok {
+			u.total++
+			if q.Blocked {
+				u.blocked++
+			}
+			if q.Cached {
+				u.cached++
+			}
+			if q.ResponseCode == 3 {
+				u.nxdomain++
+			}
+			u.responseTime += q.ResponseTimeMs
+			u.domains[q.Domain] = struct{}{}
+			u.clients[q.ClientIP] = struct{}{}
+		} else {
+			u := &hourUpdate{
+				total:        1,
+				responseTime: q.ResponseTimeMs,
+				domains:      map[string]struct{}{q.Domain: {}},
+				clients:      map[string]struct{}{q.ClientIP: {}},
+			}
+			if q.Blocked {
+				u.blocked = 1
+			}
+			if q.Cached {
+				u.cached = 1
+			}
+			if q.ResponseCode == 3 {
+				u.nxdomain = 1
+			}
+			updates[hour] = u
+		}
+	}
+
+	tx, err := s.db.Begin()
+	if err != nil {
+		slog.Default().Error("Failed to begin hourly stats transaction", "error", err)
+		return
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	stmt, err := tx.Prepare(`
+		INSERT INTO hourly_stats (hour, total_queries, blocked_queries, cached_queries,
+			nxdomain_queries, total_response_time_ms, unique_domains, unique_clients)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(hour) DO UPDATE SET
+			total_queries = total_queries + excluded.total_queries,
+			blocked_queries = blocked_queries + excluded.blocked_queries,
+			cached_queries = cached_queries + excluded.cached_queries,
+			nxdomain_queries = nxdomain_queries + excluded.nxdomain_queries,
+			total_response_time_ms = total_response_time_ms + excluded.total_response_time_ms,
+			unique_domains = MAX(unique_domains, excluded.unique_domains),
+			unique_clients = MAX(unique_clients, excluded.unique_clients)
+	`)
+	if err != nil {
+		slog.Default().Error("Failed to prepare hourly stats statement", "error", err)
+		return
+	}
+	defer func() { _ = stmt.Close() }()
+
+	for hour, u := range updates {
+		_, err = stmt.Exec(hour, u.total, u.blocked, u.cached, u.nxdomain,
+			u.responseTime, len(u.domains), len(u.clients))
+		if err != nil {
+			slog.Default().Error("Failed to update hourly stats", "error", err, "hour", hour)
+		}
+	}
+
+	if err = tx.Commit(); err != nil {
+		slog.Default().Error("Failed to commit hourly stats transaction", "error", err)
 	}
 }
 
@@ -542,7 +717,6 @@ func (s *SQLiteStorage) GetStatistics(ctx context.Context, since time.Time) (*St
 		return nil, ErrClosed
 	}
 
-	// Apply timeout for this expensive aggregation query
 	ctx, cancel := withQueryTimeout(ctx, defaultQueryTimeout)
 	defer cancel()
 
@@ -551,17 +725,23 @@ func (s *SQLiteStorage) GetStatistics(ctx context.Context, since time.Time) (*St
 		Until: time.Now(),
 	}
 
+	// Use the pre-aggregated hourly_stats table for fast O(hours) lookups.
+	// Falls back to scanning queries table if hourly_stats is empty (first run).
+	sinceStr := FormatTimestamp(since)
+
 	err := s.db.QueryRowContext(ctx, `
 		SELECT
-			COUNT(*) as total,
-			SUM(CASE WHEN blocked THEN 1 ELSE 0 END) as blocked,
-			SUM(CASE WHEN cached THEN 1 ELSE 0 END) as cached,
-			COUNT(DISTINCT domain) as unique_domains,
-			COUNT(DISTINCT client_ip) as unique_clients,
-			AVG(response_time_ms) as avg_response_time
-		FROM queries
-		WHERE timestamp >= ?
-	`, FormatTimestamp(since)).Scan(
+			COALESCE(SUM(total_queries), 0),
+			COALESCE(SUM(blocked_queries), 0),
+			COALESCE(SUM(cached_queries), 0),
+			COALESCE(MAX(unique_domains), 0),
+			COALESCE(MAX(unique_clients), 0),
+			CASE WHEN SUM(total_queries) > 0
+				THEN SUM(total_response_time_ms) / SUM(total_queries)
+				ELSE 0 END
+		FROM hourly_stats
+		WHERE hour >= ?
+	`, sinceStr).Scan(
 		&stats.TotalQueries,
 		&stats.BlockedQueries,
 		&stats.CachedQueries,
@@ -570,8 +750,31 @@ func (s *SQLiteStorage) GetStatistics(ctx context.Context, since time.Time) (*St
 		&stats.AvgResponseTimeMs,
 	)
 
-	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrQueryFailed, err)
+	// Fallback to queries table if hourly_stats is empty (first run / migration pending).
+	// This uses the expensive COUNT(DISTINCT) queries but only runs until hourly_stats
+	// is populated by the write path.
+	if err != nil || stats.TotalQueries == 0 {
+		err = s.db.QueryRowContext(ctx, `
+			SELECT
+				COUNT(*) as total,
+				SUM(CASE WHEN blocked THEN 1 ELSE 0 END) as blocked,
+				SUM(CASE WHEN cached THEN 1 ELSE 0 END) as cached,
+				COUNT(DISTINCT domain) as unique_domains,
+				COUNT(DISTINCT client_ip) as unique_clients,
+				AVG(response_time_ms) as avg_response_time
+			FROM queries
+			WHERE timestamp >= ?
+		`, sinceStr).Scan(
+			&stats.TotalQueries,
+			&stats.BlockedQueries,
+			&stats.CachedQueries,
+			&stats.UniqueDomains,
+			&stats.UniqueClients,
+			&stats.AvgResponseTimeMs,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("%w: %v", ErrQueryFailed, err)
+		}
 	}
 
 	// Calculate rates
@@ -592,7 +795,11 @@ func (s *SQLiteStorage) GetTopDomains(ctx context.Context, limit int, blocked bo
 		return nil, ErrClosed
 	}
 
-	// Apply timeout for this expensive aggregation query
+	// Default to 7 days if no time bound — prevents full table scans on large databases
+	if since.IsZero() {
+		since = time.Now().AddDate(0, 0, -7)
+	}
+
 	ctx, cancel := withQueryTimeout(ctx, defaultQueryTimeout)
 	defer cancel()
 
@@ -823,6 +1030,11 @@ func (s *SQLiteStorage) GetQueryTypeStats(ctx context.Context, limit int, since 
 		return nil, ErrClosed
 	}
 
+	// Default to 7 days if no time bound
+	if since.IsZero() {
+		since = time.Now().AddDate(0, 0, -7)
+	}
+
 	if limit <= 0 || limit > 100 {
 		limit = 10
 	}
@@ -965,38 +1177,65 @@ func (s *SQLiteStorage) Cleanup(ctx context.Context, olderThan time.Time) error 
 		return ErrClosed
 	}
 
-	// Delete old queries
-	result, err := s.db.ExecContext(ctx, `
-		DELETE FROM queries WHERE timestamp < ?
-	`, olderThan)
-	if err != nil {
-		return fmt.Errorf("%w: %v", ErrQueryFailed, err)
+	// Delete in batches of 50,000 to avoid long WAL locks.
+	// Each batch is a separate transaction so readers aren't blocked.
+	const batchSize = 50000
+	var totalDeleted int64
+
+	for {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+
+		result, err := s.db.ExecContext(ctx, `
+			DELETE FROM queries WHERE rowid IN (
+				SELECT rowid FROM queries WHERE timestamp < ? LIMIT ?
+			)
+		`, olderThan, batchSize)
+		if err != nil {
+			return fmt.Errorf("%w: %v", ErrQueryFailed, err)
+		}
+
+		rows, _ := result.RowsAffected()
+		totalDeleted += rows
+
+		if rows < batchSize {
+			break // No more rows to delete
+		}
 	}
 
-	rows, _ := result.RowsAffected()
+	if totalDeleted == 0 {
+		return nil
+	}
 
-	// Clean up domain stats for domains that no longer have queries.
-	// Using EXISTS with LIMIT 1 allows early termination instead of full table scan.
-	_, err = s.db.ExecContext(ctx, `
+	slog.Default().Info("Retention cleanup completed",
+		"deleted_rows", totalDeleted,
+		"cutoff", FormatTimestamp(olderThan),
+	)
+
+	// Clean up orphaned summary table entries
+	_, _ = s.db.ExecContext(ctx, `
 		DELETE FROM domain_stats
 		WHERE NOT EXISTS (
 			SELECT 1 FROM queries WHERE queries.domain = domain_stats.domain LIMIT 1
 		)
 	`)
-	if err != nil {
-		return fmt.Errorf("%w: %v", ErrQueryFailed, err)
-	}
 
-	// Use incremental vacuum to reclaim space without blocking all operations.
-	// Full VACUUM would create a complete database copy and block everything.
-	// Incremental vacuum removes freed pages in small chunks (1000 pages at a time).
-	if rows > 10000 {
-		if _, err := s.db.ExecContext(ctx, "PRAGMA incremental_vacuum(1000)"); err != nil {
-			// Log but don't fail - incremental vacuum is best-effort
-			slog.Default().Error("Incremental vacuum operation failed",
-				"error", err,
-				"deleted_rows", rows,
-			)
+	_, _ = s.db.ExecContext(ctx, `
+		DELETE FROM client_stats
+		WHERE NOT EXISTS (
+			SELECT 1 FROM queries WHERE queries.client_ip = client_stats.client_ip LIMIT 1
+		)
+	`)
+
+	_, _ = s.db.ExecContext(ctx, `
+		DELETE FROM hourly_stats WHERE hour < ?
+	`, FormatTimestamp(olderThan))
+
+	// Incremental vacuum to reclaim space
+	if totalDeleted > 10000 {
+		if _, err := s.db.ExecContext(ctx, "PRAGMA incremental_vacuum(2000)"); err != nil {
+			slog.Default().Error("Incremental vacuum failed", "error", err)
 		}
 	}
 
