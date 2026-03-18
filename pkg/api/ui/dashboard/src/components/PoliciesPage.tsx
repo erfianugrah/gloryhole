@@ -91,6 +91,7 @@ export function PoliciesPage() {
   async function handleTogglePolicies() {
     try {
       if (features?.policies_enabled) {
+        // Disabling — use whatever duration is currently selected
         const dur = disableDuration === "indefinite" ? undefined : disableDuration;
         await disablePolicies(dur);
       } else {
@@ -99,6 +100,19 @@ export function PoliciesPage() {
       await loadData();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Toggle failed");
+    }
+  }
+
+  async function handleDisableDurationChange(dur: string) {
+    setDisableDuration(dur);
+    // Re-apply disable with the new duration immediately
+    if (!features?.policies_enabled) {
+      try {
+        await disablePolicies(dur === "indefinite" ? undefined : dur);
+        await loadData();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to update duration");
+      }
     }
   }
 
@@ -261,8 +275,8 @@ export function PoliciesPage() {
             <Label className="text-xs">
               {features?.policies_enabled ? "Enabled" : "Disabled"}
             </Label>
-            {features?.policies_enabled && (
-              <Select value={disableDuration} onValueChange={setDisableDuration}>
+            {!features?.policies_enabled && (
+              <Select value={disableDuration} onValueChange={handleDisableDurationChange}>
                 <SelectTrigger className="h-7 w-[130px] text-xs">
                   <SelectValue placeholder="Duration" />
                 </SelectTrigger>

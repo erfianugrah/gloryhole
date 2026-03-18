@@ -108,6 +108,18 @@ export function BlocklistsPage() {
     }
   }
 
+  async function handleDisableDurationChange(dur: string) {
+    setDisableDuration(dur);
+    if (!features?.blocklist_enabled) {
+      try {
+        await disableBlocklist(dur === "indefinite" ? undefined : dur);
+        await loadData();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to update duration");
+      }
+    }
+  }
+
   async function handleAddSource() {
     const url = newSource.trim();
     if (!url || !info) return;
@@ -170,8 +182,8 @@ export function BlocklistsPage() {
             <Label className="text-xs">
               {features?.blocklist_enabled ? "Enabled" : "Disabled"}
             </Label>
-            {features?.blocklist_enabled && (
-              <Select value={disableDuration} onValueChange={setDisableDuration}>
+            {!features?.blocklist_enabled && (
+              <Select value={disableDuration} onValueChange={handleDisableDurationChange}>
                 <SelectTrigger className="h-7 w-[130px] text-xs">
                   <SelectValue placeholder="Duration" />
                 </SelectTrigger>
