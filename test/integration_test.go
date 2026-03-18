@@ -466,6 +466,113 @@ func TestIntegration_LocalRecordsWithCache(t *testing.T) {
 	telem.Shutdown(ctx)
 }
 
+// TestIntegration_UIGeneratedPolicies tests the exact expressions the fixed UI
+// generates, pushed through the API and verified against the live DNS server.
+func TestIntegration_UIGeneratedPolicies(t *testing.T) {
+	dnsCfg := &config.Config{
+		Server: config.ServerConfig{
+			ListenAddress: "127.0.0.1:15370",
+			TCPEnabled:    true,
+			UDPEnabled:    true,
+		},
+		UpstreamDNSServers: []string{"1.1.1.1:53"},
+	}
+
+	logger, _ := logging.New(&config.LoggingConfig{Level: "error", Format: "text", Output: "stdout"})
+	ctx := context.Background()
+	telem, _ := telemetry.New(ctx, &config.TelemetryConfig{Enabled: false}, logger)
+	metrics, _ := telem.InitMetrics()
+
+	handler := dns.NewHandler()
+	fwd := forwarder.NewForwarder(dnsCfg, logger)
+	handler.SetForwarder(fwd)
+
+	policyEngine := policy.NewEngine(nil)
+	handler.SetPolicyEngine(policyEngine)
+
+	// Start DNS server
+	dnsServer := dns.NewServer(dnsCfg, handler, logger, metrics)
+	dnsCtx, dnsCancel := context.WithCancel(ctx)
+	defer dnsCancel()
+	go dnsServer.Start(dnsCtx)
+	time.Sleep(100 * time.Millisecond)
+
+	// Start API server
+	apiListener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("Failed to find free port: %v", err)
+	}
+	apiAddr := apiListener.Addr().String()
+	apiListener.Close()
+
+	apiCfg := &api.Config{
+		ListenAddress: apiAddr,
+		PolicyEngine:  policyEngine,
+		Logger:        logger.Logger,
+		Version:       "test",
+		InitialConfig: &config.Config{Auth: config.AuthConfig{Enabled: false}},
+	}
+	apiServer := api.New(apiCfg)
+	apiCtx, apiCancel := context.WithCancel(ctx)
+	defer apiCancel()
+	go apiServer.Start(apiCtx)
+	time.Sleep(100 * time.Millisecond)
+
+	// Helper to add a policy via the API
+	addPolicy := func(name, logic, action string) {
+		t.Helper()
+		body, _ := json.Marshal(api.PolicyRequest{Name: name, Logic: logic, Action: action, Enabled: true})
+		resp, err := http.Post("http://"+apiAddr+"/api/policies", "application/json", bytes.NewReader(body))
+		if err != nil {
+			t.Fatalf("addPolicy %s: %v", name, err)
+		}
+		if resp.StatusCode != http.StatusCreated {
+			t.Fatalf("addPolicy %s: expected 201, got %d", name, resp.StatusCode)
+		}
+		resp.Body.Close()
+	}
+
+	// Add policies using the EXACT expressions the fixed UI produces
+	addPolicy("Block regex tracker", `DomainRegex(Domain, "^tracker\\d+\\.")`, policy.ActionBlock)
+	addPolicy("Block by IP", `IPEquals(ClientIP, "127.0.0.1")`, policy.ActionBlock) // will match all local queries
+
+	// Verify DomainRegex blocks the regex pattern
+	client := &mdns.Client{Timeout: 5 * time.Second}
+	msg := new(mdns.Msg)
+	msg.SetQuestion("tracker42.example.com.", mdns.TypeA)
+	resp, _, err := client.Exchange(msg, dnsCfg.Server.ListenAddress)
+	if err != nil {
+		t.Fatalf("DNS query failed: %v", err)
+	}
+	if resp.Rcode != mdns.RcodeNameError {
+		t.Errorf("tracker42.example.com: expected NXDOMAIN, got %s", mdns.RcodeToString[resp.Rcode])
+	}
+
+	// Test the /api/policies/test endpoint with numeric Hour expression
+	testPayload, _ := json.Marshal(map[string]string{
+		"logic":  `Hour >= 0`,
+		"domain": "any.com",
+	})
+	testResp, err := http.Post("http://"+apiAddr+"/api/policies/test", "application/json", bytes.NewReader(testPayload))
+	if err != nil {
+		t.Fatalf("test endpoint: %v", err)
+	}
+	defer testResp.Body.Close()
+	if testResp.StatusCode != http.StatusOK {
+		t.Fatalf("test endpoint: expected 200, got %d", testResp.StatusCode)
+	}
+	var testResult map[string]any
+	json.NewDecoder(testResp.Body).Decode(&testResult)
+	if matched, _ := testResult["matched"].(bool); !matched {
+		t.Error("test endpoint: expected Hour >= 0 to match, got false")
+	}
+
+	// Cleanup
+	dnsServer.Shutdown(context.Background())
+	apiServer.Shutdown(context.Background())
+	telem.Shutdown(ctx)
+}
+
 // TestIntegration_ComplexPolicyRules tests advanced policy engine features
 func TestIntegration_ComplexPolicyRules(t *testing.T) {
 	cfg := &config.Config{

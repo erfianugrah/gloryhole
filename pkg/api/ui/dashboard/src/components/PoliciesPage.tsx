@@ -1,5 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
-import { useRef, useState as useStateAlias } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Plus, Trash2, Pencil, Download, Upload, Play, Wand2 } from "lucide-react";
 import { ConditionEditor, emptyTree, treeToExpression } from "./ConditionEditor";
 import type { ConditionTree } from "./ConditionEditor";
@@ -198,7 +197,7 @@ export function PoliciesPage() {
         count++;
       }
 
-      await loadPolicies();
+      await loadData();
       setError(null);
       // Show count inline — no toast needed
       alert(`Imported ${count} policies`);
@@ -348,7 +347,7 @@ export function PoliciesPage() {
 
       {/* Create / Edit Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-xl">
+        <DialogContent className="max-w-2xl lg:max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
               {editingPolicy ? "Edit Policy" : "Create Policy"}

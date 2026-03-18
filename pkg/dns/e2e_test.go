@@ -216,6 +216,120 @@ func TestE2E_FullDNSServer(t *testing.T) {
 	}
 }
 
+// TestE2E_UIExpressionPolicies tests the exact expressions the fixed UI
+// generates through the full DNS server stack: DomainRegex, IPEquals,
+// QueryTypeIn, and numeric Hour/Weekday comparisons.
+func TestE2E_UIExpressionPolicies(t *testing.T) {
+	cfg := &config.Config{
+		Server: config.ServerConfig{
+			ListenAddress: "127.0.0.1:15370",
+			TCPEnabled:    true,
+			UDPEnabled:    true,
+		},
+		UpstreamDNSServers: []string{"1.1.1.1:53"},
+	}
+
+	logger, err := logging.New(&config.LoggingConfig{Level: "error", Format: "text", Output: "stdout"})
+	if err != nil {
+		t.Fatalf("Failed to create logger: %v", err)
+	}
+
+	ctx := context.Background()
+	telem, err := telemetry.New(ctx, &config.TelemetryConfig{Enabled: false}, logger)
+	if err != nil {
+		t.Fatalf("Failed to create telemetry: %v", err)
+	}
+	metrics, _ := telem.InitMetrics()
+
+	handler := NewHandler()
+	fwd := forwarder.NewForwarder(cfg, logger)
+	handler.SetForwarder(fwd)
+
+	// Setup policy engine with expressions matching the fixed UI output
+	pe := policy.NewEngine(nil)
+
+	// DomainRegex — the "matches (regex)" operator now correctly maps here
+	if err := pe.AddRule(&policy.Rule{
+		Name: "Block regex tracker", Logic: `DomainRegex(Domain, "^tracker\\d+\\.")`,
+		Action: policy.ActionBlock, Enabled: true,
+	}); err != nil {
+		t.Fatalf("AddRule DomainRegex: %v", err)
+	}
+
+	// DomainEndsWith — the "ends with" operator on Domain field
+	if err := pe.AddRule(&policy.Rule{
+		Name: "Block .badsite.com", Logic: `DomainEndsWith(Domain, ".badsite.com")`,
+		Action: policy.ActionBlock, Enabled: true,
+	}); err != nil {
+		t.Fatalf("AddRule DomainEndsWith: %v", err)
+	}
+
+	// Numeric Hour — the UI now emits unquoted ints: Hour >= 0 && Hour <= 23
+	// This rule always matches (any hour is 0-23) to prove numeric exprs compile.
+	if err := pe.AddRule(&policy.Rule{
+		Name: "Block during all hours", Logic: `(DomainMatches(Domain, "hourtest") && Hour >= 0 && Hour <= 23)`,
+		Action: policy.ActionBlock, Enabled: true,
+	}); err != nil {
+		t.Fatalf("AddRule Hour: %v", err)
+	}
+
+	// IPEquals — the UI "equals" on ClientIP now emits IPEquals
+	if err := pe.AddRule(&policy.Rule{
+		Name: "Block from loopback", Logic: `(DomainMatches(Domain, "iptest") && IPEquals(ClientIP, "127.0.0.1"))`,
+		Action: policy.ActionBlock, Enabled: true,
+	}); err != nil {
+		t.Fatalf("AddRule IPEquals: %v", err)
+	}
+
+	handler.SetPolicyEngine(pe)
+
+	server := NewServer(cfg, handler, logger, metrics)
+	serverCtx, serverCancel := context.WithCancel(ctx)
+	defer serverCancel()
+
+	go func() { _ = server.Start(serverCtx) }()
+	time.Sleep(100 * time.Millisecond)
+
+	client := &dns.Client{Timeout: 5 * time.Second}
+
+	tests := []struct {
+		name        string
+		domain      string
+		expectRcode int
+	}{
+		{"DomainRegex blocks tracker42", "tracker42.example.com.", dns.RcodeNameError},
+		{"DomainRegex blocks tracker0", "tracker0.cdn.com.", dns.RcodeNameError},
+		{"DomainRegex allows clean domain", "www.example.com.", dns.RcodeSuccess},
+		{"DomainEndsWith blocks sub.badsite.com", "sub.badsite.com.", dns.RcodeNameError},
+		{"DomainEndsWith allows badsite.org", "badsite.org.", dns.RcodeSuccess},
+		{"Numeric Hour blocks hourtest.com", "hourtest.com.", dns.RcodeNameError},
+		{"IPEquals blocks iptest.com from loopback", "iptest.com.", dns.RcodeNameError},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			msg := new(dns.Msg)
+			msg.SetQuestion(tt.domain, dns.TypeA)
+			msg.RecursionDesired = true
+
+			resp, _, err := client.Exchange(msg, cfg.Server.ListenAddress)
+			if err != nil {
+				t.Fatalf("Query failed: %v", err)
+			}
+			if resp.Rcode != tt.expectRcode {
+				t.Errorf("expected %s, got %s",
+					dns.RcodeToString[tt.expectRcode],
+					dns.RcodeToString[resp.Rcode])
+			}
+		})
+	}
+
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer shutdownCancel()
+	_ = server.Shutdown(shutdownCtx)
+	_ = telem.Shutdown(ctx)
+}
+
 // TestE2E_ConcurrentQueries tests the server under concurrent load
 func TestE2E_ConcurrentQueries(t *testing.T) {
 	// Create minimal test configuration

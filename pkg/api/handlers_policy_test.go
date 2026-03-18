@@ -632,6 +632,78 @@ func TestPolicyAPI_NoPolicyEngine(t *testing.T) {
 	}
 }
 
+// TestHandleTestPolicy exercises the /api/policies/test endpoint with every
+// expression pattern the fixed UI generates, ensuring compile + evaluate work
+// through the HTTP layer.
+func TestHandleTestPolicy(t *testing.T) {
+	server := setupTestAPIServer()
+
+	tests := []struct {
+		name       string
+		logic      string
+		domain     string
+		wantStatus int
+		wantMatch  bool
+	}{
+		// Domain operators
+		{name: "Domain/equals", logic: `Domain == "ads.example.com"`, domain: "ads.example.com", wantStatus: 200, wantMatch: true},
+		{name: "Domain/contains", logic: `DomainMatches(Domain, "example")`, domain: "ads.example.com", wantStatus: 200, wantMatch: true},
+		{name: "Domain/starts_with", logic: `DomainStartsWith(Domain, "ads")`, domain: "ads.example.com", wantStatus: 200, wantMatch: true},
+		{name: "Domain/ends_with", logic: `DomainEndsWith(Domain, ".example.com")`, domain: "ads.example.com", wantStatus: 200, wantMatch: true},
+		{name: "Domain/regex", logic: `DomainRegex(Domain, "^ads\\.")`, domain: "ads.example.com", wantStatus: 200, wantMatch: true},
+		{name: "Domain/regex/no-match", logic: `DomainRegex(Domain, "^www\\.")`, domain: "ads.example.com", wantStatus: 200, wantMatch: false},
+		// ClientIP — uses IPEquals/IPInCIDR
+		{name: "ClientIP/equals", logic: `IPEquals(ClientIP, "127.0.0.1")`, domain: "test.com", wantStatus: 200, wantMatch: true},
+		{name: "ClientIP/not-equals", logic: `!IPEquals(ClientIP, "10.0.0.1")`, domain: "test.com", wantStatus: 200, wantMatch: true},
+		{name: "ClientIP/CIDR", logic: `IPInCIDR(ClientIP, "127.0.0.0/8")`, domain: "test.com", wantStatus: 200, wantMatch: true},
+		// QueryType — uses QueryTypeIn
+		{name: "QueryType/equals", logic: `QueryType == "A"`, domain: "test.com", wantStatus: 200, wantMatch: true},
+		{name: "QueryType/in", logic: `QueryTypeIn(QueryType, "A", "AAAA")`, domain: "test.com", wantStatus: 200, wantMatch: true},
+		// Hour/Weekday — numeric, no quotes
+		{name: "Hour/gte", logic: `Hour >= 0`, domain: "test.com", wantStatus: 200, wantMatch: true},
+		{name: "Weekday/lte", logic: `Weekday <= 6`, domain: "test.com", wantStatus: 200, wantMatch: true},
+		// Groups
+		{name: "AND group", logic: `(DomainMatches(Domain, "example") && DomainEndsWith(Domain, ".com"))`, domain: "ads.example.com", wantStatus: 200, wantMatch: true},
+		{name: "OR group", logic: `(Domain == "other.com" || DomainMatches(Domain, "example"))`, domain: "ads.example.com", wantStatus: 200, wantMatch: true},
+		{name: "NOT group", logic: `!(Domain == "other.com")`, domain: "ads.example.com", wantStatus: 200, wantMatch: true},
+		// Cross-field
+		{name: "cross-field domain+hour", logic: `(DomainMatches(Domain, "example") && Hour >= 0)`, domain: "ads.example.com", wantStatus: 200, wantMatch: true},
+		// Invalid expression
+		{name: "compile error", logic: `Hour == "bad"`, domain: "test.com", wantStatus: 400, wantMatch: false},
+		// Empty inputs
+		{name: "empty logic", logic: ``, domain: "test.com", wantStatus: 400, wantMatch: false},
+		{name: "empty domain", logic: `true`, domain: "", wantStatus: 400, wantMatch: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			payload := map[string]string{"logic": tt.logic, "domain": tt.domain}
+			body, _ := json.Marshal(payload)
+			req := httptest.NewRequest("POST", "/api/policies/test", bytes.NewReader(body))
+			w := httptest.NewRecorder()
+
+			server.handleTestPolicy(w, req)
+
+			resp := w.Result()
+			defer func() { _ = resp.Body.Close() }()
+
+			if resp.StatusCode != tt.wantStatus {
+				respBody, _ := io.ReadAll(resp.Body)
+				t.Fatalf("expected status %d, got %d: %s", tt.wantStatus, resp.StatusCode, string(respBody))
+			}
+
+			if tt.wantStatus == 200 {
+				var result map[string]any
+				json.NewDecoder(resp.Body).Decode(&result)
+				matched, _ := result["matched"].(bool)
+				if matched != tt.wantMatch {
+					t.Errorf("expected matched=%v, got %v", tt.wantMatch, matched)
+				}
+			}
+		})
+	}
+}
+
 func TestPolicyAPI_EnableEngineAfterStart(t *testing.T) {
 	// Start with no engine
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
