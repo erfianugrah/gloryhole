@@ -704,6 +704,72 @@ func TestHandleTestPolicy(t *testing.T) {
 	}
 }
 
+// TestHandleTestPolicy_RealDomains simulates clicking "Test" in the UI for
+// real-world policies: sentry.io, adobe.io, adobe.com.  Each request goes
+// through the full HTTP handler → policy.NewEngine → compile → evaluate path.
+func TestHandleTestPolicy_RealDomains(t *testing.T) {
+	server := setupTestAPIServer()
+
+	tests := []struct {
+		name      string
+		logic     string
+		domain    string
+		wantMatch bool
+	}{
+		// Adobe OR — user picks "contains" for both, OR group
+		{"Adobe OR / creativecloud.adobe.com", `(DomainMatches(Domain, "adobe.io") || DomainMatches(Domain, "adobe.com"))`, "creativecloud.adobe.com", true},
+		{"Adobe OR / api.adobe.io", `(DomainMatches(Domain, "adobe.io") || DomainMatches(Domain, "adobe.com"))`, "api.adobe.io", true},
+		{"Adobe OR / google.com", `(DomainMatches(Domain, "adobe.io") || DomainMatches(Domain, "adobe.com"))`, "google.com", false},
+
+		// Adobe AND — wrong, but verify it behaves correctly (both must match)
+		{"Adobe AND / creativecloud.adobe.com", `(DomainMatches(Domain, "adobe.io") && DomainMatches(Domain, "adobe.com"))`, "creativecloud.adobe.com", false},
+
+		// Sentry contains
+		{"Sentry / o123456.ingest.sentry.io", `DomainMatches(Domain, "sentry.io")`, "o123456.ingest.sentry.io", true},
+		{"Sentry / sentry.io", `DomainMatches(Domain, "sentry.io")`, "sentry.io", true},
+		{"Sentry / sentry-cdn.com", `DomainMatches(Domain, "sentry.io")`, "browser.sentry-cdn.com", false},
+
+		// Sentry ends_with (UI prepends dot)
+		{"Sentry ends_with / api.sentry.io", `DomainEndsWith(Domain, ".sentry.io")`, "api.sentry.io", true},
+		{"Sentry ends_with / sentry.io bare", `DomainEndsWith(Domain, ".sentry.io")`, "sentry.io", false},
+
+		// Combined Adobe + Sentry
+		{"Combined / adobe.com", `(DomainMatches(Domain, "adobe.io") || DomainMatches(Domain, "adobe.com") || DomainMatches(Domain, "sentry.io"))`, "exchange.adobe.com", true},
+		{"Combined / sentry.io", `(DomainMatches(Domain, "adobe.io") || DomainMatches(Domain, "adobe.com") || DomainMatches(Domain, "sentry.io"))`, "o123456.ingest.sentry.io", true},
+		{"Combined / unrelated", `(DomainMatches(Domain, "adobe.io") || DomainMatches(Domain, "adobe.com") || DomainMatches(Domain, "sentry.io"))`, "github.com", false},
+
+		// Regex for sentry subdomains
+		{"Sentry regex / subdomain", `DomainRegex(Domain, ".*\\.sentry\\.io$")`, "o123456.ingest.sentry.io", true},
+		{"Sentry regex / bare", `DomainRegex(Domain, ".*\\.sentry\\.io$")`, "sentry.io", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			payload := map[string]string{"logic": tt.logic, "domain": tt.domain}
+			body, _ := json.Marshal(payload)
+			req := httptest.NewRequest("POST", "/api/policies/test", bytes.NewReader(body))
+			w := httptest.NewRecorder()
+
+			server.handleTestPolicy(w, req)
+
+			resp := w.Result()
+			defer func() { _ = resp.Body.Close() }()
+
+			if resp.StatusCode != http.StatusOK {
+				respBody, _ := io.ReadAll(resp.Body)
+				t.Fatalf("expected 200, got %d: %s", resp.StatusCode, string(respBody))
+			}
+
+			var result map[string]any
+			json.NewDecoder(resp.Body).Decode(&result)
+			matched, _ := result["matched"].(bool)
+			if matched != tt.wantMatch {
+				t.Errorf("expected matched=%v, got %v\n  logic: %s\n  domain: %s", tt.wantMatch, matched, tt.logic, tt.domain)
+			}
+		})
+	}
+}
+
 func TestPolicyAPI_EnableEngineAfterStart(t *testing.T) {
 	// Start with no engine
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))

@@ -35,7 +35,7 @@ import {
 } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 import { T } from "@/lib/typography";
-import type { Policy } from "@/lib/api";
+import type { Policy, FeatureState } from "@/lib/api";
 import {
   fetchPolicies,
   createPolicy,
@@ -43,14 +43,19 @@ import {
   deletePolicy,
   testPolicy,
   exportPolicies,
+  fetchFeatures,
+  disablePolicies,
+  enablePolicies,
 } from "@/lib/api";
 
 // ─── Component ──────────────────────────────────────────────────────
 
 export function PoliciesPage() {
   const [policies, setPolicies] = useState<Policy[]>([]);
+  const [features, setFeatures] = useState<FeatureState | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [disableDuration, setDisableDuration] = useState("indefinite");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingPolicy, setEditingPolicy] = useState<Policy | null>(null);
   const [testResult, setTestResult] = useState<{ valid: boolean; error?: string } | null>(null);
@@ -68,8 +73,9 @@ export function PoliciesPage() {
 
   const loadData = useCallback(async () => {
     try {
-      const data = await fetchPolicies();
+      const [data, ft] = await Promise.all([fetchPolicies(), fetchFeatures()]);
       setPolicies(data);
+      setFeatures(ft);
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load policies");
@@ -81,6 +87,20 @@ export function PoliciesPage() {
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  async function handleTogglePolicies() {
+    try {
+      if (features?.policies_enabled) {
+        const dur = disableDuration === "indefinite" ? undefined : disableDuration;
+        await disablePolicies(dur);
+      } else {
+        await enablePolicies();
+      }
+      await loadData();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Toggle failed");
+    }
+  }
 
   function openCreateDialog() {
     setEditingPolicy(null);
@@ -231,7 +251,33 @@ export function PoliciesPage() {
           <h2 className={T.pageTitle}>Policies</h2>
           <p className={T.pageDescription}>DNS filtering policies with expression-based rules</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            <Switch
+              checked={features?.policies_enabled ?? true}
+              onCheckedChange={handleTogglePolicies}
+              aria-label="Toggle policies"
+            />
+            <Label className="text-xs">
+              {features?.policies_enabled ? "Enabled" : "Disabled"}
+            </Label>
+            {features?.policies_enabled && (
+              <Select value={disableDuration} onValueChange={setDisableDuration}>
+                <SelectTrigger className="h-7 w-[130px] text-xs">
+                  <SelectValue placeholder="Duration" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="indefinite">Indefinite</SelectItem>
+                  <SelectItem value="5m">5 minutes</SelectItem>
+                  <SelectItem value="15m">15 minutes</SelectItem>
+                  <SelectItem value="30m">30 minutes</SelectItem>
+                  <SelectItem value="1h">1 hour</SelectItem>
+                  <SelectItem value="6h">6 hours</SelectItem>
+                  <SelectItem value="24h">24 hours</SelectItem>
+                </SelectContent>
+              </Select>
+            )}
+          </div>
           <input
             ref={fileInputRef}
             type="file"

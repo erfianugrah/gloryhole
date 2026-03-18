@@ -126,6 +126,242 @@ func TestUIGeneratedExpressions(t *testing.T) {
 	// Override: the Adobe OR test should actually match
 	cases[len(cases)-1].wantMatch = true
 
+	runCases(t, cases)
+}
+
+// TestRealWorldPolicies reproduces the exact user workflow for creating
+// policies via the UI visual builder for real domains: sentry.io, adobe.io,
+// adobe.com.  Each test builds the expression string exactly as the TS
+// conditionToExpr() + groupToExpr() would for a given builder configuration,
+// then verifies it compiles and matches (or doesn't) against realistic
+// domain lists.
+func TestRealWorldPolicies(t *testing.T) {
+	// ── Scenario 1: Adobe policy ────────────────────────────────────
+	// User creates an ALLOW policy named "Adobe" with two conditions:
+	//   Domain "contains" adobe.io   → DomainMatches(Domain, "adobe.io")
+	//   Domain "contains" adobe.com  → DomainMatches(Domain, "adobe.com")
+	// Visual builder has OR selected → joined with ||
+
+	adobeOR := `(DomainMatches(Domain, "adobe.io") || DomainMatches(Domain, "adobe.com"))`
+	adobeAND := `(DomainMatches(Domain, "adobe.io") && DomainMatches(Domain, "adobe.com"))`
+
+	adobeDomains := []struct {
+		domain  string
+		wantOR  bool
+		wantAND bool
+	}{
+		{"creativecloud.adobe.com", true, false}, // contains "adobe.com" but not "adobe.io"
+		{"api.adobe.io", true, false},            // contains "adobe.io" but not "adobe.com"
+		{"license.adobe.io", true, false},
+		{"exchange.adobe.com", true, false},
+		{"cdn.adobe.io.adobe.com", true, true},   // contains both
+		{"google.com", false, false},             // contains neither
+		{"notadobe.io.example.com", true, false}, // substring "adobe.io" IS in "notadobe.io..."
+		{"adobe.io", true, false},                // exact
+		{"adobe.com", true, false},               // exact
+	}
+
+	t.Run("Adobe/OR", func(t *testing.T) {
+		engine := NewEngine(nil)
+		if err := engine.AddRule(&Rule{
+			Name: "Adobe", Logic: adobeOR, Action: ActionAllow, Enabled: true,
+		}); err != nil {
+			t.Fatalf("compile failed: %v\n  expr: %s", err, adobeOR)
+		}
+		for _, d := range adobeDomains {
+			ctx := Context{Domain: d.domain, ClientIP: "127.0.0.1", QueryType: "A"}
+			matched, _ := engine.Evaluate(ctx)
+			if matched != d.wantOR {
+				t.Errorf("domain %q: expected match=%v, got %v", d.domain, d.wantOR, matched)
+			}
+		}
+	})
+
+	t.Run("Adobe/AND", func(t *testing.T) {
+		engine := NewEngine(nil)
+		if err := engine.AddRule(&Rule{
+			Name: "Adobe", Logic: adobeAND, Action: ActionAllow, Enabled: true,
+		}); err != nil {
+			t.Fatalf("compile failed: %v\n  expr: %s", err, adobeAND)
+		}
+		for _, d := range adobeDomains {
+			ctx := Context{Domain: d.domain, ClientIP: "127.0.0.1", QueryType: "A"}
+			matched, _ := engine.Evaluate(ctx)
+			if matched != d.wantAND {
+				t.Errorf("domain %q: expected match=%v, got %v", d.domain, d.wantAND, matched)
+			}
+		}
+	})
+
+	// ── Scenario 2: Sentry policy ──────────────────────────────────
+	// User creates an ALLOW policy for Sentry with:
+	//   Domain "contains" sentry.io    → DomainMatches(Domain, "sentry.io")
+	//
+	// Single condition — no group wrapper needed.
+
+	sentryExpr := `DomainMatches(Domain, "sentry.io")`
+
+	sentryDomains := []struct {
+		domain string
+		want   bool
+	}{
+		{"sentry.io", true},
+		{"o123456.ingest.sentry.io", true},
+		{"browser.sentry-cdn.com", false}, // "sentry.io" not in "sentry-cdn.com"
+		{"api.sentry.io", true},
+		{"sentry.io.example.com", true}, // substring match
+		{"google.com", false},
+	}
+
+	t.Run("Sentry/contains", func(t *testing.T) {
+		engine := NewEngine(nil)
+		if err := engine.AddRule(&Rule{
+			Name: "Sentry", Logic: sentryExpr, Action: ActionAllow, Enabled: true,
+		}); err != nil {
+			t.Fatalf("compile failed: %v\n  expr: %s", err, sentryExpr)
+		}
+		for _, d := range sentryDomains {
+			ctx := Context{Domain: d.domain, ClientIP: "127.0.0.1", QueryType: "A"}
+			matched, _ := engine.Evaluate(ctx)
+			if matched != d.want {
+				t.Errorf("domain %q: expected match=%v, got %v", d.domain, d.want, matched)
+			}
+		}
+	})
+
+	// ── Scenario 3: Sentry with "ends with" ────────────────────────
+	// User selects "ends with" + "sentry.io"
+	// UI generates: DomainEndsWith(Domain, ".sentry.io")  (dot prepended)
+
+	sentryEndsExpr := `DomainEndsWith(Domain, ".sentry.io")`
+
+	sentryEndsDomains := []struct {
+		domain string
+		want   bool
+	}{
+		{"sentry.io", false},               // does NOT end with ".sentry.io"
+		{"o123456.ingest.sentry.io", true}, // ends with ".sentry.io"
+		{"api.sentry.io", true},
+		{"notsentry.io", false}, // ends with "sentry.io" but not ".sentry.io"
+		{"google.com", false},
+	}
+
+	t.Run("Sentry/ends_with", func(t *testing.T) {
+		engine := NewEngine(nil)
+		if err := engine.AddRule(&Rule{
+			Name: "Sentry", Logic: sentryEndsExpr, Action: ActionAllow, Enabled: true,
+		}); err != nil {
+			t.Fatalf("compile failed: %v\n  expr: %s", err, sentryEndsExpr)
+		}
+		for _, d := range sentryEndsDomains {
+			ctx := Context{Domain: d.domain, ClientIP: "127.0.0.1", QueryType: "A"}
+			matched, _ := engine.Evaluate(ctx)
+			if matched != d.want {
+				t.Errorf("domain %q: expected match=%v, got %v", d.domain, d.want, matched)
+			}
+		}
+	})
+
+	// ── Scenario 4: Adobe + Sentry combined ────────────────────────
+	// User creates a policy with OR group containing three conditions:
+	//   Domain contains "adobe.io"
+	//   Domain contains "adobe.com"
+	//   Domain contains "sentry.io"
+
+	combinedExpr := `(DomainMatches(Domain, "adobe.io") || DomainMatches(Domain, "adobe.com") || DomainMatches(Domain, "sentry.io"))`
+
+	combinedDomains := []struct {
+		domain string
+		want   bool
+	}{
+		{"creativecloud.adobe.com", true},
+		{"api.adobe.io", true},
+		{"o123456.ingest.sentry.io", true},
+		{"google.com", false},
+		{"facebook.com", false},
+	}
+
+	t.Run("Combined/Adobe+Sentry", func(t *testing.T) {
+		engine := NewEngine(nil)
+		if err := engine.AddRule(&Rule{
+			Name: "Allow Adobe+Sentry", Logic: combinedExpr, Action: ActionAllow, Enabled: true,
+		}); err != nil {
+			t.Fatalf("compile failed: %v\n  expr: %s", err, combinedExpr)
+		}
+		for _, d := range combinedDomains {
+			ctx := Context{Domain: d.domain, ClientIP: "127.0.0.1", QueryType: "A"}
+			matched, _ := engine.Evaluate(ctx)
+			if matched != d.want {
+				t.Errorf("domain %q: expected match=%v, got %v", d.domain, d.want, matched)
+			}
+		}
+	})
+
+	// ── Scenario 5: Adobe with "equals" operator ───────────────────
+	// User selects "equals" instead of "contains"
+	// UI generates: Domain == "adobe.com"
+	// This is an EXACT match — subdomains won't match.
+
+	t.Run("Adobe/equals-exact", func(t *testing.T) {
+		expr := `Domain == "adobe.com"`
+		engine := NewEngine(nil)
+		if err := engine.AddRule(&Rule{
+			Name: "Adobe exact", Logic: expr, Action: ActionAllow, Enabled: true,
+		}); err != nil {
+			t.Fatalf("compile failed: %v", err)
+		}
+
+		tests := []struct {
+			domain string
+			want   bool
+		}{
+			{"adobe.com", true},
+			{"creativecloud.adobe.com", false}, // NOT equal
+			{"adobe.com.evil.com", false},
+		}
+		for _, d := range tests {
+			ctx := Context{Domain: d.domain, ClientIP: "127.0.0.1", QueryType: "A"}
+			matched, _ := engine.Evaluate(ctx)
+			if matched != d.want {
+				t.Errorf("domain %q: expected match=%v, got %v", d.domain, d.want, matched)
+			}
+		}
+	})
+
+	// ── Scenario 6: Regex match ────────────────────────────────────
+	// User selects "matches (regex)" with pattern ".*\.sentry\.io$"
+	// UI generates: DomainRegex(Domain, ".*\\.sentry\\.io$")
+
+	t.Run("Sentry/regex", func(t *testing.T) {
+		expr := `DomainRegex(Domain, ".*\\.sentry\\.io$")`
+		engine := NewEngine(nil)
+		if err := engine.AddRule(&Rule{
+			Name: "Sentry regex", Logic: expr, Action: ActionAllow, Enabled: true,
+		}); err != nil {
+			t.Fatalf("compile failed: %v", err)
+		}
+
+		tests := []struct {
+			domain string
+			want   bool
+		}{
+			{"o123456.ingest.sentry.io", true},
+			{"api.sentry.io", true},
+			{"sentry.io", false},    // no dot before "sentry" — pattern requires subdomain
+			{"notsentry.io", false}, // no dot before sentry
+			{"sentry.io.evil.com", false},
+		}
+		for _, d := range tests {
+			ctx := Context{Domain: d.domain, ClientIP: "127.0.0.1", QueryType: "A"}
+			matched, _ := engine.Evaluate(ctx)
+			if matched != d.want {
+				t.Errorf("domain %q: expected match=%v, got %v", d.domain, d.want, matched)
+			}
+		}
+	})
+}
+
+func runCases(t *testing.T, cases []uiExprCase) {
 	for _, tc := range cases {
 		tc.defaults()
 		t.Run(tc.name, func(t *testing.T) {
