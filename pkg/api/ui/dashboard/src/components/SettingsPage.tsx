@@ -39,6 +39,21 @@ import {
   resetStorage,
 } from "@/lib/api";
 
+/** Parse a Go duration string like "5m0s", "1h30m0s", or "300s" into total seconds. */
+function parseDurationToSeconds(dur?: string): number | undefined {
+  if (!dur) return undefined;
+  let total = 0;
+  const h = dur.match(/(\d+)h/);
+  const m = dur.match(/(\d+)m/);
+  const s = dur.match(/(\d+)s/);
+  if (h) total += parseInt(h[1], 10) * 3600;
+  if (m) total += parseInt(m[1], 10) * 60;
+  if (s) total += parseInt(s[1], 10);
+  // Bare number fallback (already seconds)
+  if (!h && !m && !s && /^\d+$/.test(dur)) total = parseInt(dur, 10);
+  return total || undefined;
+}
+
 export function SettingsPage() {
   const [config, setConfig] = useState<ConfigResponse | null>(null);
   const [health, setHealth] = useState<HealthResponse | null>(null);
@@ -100,58 +115,47 @@ export function SettingsPage() {
       setConfig(cfg);
       setHealth(h);
 
-      // Populate DNS form
-      const dns = cfg.dns as Record<string, unknown>;
-      if (dns?.upstreams && Array.isArray(dns.upstreams)) {
-        setUpstreams((dns.upstreams as string[]).join("\n"));
+      // Populate DNS form — Go returns upstream_dns_servers at top level
+      if (cfg.upstream_dns_servers?.length) {
+        setUpstreams(cfg.upstream_dns_servers.join("\n"));
       }
 
-      // Populate cache form
-      const cache = cfg.cache as Record<string, unknown>;
+      // Populate cache form — Go returns durations as strings like "5m0s"
+      const cache = cfg.cache;
       if (cache) {
-        setCacheEnabled(cache.enabled as boolean ?? true);
-        setCacheMaxEntries(String(cache.max_entries ?? "10000"));
-        setCacheMinTTL(String(cache.min_ttl_seconds ?? "60"));
-        setCacheMaxTTL(String(cache.max_ttl_seconds ?? "86400"));
-        setCacheNegTTL(String(cache.negative_ttl_seconds ?? "300"));
-        setCacheShards(String(cache.shard_count ?? "0"));
+        setCacheEnabled(cache.enabled ?? true);
+        setCacheMaxEntries(String(cache.max_entries ?? 10000));
+        setCacheMinTTL(String(parseDurationToSeconds(cache.min_ttl) ?? 60));
+        setCacheMaxTTL(String(parseDurationToSeconds(cache.max_ttl) ?? 86400));
+        setCacheNegTTL(String(parseDurationToSeconds(cache.negative_ttl) ?? 300));
+        setCacheShards(String(cache.shard_count ?? 0));
       }
 
       // Populate logging form
-      const logging = cfg.logging as Record<string, unknown>;
+      const logging = cfg.logging;
       if (logging) {
-        setLogLevel(String(logging.level ?? "info"));
-        setLogFormat(String(logging.format ?? "text"));
-        setLogOutput(String(logging.output ?? "stdout"));
-      }
-      // Retention from database config
-      const server = cfg.server as Record<string, unknown>;
-      if (server?.retention_days) {
-        setRetentionDays(String(server.retention_days));
+        setLogLevel(logging.level ?? "info");
+        setLogFormat(logging.format ?? "text");
+        setLogOutput(logging.output ?? "stdout");
       }
 
-      // Populate TLS form
-      const tls = cfg.tls as Record<string, unknown>;
-      if (tls) {
-        setDotEnabled(tls.dot_enabled as boolean ?? false);
-        setDotAddress(String(tls.dot_address ?? ":853"));
-        setCertFile(String(tls.cert_file ?? ""));
-        setKeyFile(String(tls.key_file ?? ""));
-        const acme = tls.acme as Record<string, unknown>;
-        if (acme) {
-          setAcmeEnabled(acme.enabled as boolean ?? false);
-          if (Array.isArray(acme.hosts)) {
-            setAcmeHosts((acme.hosts as string[]).join(", "));
+      // Populate TLS form — nested under cfg.server.tls
+      const srv = cfg.server;
+      if (srv) {
+        setDotEnabled(srv.dot_enabled ?? false);
+        setDotAddress(srv.dot_address ?? ":853");
+        const tls = srv.tls;
+        if (tls) {
+          setCertFile(tls.cert_file ?? "");
+          setKeyFile(tls.key_file ?? "");
+          const acme = tls.acme;
+          if (acme) {
+            setAcmeEnabled(acme.enabled ?? false);
+            if (Array.isArray(acme.hosts)) {
+              setAcmeHosts(acme.hosts.join(", "));
+            }
           }
         }
-      }
-
-      // Populate auth display
-      const auth = cfg.auth as Record<string, unknown>;
-      if (auth) {
-        setAuthEnabled(auth.enabled as boolean ?? false);
-        setAuthUsername(String(auth.username ?? ""));
-        setAuthHasApiKey(!!auth.has_api_key);
       }
 
       // Populate block page form
@@ -209,9 +213,10 @@ export function SettingsPage() {
       await updateCacheConfig({
         enabled: cacheEnabled,
         max_entries: parseInt(cacheMaxEntries, 10),
-        min_ttl_seconds: parseInt(cacheMinTTL, 10),
-        max_ttl_seconds: parseInt(cacheMaxTTL, 10),
-        negative_ttl_seconds: parseInt(cacheNegTTL, 10),
+        min_ttl: cacheMinTTL,       // Go parseDurationField accepts bare ints as seconds
+        max_ttl: cacheMaxTTL,
+        negative_ttl: cacheNegTTL,
+        blocked_ttl: "300",         // sensible default
         shard_count: parseInt(cacheShards, 10),
       });
       showSuccess("Cache settings updated");
@@ -230,6 +235,9 @@ export function SettingsPage() {
         level: logLevel,
         format: logFormat,
         output: logOutput,
+        max_size: config?.logging?.max_size ?? 100,
+        max_backups: config?.logging?.max_backups ?? 3,
+        max_age: config?.logging?.max_age ?? 28,
       });
       showSuccess("Logging settings updated");
       await loadData();

@@ -70,7 +70,7 @@ export function ClientsPage() {
   async function handleCreateGroup() {
     if (!newGroupName.trim()) return;
     try {
-      await createClientGroup({ name: newGroupName.trim(), description: newGroupDesc.trim() });
+      await createClientGroup({ name: newGroupName.trim(), description: newGroupDesc.trim(), clients: [] });
       setNewGroupName("");
       setNewGroupDesc("");
       await loadData();

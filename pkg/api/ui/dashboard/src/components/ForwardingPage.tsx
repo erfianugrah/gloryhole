@@ -59,7 +59,14 @@ export function ForwardingPage() {
     setSaving(true);
     try {
       const upstreams = formUpstreams.split(",").map((s) => s.trim()).filter(Boolean);
-      await createForwardingRule({ domain: formDomain, upstreams });
+      await createForwardingRule({
+        name: formDomain,                              // use domain as rule name
+        domains: [formDomain],                         // Go expects domains array
+        upstreams,
+        priority: 50,
+        failover: false,
+        enabled: true,
+      });
       setDialogOpen(false);
       await loadData();
     } catch (err) {

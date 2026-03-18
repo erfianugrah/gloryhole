@@ -73,7 +73,21 @@ export function LocalRecordsPage() {
   async function handleSave() {
     setSaving(true);
     try {
-      await createLocalRecord({ domain: formDomain, type: formType, value: formValue, ttl: formTTL });
+      // Map the generic "value" field to the Go-expected field per record type
+      const req: Parameters<typeof createLocalRecord>[0] = {
+        domain: formDomain,
+        type: formType,
+        ttl: formTTL,
+      };
+      if (formType === "A" || formType === "AAAA") {
+        req.ips = formValue.split(",").map((s) => s.trim()).filter(Boolean);
+      } else if (formType === "TXT") {
+        req.txt_records = [formValue];
+      } else {
+        // CNAME, PTR, MX, NS, etc.
+        req.target = formValue;
+      }
+      await createLocalRecord(req);
       setDialogOpen(false);
       await loadData();
     } catch (err) {

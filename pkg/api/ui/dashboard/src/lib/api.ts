@@ -123,8 +123,21 @@ export interface LocalRecord {
   id: string;
   domain: string;
   type: string;
-  value: string;
+  value: string;   // UI display value (IP, target, or text)
   ttl: number;
+}
+
+export interface LocalRecordCreateRequest {
+  domain: string;
+  type: string;
+  ips?: string[];
+  target?: string;
+  txt_records?: string[];
+  ttl: number;
+  priority?: number;
+  weight?: number;
+  port?: number;
+  wildcard?: boolean;
 }
 
 export interface ConditionalForwardingRule {
@@ -189,14 +202,39 @@ export interface FeatureState {
 }
 
 export interface ConfigResponse {
-  server: Record<string, unknown>;
-  dns: Record<string, unknown>;
-  blocklist: Record<string, unknown>;
-  cache: Record<string, unknown>;
-  block_page?: Record<string, unknown>;
-  logging: Record<string, unknown>;
-  auth: Record<string, unknown>;
-  tls?: Record<string, unknown>;
+  server: {
+    listen_address: string;
+    web_ui_address: string;
+    tcp_enabled: boolean;
+    udp_enabled: boolean;
+    enable_blocklist: boolean;
+    enable_policies: boolean;
+    decision_trace: boolean;
+    dot_enabled: boolean;
+    dot_address: string;
+    cors_allowed_origins: string[];
+    tls: {
+      cert_file: string;
+      key_file: string;
+      autocert: Record<string, unknown>;
+      acme: { enabled: boolean; hosts: string[]; email?: string; cache_dir?: string };
+    };
+  };
+  cache: {
+    enabled: boolean;
+    max_entries: number;
+    min_ttl: string;
+    max_ttl: string;
+    negative_ttl: string;
+    blocked_ttl: string;
+    shard_count: number;
+  };
+  block_page?: { enabled: boolean; block_ip: string };
+  logging: { level: string; format: string; output: string; file_path?: string;
+             add_source?: boolean; max_size?: number; max_backups?: number; max_age?: number };
+  upstream_dns_servers: string[];
+  blocklists: string[];
+  whitelist: string[];
 }
 
 // ─── Statistics ──────────────────────────────────────────────────────
@@ -323,7 +361,7 @@ export async function fetchLocalRecords(): Promise<LocalRecord[]> {
 }
 
 export function createLocalRecord(
-  record: Omit<LocalRecord, "id">
+  record: LocalRecordCreateRequest
 ): Promise<LocalRecord> {
   return apiFetch<LocalRecord>("/api/localrecords", {
     method: "POST",
@@ -449,10 +487,19 @@ export function updateFeatures(state: Partial<FeatureState>): Promise<void> {
   });
 }
 
+/** Convert a human duration like "5m", "1h", "24h" to seconds for the Go API. */
+function durationToSeconds(dur?: string): number {
+  if (!dur) return 0; // indefinite
+  const match = dur.match(/^(\d+)(m|h)$/);
+  if (!match) return 0;
+  const n = parseInt(match[1], 10);
+  return match[2] === "h" ? n * 3600 : n * 60;
+}
+
 export function disableBlocklist(duration?: string): Promise<void> {
   return apiFetch<void>("/api/features/blocklist/disable", {
     method: "POST",
-    body: JSON.stringify({ duration }),
+    body: JSON.stringify({ duration: durationToSeconds(duration) }),
   });
 }
 
@@ -463,7 +510,7 @@ export function enableBlocklist(): Promise<void> {
 export function disablePolicies(duration?: string): Promise<void> {
   return apiFetch<void>("/api/features/policies/disable", {
     method: "POST",
-    body: JSON.stringify({ duration }),
+    body: JSON.stringify({ duration: durationToSeconds(duration) }),
   });
 }
 
@@ -482,7 +529,7 @@ export function updateUpstreams(
 ): Promise<void> {
   return apiFetch<void>("/api/config/upstreams", {
     method: "PUT",
-    body: JSON.stringify({ upstreams }),
+    body: JSON.stringify({ servers: upstreams }),
   });
 }
 
@@ -540,7 +587,10 @@ export function purgeCache(): Promise<void> {
 }
 
 export function resetStorage(): Promise<void> {
-  return apiFetch<void>("/api/storage/reset", { method: "POST" });
+  return apiFetch<void>("/api/storage/reset", {
+    method: "POST",
+    body: JSON.stringify({ confirm: "NUKE" }),
+  });
 }
 
 // ─── Unbound Resolver ────────────────────────────────────────────────
