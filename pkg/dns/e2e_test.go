@@ -296,14 +296,17 @@ func TestE2E_UIExpressionPolicies(t *testing.T) {
 		name        string
 		domain      string
 		expectRcode int
+		notBlocked  bool // when true, only assert rcode != NXDOMAIN (domain may SERVFAIL upstream)
 	}{
-		{"DomainRegex blocks tracker42", "tracker42.example.com.", dns.RcodeNameError},
-		{"DomainRegex blocks tracker0", "tracker0.cdn.com.", dns.RcodeNameError},
-		{"DomainRegex allows clean domain", "www.example.com.", dns.RcodeSuccess},
-		{"DomainEndsWith blocks sub.badsite.com", "sub.badsite.com.", dns.RcodeNameError},
-		{"DomainEndsWith allows badsite.org", "badsite.org.", dns.RcodeSuccess},
-		{"Numeric Hour blocks hourtest.com", "hourtest.com.", dns.RcodeNameError},
-		{"IPEquals blocks iptest.com from loopback", "iptest.com.", dns.RcodeNameError},
+		{"DomainRegex blocks tracker42", "tracker42.example.com.", dns.RcodeNameError, false},
+		{"DomainRegex blocks tracker0", "tracker0.cdn.com.", dns.RcodeNameError, false},
+		{"DomainRegex allows clean domain", "www.example.com.", dns.RcodeSuccess, false},
+		{"DomainEndsWith blocks sub.badsite.com", "sub.badsite.com.", dns.RcodeNameError, false},
+		// badsite.org is not blocked by policy — just verify it isn't NXDOMAIN from the engine.
+		// The upstream may SERVFAIL for non-existent domains so we only assert "not blocked".
+		{"DomainEndsWith allows badsite.org", "badsite.org.", 0, true},
+		{"Numeric Hour blocks hourtest.com", "hourtest.com.", dns.RcodeNameError, false},
+		{"IPEquals blocks iptest.com from loopback", "iptest.com.", dns.RcodeNameError, false},
 	}
 
 	for _, tt := range tests {
@@ -316,7 +319,12 @@ func TestE2E_UIExpressionPolicies(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Query failed: %v", err)
 			}
-			if resp.Rcode != tt.expectRcode {
+			if tt.notBlocked {
+				// Only verify the policy engine didn't return NXDOMAIN (block)
+				if resp.Rcode == dns.RcodeNameError {
+					t.Errorf("expected domain NOT to be blocked, got NXDOMAIN")
+				}
+			} else if resp.Rcode != tt.expectRcode {
 				t.Errorf("expected %s, got %s",
 					dns.RcodeToString[tt.expectRcode],
 					dns.RcodeToString[resp.Rcode])
