@@ -87,7 +87,7 @@ export function SettingsPage() {
   const [logLevel, setLogLevel] = useState("info");
   const [logFormat, setLogFormat] = useState("text");
   const [logOutput, setLogOutput] = useState("stdout");
-  const [retentionDays, setRetentionDays] = useState("7");
+  const [retentionDays] = useState("7"); // Read-only display; not editable from UI
   const [savingLogging, setSavingLogging] = useState(false);
 
   // TLS form state

@@ -247,8 +247,10 @@ export async function fetchTimeseries(
   since = "24h",
   buckets = 24
 ): Promise<TimeseriesBucket[]> {
+  // Go handler expects ?period=hour|day|week&points=N
+  const period = since === "7d" ? "week" : since === "24h" ? "day" : "hour";
   const res = await apiFetch<{ data: TimeseriesBucketRaw[] }>(
-    `/api/stats/timeseries?since=${since}&buckets=${buckets}`
+    `/api/stats/timeseries?period=${period}&points=${buckets}`
   );
   return (res.data ?? []).map((d) => ({
     timestamp: d.timestamp,
@@ -298,10 +300,18 @@ export async function fetchQueries(filter: QueryFilter = {}): Promise<QueryLog[]
   if (filter.limit) params.set("limit", String(filter.limit));
   if (filter.offset) params.set("offset", String(filter.offset));
   if (filter.status) params.set("status", filter.status);
-  if (filter.query_type) params.set("query_type", filter.query_type);
+  if (filter.query_type) params.set("type", filter.query_type);  // Go reads "type"
   if (filter.client) params.set("client", filter.client);
   if (filter.domain) params.set("domain", filter.domain);
-  if (filter.since) params.set("since", filter.since);
+  if (filter.since) {
+    // Go reads "start" as an ISO timestamp, convert duration like "24h" to absolute time
+    const ms = filter.since.endsWith("h")
+      ? parseInt(filter.since) * 3600000
+      : filter.since.endsWith("d")
+        ? parseInt(filter.since) * 86400000
+        : 86400000;
+    params.set("start", new Date(Date.now() - ms).toISOString());
+  }
   const res = await apiFetch<{ queries: QueryLog[] }>(`/api/queries?${params}`);
   return res.queries ?? [];
 }
@@ -355,9 +365,25 @@ export async function exportPolicies(): Promise<Policy[]> {
 
 // ─── Local Records ───────────────────────────────────────────────────
 
+interface LocalRecordRaw {
+  id: string;
+  domain: string;
+  type: string;
+  ips?: string[];
+  target?: string;
+  txt_records?: string[];
+  ttl: number;
+}
+
 export async function fetchLocalRecords(): Promise<LocalRecord[]> {
-  const res = await apiFetch<{ records: LocalRecord[] }>("/api/localrecords");
-  return res.records ?? [];
+  const res = await apiFetch<{ records: LocalRecordRaw[] }>("/api/localrecords");
+  return (res.records ?? []).map((r) => ({
+    id: r.id,
+    domain: r.domain,
+    type: r.type,
+    ttl: r.ttl,
+    value: r.ips?.join(", ") ?? r.target ?? r.txt_records?.join("; ") ?? "",
+  }));
 }
 
 export function createLocalRecord(

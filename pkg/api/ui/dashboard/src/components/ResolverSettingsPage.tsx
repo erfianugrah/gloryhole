@@ -93,7 +93,11 @@ export function ResolverSettingsPage() {
   async function handleSave(fields: Partial<UnboundServerBlock>) {
     setSaving(true);
     try {
-      await updateUnboundServer(fields);
+      // Send full server block merged with changes so Go's mergeServerBlock
+      // sees non-zero values for all boolean fields (false is zero-value and
+      // would be skipped in a partial merge).
+      const full = config ? { ...config.server, ...fields } : fields;
+      await updateUnboundServer(full);
       showSuccess("Resolver settings updated");
       await loadData();
     } catch (err) {
