@@ -33,6 +33,7 @@ import {
   enableBlocklist,
   disableBlocklist,
   updateBlocklistSources,
+  isBlocklistActive,
 } from "@/lib/api";
 
 function formatNumber(n: number): string {
@@ -94,9 +95,11 @@ export function BlocklistsPage() {
     }
   }
 
+  const blocklistActive = isBlocklistActive(features);
+
   async function handleToggleBlocklist() {
     try {
-      if (features?.blocklist_enabled) {
+      if (blocklistActive) {
         const dur = disableDuration === "indefinite" ? undefined : disableDuration;
         await disableBlocklist(dur);
       } else {
@@ -110,7 +113,7 @@ export function BlocklistsPage() {
 
   async function handleDisableDurationChange(dur: string) {
     setDisableDuration(dur);
-    if (!features?.blocklist_enabled) {
+    if (!blocklistActive) {
       try {
         await disableBlocklist(dur === "indefinite" ? undefined : dur);
         await loadData();
@@ -175,14 +178,14 @@ export function BlocklistsPage() {
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2">
             <Switch
-              checked={features?.blocklist_enabled ?? true}
+              checked={blocklistActive}
               onCheckedChange={handleToggleBlocklist}
               aria-label="Toggle blocklist"
             />
             <Label className="text-xs">
-              {features?.blocklist_enabled ? "Enabled" : "Disabled"}
+              {blocklistActive ? "Enabled" : "Disabled"}
             </Label>
-            {!features?.blocklist_enabled && (
+            {!blocklistActive && (
               <Select value={disableDuration} onValueChange={handleDisableDurationChange}>
                 <SelectTrigger className="h-7 w-[130px] text-xs">
                   <SelectValue placeholder="Duration" />

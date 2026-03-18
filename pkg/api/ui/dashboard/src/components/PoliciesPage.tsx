@@ -46,6 +46,7 @@ import {
   fetchFeatures,
   disablePolicies,
   enablePolicies,
+  isPoliciesActive,
 } from "@/lib/api";
 
 // ─── Component ──────────────────────────────────────────────────────
@@ -89,9 +90,9 @@ export function PoliciesPage() {
   }, [loadData]);
 
   async function handleTogglePolicies() {
+    const active = isPoliciesActive(features);
     try {
-      if (features?.policies_enabled) {
-        // Disabling — use whatever duration is currently selected
+      if (active) {
         const dur = disableDuration === "indefinite" ? undefined : disableDuration;
         await disablePolicies(dur);
       } else {
@@ -105,8 +106,7 @@ export function PoliciesPage() {
 
   async function handleDisableDurationChange(dur: string) {
     setDisableDuration(dur);
-    // Re-apply disable with the new duration immediately
-    if (!features?.policies_enabled) {
+    if (!isPoliciesActive(features)) {
       try {
         await disablePolicies(dur === "indefinite" ? undefined : dur);
         await loadData();
@@ -268,14 +268,14 @@ export function PoliciesPage() {
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2">
             <Switch
-              checked={features?.policies_enabled ?? true}
+              checked={isPoliciesActive(features)}
               onCheckedChange={handleTogglePolicies}
               aria-label="Toggle policies"
             />
             <Label className="text-xs">
-              {features?.policies_enabled ? "Enabled" : "Disabled"}
+              {isPoliciesActive(features) ? "Enabled" : "Disabled"}
             </Label>
-            {!features?.policies_enabled && (
+            {!isPoliciesActive(features) && (
               <Select value={disableDuration} onValueChange={handleDisableDurationChange}>
                 <SelectTrigger className="h-7 w-[130px] text-xs">
                   <SelectValue placeholder="Duration" />

@@ -196,9 +196,22 @@ export interface HealthResponse {
 
 export interface FeatureState {
   blocklist_enabled: boolean;
+  blocklist_temp_disabled: boolean;
   blocklist_disabled_until?: string;
   policies_enabled: boolean;
+  policies_temp_disabled: boolean;
   policies_disabled_until?: string;
+}
+
+/** Effective state: enabled in config AND not temporarily disabled. */
+export function isBlocklistActive(f: FeatureState | null): boolean {
+  if (!f) return true;
+  return f.blocklist_enabled && !f.blocklist_temp_disabled;
+}
+
+export function isPoliciesActive(f: FeatureState | null): boolean {
+  if (!f) return true;
+  return f.policies_enabled && !f.policies_temp_disabled;
 }
 
 export interface ConfigResponse {
@@ -248,7 +261,9 @@ export async function fetchTimeseries(
   buckets = 24
 ): Promise<TimeseriesBucket[]> {
   // Go handler expects ?period=hour|day|week&points=N
-  const period = since === "7d" ? "week" : since === "24h" ? "day" : "hour";
+  // period sets the bucket size: hour=1h buckets, day=24h buckets, week=7d buckets
+  // "Last 24h" → 24 x 1h buckets; "Last 7d" → 7 x 24h buckets
+  const period = since === "7d" ? "day" : "hour";
   const res = await apiFetch<{ data: TimeseriesBucketRaw[] }>(
     `/api/stats/timeseries?period=${period}&points=${buckets}`
   );
