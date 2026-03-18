@@ -498,9 +498,9 @@ func TestIntegration_UIGeneratedPolicies(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	// Start API server
-	apiListener, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatalf("Failed to find free port: %v", err)
+	apiListener, listenErr := net.Listen("tcp", "127.0.0.1:0")
+	if listenErr != nil {
+		t.Fatalf("Failed to find free port: %v", listenErr)
 	}
 	apiAddr := apiListener.Addr().String()
 	apiListener.Close()
