@@ -195,7 +195,7 @@ jobs:
           docker buildx imagetools create -t "${GHCR}:latest" \
             "${GHCR}:${TAG}-amd64" "${GHCR}:${TAG}-arm64"
 
-  # Deploy to Fly.io after all images are published
+  # Deploy to Fly.io — layers config onto the already-published image
   fly-deploy:
     name: Deploy to Fly.io
     needs: [docker-manifest]
@@ -221,27 +221,19 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      - name: Extract version
-        id: meta
-        run: |
-          echo "version=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
-          echo "build_time=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
-
-      - name: Build and push Fly image
+      - name: Build Fly image (config layer on top of published image)
         uses: docker/build-push-action@v6
         with:
           context: .
           file: Dockerfile.fly
           platforms: linux/amd64
-          push: true
-          tags: ${{ secrets.DOCKER_USERNAME }}/glory-hole:fly
+          push: false
+          load: true
+          tags: glory-hole:fly
           build-args: |
-            VERSION=${{ steps.meta.outputs.version }}
-            BUILD_TIME=${{ steps.meta.outputs.build_time }}
-          cache-from: type=gha,scope=docker-fly
-          cache-to: type=gha,scope=docker-fly,mode=max
+            VERSION=${{ github.ref_name }}
 
       - name: Deploy to Fly.io
-        run: flyctl deploy --image ${{ secrets.DOCKER_USERNAME }}/glory-hole:fly
+        run: flyctl deploy --local-only --image glory-hole:fly
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
