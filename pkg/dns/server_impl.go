@@ -102,7 +102,7 @@ func (s *Server) Start(ctx context.Context) error {
 	// Create and assign UDP server
 	if s.cfg.Server.UDPEnabled {
 		s.udpServer = &dns.Server{
-			Addr:    s.cfg.Server.ListenAddress,
+			Addr:    s.cfg.Server.UDPAddr(),
 			Net:     "udp",
 			Handler: dns.HandlerFunc(wrappedHandler.serveDNS),
 		}
@@ -111,7 +111,7 @@ func (s *Server) Start(ctx context.Context) error {
 	// Create and assign TCP server
 	if s.cfg.Server.TCPEnabled {
 		s.tcpServer = &dns.Server{
-			Addr:    s.cfg.Server.ListenAddress,
+			Addr:    s.cfg.Server.TCPAddr(),
 			Net:     "tcp",
 			Handler: dns.HandlerFunc(wrappedHandler.serveDNS),
 		}
@@ -133,7 +133,7 @@ func (s *Server) Start(ctx context.Context) error {
 	// Start UDP server in goroutine
 	if s.cfg.Server.UDPEnabled {
 		go func() {
-			s.logger.Info("Starting UDP DNS server", "address", s.cfg.Server.ListenAddress)
+			s.logger.Info("Starting UDP DNS server", "address", s.cfg.Server.UDPAddr())
 			s.mu.RLock()
 			udpSrv := s.udpServer
 			s.mu.RUnlock()
@@ -146,7 +146,7 @@ func (s *Server) Start(ctx context.Context) error {
 	// Start TCP server in goroutine
 	if s.cfg.Server.TCPEnabled {
 		go func() {
-			s.logger.Info("Starting TCP DNS server", "address", s.cfg.Server.ListenAddress)
+			s.logger.Info("Starting TCP DNS server", "address", s.cfg.Server.TCPAddr())
 			s.mu.RLock()
 			tcpSrv := s.tcpServer
 			s.mu.RUnlock()
@@ -180,7 +180,8 @@ func (s *Server) Start(ctx context.Context) error {
 	}
 
 	s.logger.Info("DNS server started",
-		"address", s.cfg.Server.ListenAddress,
+		"udp_address", s.cfg.Server.UDPAddr(),
+		"tcp_address", s.cfg.Server.TCPAddr(),
 		"udp", s.cfg.Server.UDPEnabled,
 		"tcp", s.cfg.Server.TCPEnabled,
 	)

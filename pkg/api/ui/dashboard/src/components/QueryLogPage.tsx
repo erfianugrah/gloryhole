@@ -357,7 +357,7 @@ export function QueryLogPage() {
                           </TableCell>
                           <TableCell>{statusBadge(q)}</TableCell>
                           <TableCell className={T.tableCellNumeric}>
-                            {q.response_time_ms.toFixed(1)}ms
+                            {(q.response_time_ms ?? 0).toFixed(1)}ms
                           </TableCell>
                         </TableRow>
                         {isExpanded && (
@@ -410,8 +410,8 @@ function QueryDetail({ query }: { query: QueryLog }) {
       </div>
       <div className="space-y-2">
         <DetailRow label="Upstream" value={query.upstream || "N/A"} mono />
-        <DetailRow label="Response Time" value={`${query.response_time_ms.toFixed(2)}ms`} />
-        <DetailRow label="Upstream Time" value={`${query.upstream_response_ms.toFixed(2)}ms`} />
+        <DetailRow label="Response Time" value={`${(query.response_time_ms ?? 0).toFixed(2)}ms`} />
+        <DetailRow label="Upstream Time" value={`${(query.upstream_response_ms ?? 0).toFixed(2)}ms`} />
         {query.blocked && <DetailRow label="Status" value="Blocked" className="text-gh-red" />}
         {query.cached && <DetailRow label="Status" value="Cached" className="text-gh-blue" />}
         <DetailRow label="DNSSEC" value={query.dnssec_validated ? "Validated" : "No"} className={query.dnssec_validated ? "text-gh-green" : ""} />

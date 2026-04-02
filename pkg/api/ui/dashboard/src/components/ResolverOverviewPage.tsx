@@ -227,7 +227,7 @@ export function ResolverOverviewPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {stats ? `${stats.cache_hit_rate.toFixed(1)}%` : "N/A"}
+              {stats ? `${(stats.cache_hit_rate ?? 0).toFixed(1)}%` : "N/A"}
             </div>
             {stats && (
               <p className="text-xs text-muted-foreground font-data mt-1">
@@ -250,7 +250,7 @@ export function ResolverOverviewPage() {
             </div>
             {stats && (
               <p className="text-xs text-muted-foreground font-data mt-1">
-                Avg recursion: {stats.avg_recursion_ms.toFixed(1)}ms
+                Avg recursion: {(stats.avg_recursion_ms ?? 0).toFixed(1)}ms
               </p>
             )}
           </CardContent>

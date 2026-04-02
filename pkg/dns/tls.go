@@ -181,10 +181,15 @@ func newACMEManager(cfg *config.ServerConfig, upstreams []string, logger *loggin
 		providerTok: token,
 	}
 
-	if err := mgr.ensureCert(); err != nil {
-		// Non-fatal: start the server without a cert and retry in the background.
-		// GetCertificate will return an error until a cert is obtained.
-		logger.Error("ACME initial certificate obtain failed, will retry in background", "error", err)
+	// Try loading cached cert synchronously (instant if exists).
+	// If no cached cert, obtain one in the background so the DNS/API
+	// servers can start immediately. DoT will return errors until
+	// the cert is ready; UDP/TCP DNS and HTTP are unaffected.
+	if cert, err := mgr.loadCached(); err == nil {
+		mgr.certStore.Store(cert)
+		logger.Info("ACME: loaded cached certificate")
+	} else {
+		logger.Info("ACME: no cached certificate, obtaining in background")
 		mgr.startRetryLoop()
 	}
 
@@ -317,12 +322,15 @@ func (m *acmeManager) obtainCert() (*tls.Certificate, error) {
 		)
 	}
 
-	// Add initial delay before first propagation poll to avoid poisoning
-	// recursive resolvers with negative (NXDOMAIN) cache entries.
+	// Add initial delay (once) before first propagation poll to avoid
+	// poisoning recursive resolvers with negative cache entries.
 	if delay := m.cfg.TLS.ACME.Cloudflare.InitialDelay; delay > 0 {
+		var once sync.Once
 		dnsChallengeOpts = append(dnsChallengeOpts, dns01.WrapPreCheck(func(domain, fqdn, value string, check dns01.PreCheckFunc) (bool, error) {
-			m.logger.Info("ACME: waiting for initial DNS propagation delay", "delay", delay, "fqdn", fqdn)
-			time.Sleep(delay)
+			once.Do(func() {
+				m.logger.Info("ACME: initial DNS propagation delay", "delay", delay, "fqdn", fqdn)
+				time.Sleep(delay)
+			})
 			return check(fqdn, value)
 		}))
 	}
@@ -532,10 +540,69 @@ func newCFZoneProvider(cfg config.CFConfig, token string, httpClient *http.Clien
 	}, nil
 }
 
+// purgeStaleRecords deletes any existing TXT records for the given FQDN.
+// This prevents accumulation of orphaned challenge records from previous
+// failed attempts or process restarts.
+func (p *cfZoneProvider) purgeStaleRecords(fqdn string) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	listURL := fmt.Sprintf("https://api.cloudflare.com/client/v4/zones/%s/dns_records?type=TXT&name=%s",
+		url.PathEscape(p.zoneID), url.QueryEscape(fqdn))
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, listURL, nil)
+	if err != nil {
+		p.logger.Warn("cloudflare: failed to build list request for stale records", "error", err)
+		return
+	}
+	req.Header.Set("Authorization", "Bearer "+p.token)
+
+	resp, err := p.httpClient.Do(req)
+	if err != nil {
+		p.logger.Warn("cloudflare: failed to list stale records", "error", err)
+		return
+	}
+	defer resp.Body.Close()
+
+	var result struct {
+		Result []struct {
+			ID string `json:"id"`
+		} `json:"result"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return
+	}
+	for _, r := range result.Result {
+		p.deleteRecord(r.ID)
+		p.logger.Info("cloudflare: purged stale challenge record", "fqdn", fqdn, "id", r.ID)
+	}
+}
+
+// deleteRecord removes a single DNS record by ID (best-effort).
+func (p *cfZoneProvider) deleteRecord(id string) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodDelete,
+		fmt.Sprintf("https://api.cloudflare.com/client/v4/zones/%s/dns_records/%s", url.PathEscape(p.zoneID), url.PathEscape(id)),
+		nil)
+	if err != nil {
+		return
+	}
+	req.Header.Set("Authorization", "Bearer "+p.token)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := p.httpClient.Do(req)
+	if err != nil {
+		return
+	}
+	resp.Body.Close()
+}
+
 // Present creates the TXT using the configured ZoneID, skipping zone discovery.
 func (p *cfZoneProvider) Present(domain, token, keyAuth string) error {
 	info := dns01.GetChallengeInfo(domain, keyAuth)
 	fqdn := dns01.UnFqdn(info.EffectiveFQDN)
+
+	// Remove any stale challenge records from previous attempts
+	p.purgeStaleRecords(fqdn)
 
 	body, err := json.Marshal(map[string]any{
 		"type":    "TXT",
@@ -598,32 +665,7 @@ func (p *cfZoneProvider) CleanUp(domain, token, keyAuth string) error {
 	if id == "" {
 		return nil // nothing to clean
 	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodDelete,
-		fmt.Sprintf("https://api.cloudflare.com/client/v4/zones/%s/dns_records/%s", url.PathEscape(p.zoneID), url.PathEscape(id)),
-		nil)
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Authorization", "Bearer "+p.token)
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := p.httpClient.Do(req)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		if cerr := resp.Body.Close(); cerr != nil {
-			p.logger.Warn("cloudflare: close response body (cleanup)", "error", cerr)
-		}
-	}()
-	// Best-effort delete; log non-2xx but don't fail
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		p.logger.Warn("cloudflare: cleanup returned non-2xx", "status", resp.StatusCode, "record_id", id)
-	}
+	p.deleteRecord(id)
 	return nil
 }
 

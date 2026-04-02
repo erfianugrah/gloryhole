@@ -63,6 +63,8 @@ type CircuitBreakerConfig struct {
 // ServerConfig holds server-specific settings
 type ServerConfig struct {
 	ListenAddress      string            `yaml:"listen_address"`
+	UDPListenAddress   string            `yaml:"udp_listen_address"` // Override listen_address for UDP only
+	TCPListenAddress   string            `yaml:"tcp_listen_address"` // Override listen_address for TCP only
 	WebUIAddress       string            `yaml:"web_ui_address"`
 	TCPEnabled         bool              `yaml:"tcp_enabled"`
 	UDPEnabled         bool              `yaml:"udp_enabled"`
@@ -511,6 +513,24 @@ func (c *Config) applyEnvOverrides() {
 	}
 
 	c.Auth.normalize()
+}
+
+// UDPAddr returns the effective listen address for the UDP server.
+// It prefers UDPListenAddress, falling back to ListenAddress.
+func (s *ServerConfig) UDPAddr() string {
+	if s.UDPListenAddress != "" {
+		return s.UDPListenAddress
+	}
+	return s.ListenAddress
+}
+
+// TCPAddr returns the effective listen address for the TCP server.
+// It prefers TCPListenAddress, falling back to ListenAddress.
+func (s *ServerConfig) TCPAddr() string {
+	if s.TCPListenAddress != "" {
+		return s.TCPListenAddress
+	}
+	return s.ListenAddress
 }
 
 // Validate checks if the configuration is valid

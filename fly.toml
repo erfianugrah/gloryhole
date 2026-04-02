@@ -1,0 +1,57 @@
+app = "glory-hole"
+primary_region = "ams"
+
+[build]
+  dockerfile = "Dockerfile.fly"
+
+[env]
+  GOMEMLIMIT = "384MiB"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = false
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [http_service.concurrency]
+    type = "connections"
+    hard_limit = 250
+    soft_limit = 200
+
+# DNS over UDP (requires dedicated IPv4: fly ips allocate-v4)
+[[services]]
+  internal_port = 53
+  protocol = "udp"
+
+  [[services.ports]]
+    port = 53
+
+# DNS over TCP
+[[services]]
+  internal_port = 53
+  protocol = "tcp"
+
+  [[services.ports]]
+    port = 53
+
+  [[services.tcp_checks]]
+    interval = "15s"
+    timeout = "2s"
+    grace_period = "300s"
+
+# DNS-over-TLS (Glory-Hole terminates TLS natively)
+[[services]]
+  internal_port = 853
+  protocol = "tcp"
+
+  [[services.ports]]
+    port = 853
+
+[mounts]
+  source = "dns_data"
+  destination = "/var/lib/glory-hole"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"

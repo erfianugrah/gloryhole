@@ -56,21 +56,25 @@ import {
 // ─── Helpers ────────────────────────────────────────────────────────
 
 function formatNumber(n: number): string {
+  if (n == null) return "0";
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
   if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
   return n.toLocaleString();
 }
 
 function formatPercent(n: number): string {
+  if (n == null) return "0%";
   return `${n.toFixed(1)}%`;
 }
 
 function formatMs(n: number): string {
+  if (n == null) return "0ms";
   if (n < 1) return "<1ms";
   return `${n.toFixed(1)}ms`;
 }
 
 function formatBytes(bytes: number): string {
+  if (bytes == null) return "0 KB";
   if (bytes >= 1_073_741_824) return `${(bytes / 1_073_741_824).toFixed(1)} GB`;
   if (bytes >= 1_048_576) return `${(bytes / 1_048_576).toFixed(0)} MB`;
   return `${(bytes / 1_024).toFixed(0)} KB`;
@@ -237,7 +241,7 @@ export function DashboardOverview() {
             <StatCard
               icon={<Thermometer className="h-4 w-4" />}
               label="Temperature"
-              value={`${stats.temperature_celsius.toFixed(1)}°C`}
+              value={`${(stats.temperature_celsius ?? 0).toFixed(1)}°C`}
               color={
                 stats.temperature_celsius > 70
                   ? "text-gh-red"
@@ -263,7 +267,7 @@ export function DashboardOverview() {
           <StatCard
             icon={<Gauge className="h-4 w-4" />}
             label="Resolver Cache"
-            value={`${resolverStats.cache_hit_rate.toFixed(1)}%`}
+            value={`${(resolverStats.cache_hit_rate ?? 0).toFixed(1)}%`}
             sub={`${resolverStats.cache_hits.toLocaleString()} hits`}
             color="text-gh-blue"
           />
@@ -376,7 +380,7 @@ export function DashboardOverview() {
                   <LegendItem
                     key={qt.type}
                     color={CHART_PALETTE[i % CHART_PALETTE.length]}
-                    label={`${qt.type} (${qt.percentage.toFixed(0)}%)`}
+                    label={`${qt.type} (${(qt.percentage ?? 0).toFixed(0)}%)`}
                   />
                 ))}
               </div>

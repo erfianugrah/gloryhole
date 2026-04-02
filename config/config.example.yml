@@ -3,6 +3,8 @@
 # Server settings
 server:
   listen_address: ":53"
+  # udp_listen_address: ""        # Override listen_address for UDP only (e.g. "fly-global-services:53" on Fly.io)
+  # tcp_listen_address: ""        # Override listen_address for TCP only
   tcp_enabled: true
   udp_enabled: true
   web_ui_address: ":8080"

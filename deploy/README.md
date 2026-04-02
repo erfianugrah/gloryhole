@@ -167,6 +167,172 @@ sudo systemctl disable glory-hole
 
 ---
 
+## Fly.io Deployment
+
+Deploy Glory-Hole as a public/private anycast DNS resolver on Fly.io with full ad-blocking, DNS-over-TLS, DNS-over-HTTPS, and Unbound recursive resolution.
+
+**What you get:** DNS (UDP/TCP), DoT (port 853), DoH (`/dns-query`), HTTPS dashboard — all on a single ~$5/mo machine.
+
+### Prerequisites
+
+- [flyctl](https://fly.io/docs/flyctl/install/) installed and authenticated (`fly auth login`)
+- A Fly.io account with a payment method
+
+### Setup
+
+1. **Create the app and allocate resources (one-time):**
+   ```bash
+   fly apps create <your-app-name>
+   fly ips allocate-v4                              # $2/mo, required for UDP DNS
+   fly volumes create dns_data --size 1 --region ams # 1GB persistent volume
+   ```
+
+2. **Update `fly.toml`** with your app name:
+   ```toml
+   app = "<your-app-name>"
+   ```
+
+3. **Create `config.fly.yml`** (see [Configuration](#fly-configuration) below).
+
+4. **Build and deploy:**
+   ```bash
+   make fly-deploy
+   ```
+   Or manually:
+   ```bash
+   docker build -f Dockerfile.fly -t <your-dockerhub-user>/glory-hole:fly .
+   docker push <your-dockerhub-user>/glory-hole:fly
+   fly deploy
+   ```
+
+5. **Add TLS certificate for dashboard/DoH domain:**
+   ```bash
+   fly certs add <your-doh-domain> -a <your-app-name>
+   ```
+
+6. **Create DNS records** (in your DNS provider):
+   - `A` record: DoT hostname → Fly IPv4 (from `fly ips list`)
+   - `AAAA` record: DoT hostname → Fly IPv6
+   - `CNAME` record: DoH/dashboard hostname → `<your-app-name>.fly.dev`
+
+#### Fly Configuration
+
+Create `config.fly.yml` in the project root (gitignored — contains secrets):
+
+```bash
+cp config/config.example.yml config.fly.yml
+```
+
+Key settings to configure:
+```yaml
+server:
+  udp_listen_address: "fly-global-services:53"  # Required for Fly.io UDP routing
+  dot_enabled: true
+  tls:
+    acme:
+      enabled: true
+      dns_provider: cloudflare
+      hosts:
+        - "dns.yourdomain.com"
+      cloudflare:
+        api_token: "<your-cloudflare-api-token>"
+        zone_id: "<your-zone-id>"
+
+auth:
+  enabled: true        # Always enable for internet-facing deployments
+  api_key: "<your-api-key>"
+  username: "<your-username>"
+  password_hash: "<bcrypt-hash>"  # Generate with: glory-hole hash-password "yourpass"
+
+unbound:
+  enabled: true
+  managed: true
+
+logging:
+  format: json          # Structured logs for Fly.io log drains
+
+upstream_dns_servers: [] # Unused when Unbound is enabled
+```
+
+The config is baked into the Docker image by `Dockerfile.fly`. Rebuild and redeploy to change config.
+
+#### Files
+
+| File | Tracked | Purpose |
+|------|---------|---------|
+| `fly.toml` | yes | Fly.io service definitions (ports, VM size, volume mount) |
+| `Dockerfile.fly` | yes | Full build + bakes `config.fly.yml` into image |
+| `config.fly.yml` | no (gitignored) | Fly-specific config with secrets |
+
+### How It Works
+
+| Protocol | Port | How |
+|----------|------|-----|
+| DNS (UDP/TCP) | 53 | Fly.io dedicated IPv4 anycast. UDP binds to `fly-global-services`, TCP to `0.0.0.0` — handled by `udp_listen_address` config. |
+| DNS-over-TLS | 853 | Glory-Hole terminates TLS natively using ACME DNS-01 certs via Cloudflare. |
+| DNS-over-HTTPS | 443 | Fly.io terminates HTTPS, proxies to Glory-Hole's `/dns-query` endpoint on port 8080. |
+| Dashboard | 443 | Same HTTPS service as DoH. |
+
+### Architecture
+
+```
+Client ──UDP/53──► Fly Anycast ──► Glory-Hole ──► Unbound (localhost:5353)
+Client ──DoT/853─► Fly TCP ──────► Glory-Hole (TLS) ──► Unbound
+Client ──DoH/443─► Fly HTTPS ────► Glory-Hole /dns-query ──► Unbound
+```
+
+### Per-Protocol Listen Addresses
+
+Fly.io requires UDP services to bind to the special hostname `fly-global-services` while TCP must bind to `0.0.0.0`. Glory-Hole supports this via `udp_listen_address` and `tcp_listen_address` config overrides:
+
+```yaml
+server:
+  listen_address: ":53"                          # Default for TCP
+  udp_listen_address: "fly-global-services:53"   # Override for UDP only
+```
+
+These are generic config options — not Fly-specific code. They work for any split-bind scenario.
+
+### Cost Estimate
+
+| Resource | Cost/mo |
+|----------|---------|
+| shared-cpu-1x 512MB | $3.19 |
+| Dedicated IPv4 | $2.00 |
+| 1GB Volume | $0.15 |
+| **Total** | **~$5.34** |
+
+Add ~$3.34 per additional region for multi-region anycast.
+
+### Multi-Region
+
+```bash
+fly scale count 2 --region ams,fra
+# Create a volume in each region (primary already has one)
+fly volumes create dns_data --size 1 --region fra
+```
+
+Each region gets its own Unbound cache and SQLite database. Fly's anycast routes clients to the nearest region automatically.
+
+### Troubleshooting
+
+**UDP not working:**
+- Verify you have a dedicated IPv4: `fly ips list`
+- Check that `udp_listen_address: "fly-global-services:53"` is set in config
+- Ensure `EXPOSE 53/udp` is in the Dockerfile
+
+**DoT certificate issues:**
+- Check logs: `fly logs`
+- Verify Cloudflare API token has Zone:DNS:Edit permissions
+- ACME cache is on the persistent volume at `/var/lib/glory-hole/.cache/acme/`
+
+**Memory pressure:**
+- Default VM is 512MB. Unbound + Go + blocklists use ~250-350MB.
+- `GOMEMLIMIT=384MiB` is set in `fly.toml` to prevent Go from over-allocating.
+- For large blocklists, consider upgrading to 1GB: update `fly.toml` memory to `1024mb`.
+
+---
+
 ## Kubernetes Deployment
 
 Kubernetes manifests coming soon. For now, you can use the Docker image with standard Kubernetes resources:

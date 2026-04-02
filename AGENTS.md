@@ -47,6 +47,10 @@ go test ./pkg/...   # Package-level tests
 
 # Docker
 docker build -t glory-hole:dev -f Dockerfile .
+
+# Fly.io deployment
+make fly-deploy     # Build Fly image, push, deploy
+make docker-push    # Build and push main image to DockerHub
 ```
 
 ## Key Patterns
@@ -57,8 +61,17 @@ docker build -t glory-hole:dev -f Dockerfile .
 - shadcn/ui primitives live in `src/components/ui/`, page components in `src/components/`
 - Typography constants in `src/lib/typography.ts` (`T.pageTitle`, `T.cardTitle`, etc.)
 
+## Deployment
+
+- **Docker**: `Dockerfile` for the main multi-arch image, `Dockerfile.release` for GoReleaser
+- **Fly.io**: `Dockerfile.fly` bakes `config.fly.yml` into the image; `fly.toml` defines services
+  - Per-protocol listen: `udp_listen_address`/`tcp_listen_address` in `ServerConfig` override `listen_address`
+  - ACME cert obtain is non-blocking; DNS/API start immediately, DoT comes online when cert is ready
+  - CI deploys to Fly.io on tag push (see `.github/workflows/release.yml`)
+- **Config**: `config.fly.yml` (gitignored) for Fly, `config.yml` (gitignored) for local/router
+
 ## Files to Never Commit
 
-- `config.yml` (contains secrets — use `config/config.example.yml` as template)
+- `config.yml`, `config.*.yml` (contain secrets — use `config/config.example.yml` as template)
 - `*.db`, `*.sqlite` files
 - `CLAUDE.md`, `.claude/` directory

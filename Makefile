@@ -131,6 +131,30 @@ version:
 	@echo "Build Time:  $(BUILD_TIME)"
 	@echo "Go Version:  $(GO_VERSION)"
 
+## docker: Build Docker image
+docker:
+	@echo "Building Docker image $(VERSION)..."
+	docker build -t $(BINARY_NAME):$(VERSION) -t $(BINARY_NAME):latest \
+		--build-arg VERSION=$(VERSION) --build-arg BUILD_TIME=$(BUILD_TIME) .
+
+## docker-push: Build and push Docker image to DockerHub
+docker-push: docker
+	docker tag $(BINARY_NAME):$(VERSION) erfianugrah/$(BINARY_NAME):$(VERSION)
+	docker tag $(BINARY_NAME):latest erfianugrah/$(BINARY_NAME):latest
+	docker push erfianugrah/$(BINARY_NAME):$(VERSION)
+	docker push erfianugrah/$(BINARY_NAME):latest
+
+## docker-fly: Build Fly.io image (bakes in config.fly.yml)
+docker-fly:
+	@echo "Building Fly.io image..."
+	docker build -f Dockerfile.fly -t erfianugrah/$(BINARY_NAME):fly \
+		--build-arg VERSION=$(VERSION) --build-arg BUILD_TIME=$(BUILD_TIME) .
+
+## fly-deploy: Build Fly image, push, and deploy machine
+fly-deploy: docker-fly
+	docker push erfianugrah/$(BINARY_NAME):fly
+	fly deploy --build-arg VERSION=$(VERSION) --build-arg BUILD_TIME=$(BUILD_TIME)
+
 ## release: Prepare release (lint, test, build)
 release: lint test build
 	@echo "Release build complete: $(VERSION)"
