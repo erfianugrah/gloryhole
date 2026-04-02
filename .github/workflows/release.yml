@@ -242,6 +242,6 @@ jobs:
           cache-to: type=gha,scope=docker-fly,mode=max
 
       - name: Deploy to Fly.io
-        run: fly deploy --image ${{ secrets.DOCKER_USERNAME }}/glory-hole:fly
+        run: flyctl deploy --image ${{ secrets.DOCKER_USERNAME }}/glory-hole:fly
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
