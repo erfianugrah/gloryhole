@@ -26,6 +26,7 @@ type Server struct {
 	handler        *Handler
 	logger         *logging.Logger
 	metrics        *telemetry.Metrics
+	clientACL      *ClientACL
 	udpServer      *dns.Server
 	tcpServer      *dns.Server
 	dotServer      *dns.Server
@@ -70,11 +71,20 @@ func NewServer(cfg *config.Config, handler *Handler, logger *logging.Logger, met
 		res = &tlsResources{}
 	}
 
+	// Build client ACL for plain DNS (port 53)
+	acl := NewClientACL(cfg.Server.AllowedClients)
+	if !acl.IsOpen() {
+		logger.Info("DNS client ACL enabled",
+			"entries", len(cfg.Server.AllowedClients),
+			"note", "DoT and DoH bypass ACL")
+	}
+
 	return &Server{
 		cfg:            cfg,
 		handler:        handler,
 		logger:         logger,
 		metrics:        metrics,
+		clientACL:      acl,
 		tlsConfig:      res.TLSConfig,
 		acmeHTTPServer: res.ACMEHTTPServer,
 		acmeRenew:      res.ACMERenewer,
@@ -90,11 +100,12 @@ func (s *Server) Start(ctx context.Context) error {
 	}
 	s.running = true
 
-	// Wrap handler with telemetry and logging
+	// Wrap handler with telemetry, logging, and ACL
 	wrappedHandler := &wrappedHandler{
-		handler: s.handler,
-		logger:  s.logger,
-		metrics: s.metrics,
+		handler:   s.handler,
+		logger:    s.logger,
+		metrics:   s.metrics,
+		clientACL: s.clientACL,
 	}
 
 	errChan := make(chan error, 4)
@@ -252,6 +263,19 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	return nil
 }
 
+// UpdateClientACL replaces the client ACL entries (hot-reload safe).
+func (s *Server) UpdateClientACL(entries []string) {
+	if s.clientACL != nil {
+		s.clientACL.Update(entries)
+		s.logger.Info("DNS client ACL updated", "entries", len(entries))
+	}
+}
+
+// ClientACL returns the server's client ACL for API inspection.
+func (s *Server) ClientACL() *ClientACL {
+	return s.clientACL
+}
+
 // IsRunning returns whether the server is running
 func (s *Server) IsRunning() bool {
 	s.mu.RLock()
@@ -259,11 +283,12 @@ func (s *Server) IsRunning() bool {
 	return s.running
 }
 
-// wrappedHandler wraps the DNS handler with logging and metrics
+// wrappedHandler wraps the DNS handler with logging, metrics, and ACL
 type wrappedHandler struct {
-	handler *Handler
-	logger  *logging.Logger
-	metrics *telemetry.Metrics
+	handler   *Handler
+	logger    *logging.Logger
+	metrics   *telemetry.Metrics
+	clientACL *ClientACL
 }
 
 // serveDNS is the DNS request handler wrapper that adds observability.
@@ -284,6 +309,22 @@ type wrappedHandler struct {
 func (w *wrappedHandler) serveDNS(rw dns.ResponseWriter, r *dns.Msg) {
 	startTime := time.Now()
 	ctx := context.Background()
+
+	// Client ACL: enforce on plain DNS (UDP/TCP) only. DoT and DoH bypass.
+	transport := w.transportLabel(rw)
+	if w.clientACL != nil && (transport == "udp" || transport == "tcp") {
+		clientIP := getClientIP(rw)
+		if !w.clientACL.IsAllowed(clientIP) {
+			msg := new(dns.Msg)
+			msg.SetRcode(r, dns.RcodeRefused)
+			_ = rw.WriteMsg(msg)
+			w.logger.Warn("DNS query refused by client ACL",
+				"client", clientIP,
+				"transport", transport,
+			)
+			return
+		}
+	}
 
 	// Track active clients (concurrent queries)
 	if w.metrics != nil {

@@ -667,6 +667,11 @@ func main() {
 
 		handler.SetDecisionTrace(newCfg.Server.DecisionTrace)
 
+		// Hot-reload client ACL
+		if !equalStringSlice(cfg.Server.AllowedClients, newCfg.Server.AllowedClients) {
+			server.UpdateClientACL(newCfg.Server.AllowedClients)
+		}
+
 		if !equalStringSlice(cfg.UpstreamDNSServers, newCfg.UpstreamDNSServers) {
 			logger.Info("Upstream DNS servers changed")
 			dnsResolver = resolver.New(newCfg.UpstreamDNSServers, logger)
