@@ -561,7 +561,7 @@ func (p *cfZoneProvider) purgeStaleRecords(fqdn string) {
 		p.logger.Warn("cloudflare: failed to list stale records", "error", err)
 		return
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	var result struct {
 		Result []struct {
@@ -593,7 +593,7 @@ func (p *cfZoneProvider) deleteRecord(id string) {
 	if err != nil {
 		return
 	}
-	resp.Body.Close()
+	_ = resp.Body.Close()
 }
 
 // Present creates the TXT using the configured ZoneID, skipping zone discovery.

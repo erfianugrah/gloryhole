@@ -24,7 +24,7 @@ func (s *SQLiteStorage) GetPolicyRules(ctx context.Context) ([]*PolicyRule, erro
 	if err != nil {
 		return nil, fmt.Errorf("query policy_rules: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var rules []*PolicyRule
 	for rows.Next() {
