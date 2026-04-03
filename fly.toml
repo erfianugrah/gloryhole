@@ -1,5 +1,5 @@
 app = "glory-hole"
-primary_region = "ams"
+primary_region = "fra"
 
 [build]
   dockerfile = "Dockerfile.fly"

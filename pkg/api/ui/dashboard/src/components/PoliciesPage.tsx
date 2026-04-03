@@ -1,6 +1,12 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { Plus, Trash2, Pencil, Download, Upload, Play, Wand2 } from "lucide-react";
-import { ConditionEditor, emptyTree, treeToExpression } from "./ConditionEditor";
+import { Plus, Trash2, Pencil, Download, Upload, Play, Wand2, Info } from "lucide-react";
+import {
+  ConditionEditor,
+  emptyTree,
+  treeToExpression,
+  parseExpression,
+  summarizeTree,
+} from "./ConditionEditor";
 import type { ConditionTree } from "./ConditionEditor";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -26,6 +32,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
   Table,
   TableBody,
   TableCell,
@@ -49,6 +61,19 @@ import {
   isPoliciesActive,
 } from "@/lib/api";
 
+// ─── Helpers ────────────────────────────────────────────────────────
+
+/** Attempt to produce a human-readable summary from a raw expression string. */
+function expressionSummary(logic: string): string | null {
+  try {
+    const tree = parseExpression(logic);
+    if (!tree) return null;
+    return summarizeTree(tree);
+  } catch {
+    return null;
+  }
+}
+
 // ─── Component ──────────────────────────────────────────────────────
 
 export function PoliciesPage() {
@@ -59,7 +84,10 @@ export function PoliciesPage() {
   const [disableDuration, setDisableDuration] = useState("indefinite");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingPolicy, setEditingPolicy] = useState<Policy | null>(null);
-  const [testResult, setTestResult] = useState<{ valid: boolean; error?: string } | null>(null);
+  const [testResult, setTestResult] = useState<{
+    valid: boolean;
+    error?: string;
+  } | null>(null);
 
   // Form state
   const [formName, setFormName] = useState("");
@@ -69,8 +97,10 @@ export function PoliciesPage() {
   const [formEnabled, setFormEnabled] = useState(true);
   const [saving, setSaving] = useState(false);
   const [testDomain, setTestDomain] = useState("");
-  const [showVisualBuilder, setShowVisualBuilder] = useState(false);
-  const [conditionTree, setConditionTree] = useState<ConditionTree>(emptyTree());
+  // Visual builder is the DEFAULT mode
+  const [showVisualBuilder, setShowVisualBuilder] = useState(true);
+  const [conditionTree, setConditionTree] =
+    useState<ConditionTree>(emptyTree());
 
   const loadData = useCallback(async () => {
     try {
@@ -79,7 +109,9 @@ export function PoliciesPage() {
       setFeatures(ft);
       setError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load policies");
+      setError(
+        err instanceof Error ? err.message : "Failed to load policies",
+      );
     } finally {
       setLoading(false);
     }
@@ -93,7 +125,8 @@ export function PoliciesPage() {
     const active = isPoliciesActive(features);
     try {
       if (active) {
-        const dur = disableDuration === "indefinite" ? undefined : disableDuration;
+        const dur =
+          disableDuration === "indefinite" ? undefined : disableDuration;
         await disablePolicies(dur);
       } else {
         await enablePolicies();
@@ -111,7 +144,11 @@ export function PoliciesPage() {
         await disablePolicies(dur === "indefinite" ? undefined : dur);
         await loadData();
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to update duration");
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Failed to update duration",
+        );
       }
     }
   }
@@ -125,6 +162,8 @@ export function PoliciesPage() {
     setFormEnabled(true);
     setTestResult(null);
     setTestDomain("");
+    setShowVisualBuilder(true);
+    setConditionTree(emptyTree());
     setDialogOpen(true);
   }
 
@@ -137,6 +176,18 @@ export function PoliciesPage() {
     setFormEnabled(policy.enabled);
     setTestResult(null);
     setTestDomain("");
+
+    // Try to parse existing expression into a visual tree
+    const parsed = parseExpression(policy.logic);
+    if (parsed) {
+      setConditionTree(parsed);
+      setShowVisualBuilder(true);
+    } else {
+      // Fall back to text editor for unparseable expressions
+      setConditionTree(emptyTree());
+      setShowVisualBuilder(false);
+    }
+
     setDialogOpen(true);
   }
 
@@ -159,7 +210,9 @@ export function PoliciesPage() {
       setDialogOpen(false);
       await loadData();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to save policy");
+      setError(
+        err instanceof Error ? err.message : "Failed to save policy",
+      );
     } finally {
       setSaving(false);
     }
@@ -171,7 +224,9 @@ export function PoliciesPage() {
       await deletePolicy(id);
       await loadData();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to delete policy");
+      setError(
+        err instanceof Error ? err.message : "Failed to delete policy",
+      );
     }
   }
 
@@ -186,7 +241,9 @@ export function PoliciesPage() {
       });
       await loadData();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to toggle policy");
+      setError(
+        err instanceof Error ? err.message : "Failed to toggle policy",
+      );
     }
   }
 
@@ -194,10 +251,12 @@ export function PoliciesPage() {
     if (!formLogic.trim() || !testDomain.trim()) return;
     try {
       const result = await testPolicy(formLogic, testDomain);
-      // Go returns {matched: bool}, map to our UI format
       setTestResult({ valid: result.matched ?? false });
     } catch (err) {
-      setTestResult({ valid: false, error: err instanceof Error ? err.message : "Test failed" });
+      setTestResult({
+        valid: false,
+        error: err instanceof Error ? err.message : "Test failed",
+      });
     }
   }
 
@@ -210,8 +269,13 @@ export function PoliciesPage() {
     try {
       const text = await file.text();
       const data = JSON.parse(text);
-      const imported: Array<{ name: string; logic: string; action: string; action_data?: string; enabled?: boolean }> =
-        Array.isArray(data) ? data : data.policies ?? [];
+      const imported: Array<{
+        name: string;
+        logic: string;
+        action: string;
+        action_data?: string;
+        enabled?: boolean;
+      }> = Array.isArray(data) ? data : data.policies ?? [];
 
       if (imported.length === 0) {
         setError("No policies found in import file");
@@ -233,12 +297,14 @@ export function PoliciesPage() {
 
       await loadData();
       setError(null);
-      // Show count inline — no toast needed
       alert(`Imported ${count} policies`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Import failed — check JSON format");
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Import failed — check JSON format",
+      );
     } finally {
-      // Reset the file input so the same file can be re-imported
       if (fileInputRef.current) fileInputRef.current.value = "";
     }
   }
@@ -246,7 +312,9 @@ export function PoliciesPage() {
   async function handleExport() {
     try {
       const data = await exportPolicies();
-      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+      const blob = new Blob([JSON.stringify(data, null, 2)], {
+        type: "application/json",
+      });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
@@ -263,7 +331,9 @@ export function PoliciesPage() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className={T.pageTitle}>Policies</h2>
-          <p className={T.pageDescription}>DNS filtering policies with expression-based rules</p>
+          <p className={T.pageDescription}>
+            DNS filtering policies with expression-based rules
+          </p>
         </div>
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2">
@@ -276,7 +346,10 @@ export function PoliciesPage() {
               {isPoliciesActive(features) ? "Enabled" : "Disabled"}
             </Label>
             {!isPoliciesActive(features) && (
-              <Select value={disableDuration} onValueChange={handleDisableDurationChange}>
+              <Select
+                value={disableDuration}
+                onValueChange={handleDisableDurationChange}
+              >
                 <SelectTrigger className="h-7 w-[130px] text-xs">
                   <SelectValue placeholder="Duration" />
                 </SelectTrigger>
@@ -300,7 +373,11 @@ export function PoliciesPage() {
             onChange={handleImport}
             aria-label="Import policies from JSON file"
           />
-          <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()}>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => fileInputRef.current?.click()}
+          >
             <Upload className="h-3.5 w-3.5 mr-1" />
             Import
           </Button>
@@ -308,7 +385,7 @@ export function PoliciesPage() {
             <Download className="h-3.5 w-3.5 mr-1" />
             Export
           </Button>
-          <Button size="sm" onClick={openCreateDialog}>
+          <Button size="sm" onClick={openCreateDialog} data-testid="add-policy">
             <Plus className="h-3.5 w-3.5 mr-1" />
             Add Policy
           </Button>
@@ -322,87 +399,118 @@ export function PoliciesPage() {
       )}
 
       <Card>
-        {loading ? (
-          <CardContent className="p-4 space-y-2">
-            {Array.from({ length: 5 }).map((_, i) => (
-              <Skeleton key={i} className="h-12 w-full" />
-            ))}
-          </CardContent>
-        ) : policies.length === 0 ? (
-          <CardContent className="p-8 text-center">
-            <p className={T.mutedSm}>No policies configured</p>
-            <Button size="sm" className="mt-4" onClick={openCreateDialog}>
-              <Plus className="h-3.5 w-3.5 mr-1" />
-              Create your first policy
-            </Button>
-          </CardContent>
-        ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-[50px]">#</TableHead>
-                <TableHead>Name</TableHead>
-                <TableHead>Logic</TableHead>
-                <TableHead className="w-[100px]">Action</TableHead>
-                <TableHead className="w-[70px]">Enabled</TableHead>
-                <TableHead className="w-[80px]"></TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {policies.map((policy) => (
-                  <TableRow key={policy.id}>
-                    <TableCell className={T.tableCellMono}>{policy.id}</TableCell>
-                    <TableCell>
-                      <div className={T.tableRowName}>{policy.name}</div>
-                    </TableCell>
-                    <TableCell className={cn(T.tableCellMono, "max-w-[300px] truncate")}>
-                      {policy.logic}
-                    </TableCell>
-                    <TableCell>
-                      <Badge
-                        className={
-                          policy.action === "BLOCK"
-                            ? "bg-gh-red/20 text-gh-red border-gh-red/30"
-                            : policy.action === "ALLOW"
-                            ? "bg-gh-green/20 text-gh-green border-gh-green/30"
-                            : policy.action === "REDIRECT"
-                            ? "bg-gh-yellow/20 text-gh-yellow border-gh-yellow/30"
-                            : "bg-gh-blue/20 text-gh-blue border-gh-blue/30"
-                        }
-                      >
-                        {policy.action}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <Switch
-                        checked={policy.enabled}
-                        onCheckedChange={() => handleToggle(policy)}
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-1">
-                        <Button
-                          variant="ghost"
-                          size="icon-sm"
-                          onClick={() => openEditDialog(policy)}
+        <TooltipProvider>
+          {loading ? (
+            <CardContent className="p-4 space-y-2">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <Skeleton key={i} className="h-12 w-full" />
+              ))}
+            </CardContent>
+          ) : policies.length === 0 ? (
+            <CardContent className="p-8 text-center">
+              <p className={T.mutedSm}>No policies configured</p>
+              <Button
+                size="sm"
+                className="mt-4"
+                onClick={openCreateDialog}
+              >
+                <Plus className="h-3.5 w-3.5 mr-1" />
+                Create your first policy
+              </Button>
+            </CardContent>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-[50px]">#</TableHead>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Logic</TableHead>
+                  <TableHead className="w-[100px]">Action</TableHead>
+                  <TableHead className="w-[70px]">Enabled</TableHead>
+                  <TableHead className="w-[80px]"></TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {policies.map((policy) => {
+                  const summary = expressionSummary(policy.logic);
+                  return (
+                    <TableRow key={policy.id} data-testid="policy-row">
+                      <TableCell className={T.tableCellMono}>
+                        {policy.id}
+                      </TableCell>
+                      <TableCell>
+                        <div className={T.tableRowName}>
+                          {policy.name}
+                        </div>
+                      </TableCell>
+                      <TableCell className="max-w-[350px]">
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span
+                              className="text-xs truncate block cursor-help"
+                              data-testid="policy-logic"
+                            >
+                              {summary ?? policy.logic}
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent
+                            side="bottom"
+                            className="max-w-md"
+                          >
+                            <code className="text-xs font-data break-all">
+                              {policy.logic}
+                            </code>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          className={
+                            policy.action === "BLOCK"
+                              ? "bg-gh-red/20 text-gh-red border-gh-red/30"
+                              : policy.action === "ALLOW"
+                                ? "bg-gh-green/20 text-gh-green border-gh-green/30"
+                                : policy.action === "REDIRECT"
+                                  ? "bg-gh-yellow/20 text-gh-yellow border-gh-yellow/30"
+                                  : "bg-gh-blue/20 text-gh-blue border-gh-blue/30"
+                          }
                         >
-                          <Pencil className="h-3.5 w-3.5" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon-sm"
-                          onClick={() => handleDelete(policy.id)}
-                          className="text-gh-red hover:text-gh-red"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-            </TableBody>
-          </Table>
-        )}
+                          {policy.action}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <Switch
+                          checked={policy.enabled}
+                          onCheckedChange={() => handleToggle(policy)}
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-1">
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            onClick={() => openEditDialog(policy)}
+                            data-testid="edit-policy"
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            onClick={() => handleDelete(policy.id)}
+                            className="text-gh-red hover:text-gh-red"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          )}
+        </TooltipProvider>
       </Card>
 
       {/* Create / Edit Dialog */}
@@ -425,12 +533,13 @@ export function PoliciesPage() {
                   value={formName}
                   onChange={(e) => setFormName(e.target.value)}
                   placeholder="Block ads"
+                  data-testid="policy-name"
                 />
               </div>
               <div className="space-y-2">
                 <Label className={T.formLabel}>Action</Label>
                 <Select value={formAction} onValueChange={setFormAction}>
-                  <SelectTrigger>
+                  <SelectTrigger data-testid="policy-action">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -450,12 +559,22 @@ export function PoliciesPage() {
                   variant="ghost"
                   size="sm"
                   onClick={() => {
-                    setShowVisualBuilder(!showVisualBuilder);
-                    if (!showVisualBuilder) {
-                      setConditionTree(emptyTree());
+                    if (showVisualBuilder) {
+                      // Switching to text — keep formLogic as is
+                      setShowVisualBuilder(false);
+                    } else {
+                      // Switching to visual — try to parse current expression
+                      const parsed = parseExpression(formLogic);
+                      if (parsed) {
+                        setConditionTree(parsed);
+                      } else {
+                        setConditionTree(emptyTree());
+                      }
+                      setShowVisualBuilder(true);
                     }
                   }}
                   className="h-6 text-xs px-2"
+                  data-testid="toggle-builder"
                 >
                   <Wand2 className="h-3 w-3 mr-1" />
                   {showVisualBuilder ? "Text editor" : "Visual builder"}
@@ -473,29 +592,57 @@ export function PoliciesPage() {
                     }}
                   />
                   <div className="rounded-md border border-border bg-muted/50 p-2">
-                    <p className="text-[10px] text-muted-foreground mb-1">Generated expression:</p>
-                    <code className="text-xs font-data text-foreground break-all">{formLogic || "—"}</code>
+                    <p className="text-[10px] text-muted-foreground mb-1">
+                      Generated expression:
+                    </p>
+                    <code
+                      className="text-xs font-data text-foreground break-all"
+                      data-testid="generated-expression"
+                    >
+                      {formLogic || "\u2014"}
+                    </code>
                   </div>
                 </div>
               ) : (
-                <Textarea
-                  value={formLogic}
-                  onChange={(e) => { setFormLogic(e.target.value); setTestResult(null); }}
-                  placeholder='Domain == "ads.example.com" || DomainMatches(Domain, "tracking")'
-                  className="font-data min-h-[80px]"
-                />
+                <div className="space-y-2">
+                  {editingPolicy && !parseExpression(formLogic) && (
+                    <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                      <Info className="h-3 w-3" />
+                      <span>
+                        This expression uses advanced syntax and can only
+                        be edited as text.
+                      </span>
+                    </div>
+                  )}
+                  <Textarea
+                    value={formLogic}
+                    onChange={(e) => {
+                      setFormLogic(e.target.value);
+                      setTestResult(null);
+                    }}
+                    placeholder='Domain == "ads.example.com" || DomainMatches(Domain, "tracking")'
+                    className="font-data min-h-[80px]"
+                    data-testid="logic-textarea"
+                  />
+                </div>
               )}
             </div>
 
             {(formAction === "REDIRECT" || formAction === "FORWARD") && (
               <div className="space-y-2">
                 <Label className={T.formLabel}>
-                  {formAction === "REDIRECT" ? "Redirect IP" : "Upstream DNS servers"}
+                  {formAction === "REDIRECT"
+                    ? "Redirect IP"
+                    : "Upstream DNS servers"}
                 </Label>
                 <Input
                   value={formActionData}
                   onChange={(e) => setFormActionData(e.target.value)}
-                  placeholder={formAction === "REDIRECT" ? "127.0.0.1" : "8.8.8.8:53,8.8.4.4:53"}
+                  placeholder={
+                    formAction === "REDIRECT"
+                      ? "127.0.0.1"
+                      : "8.8.8.8:53,8.8.4.4:53"
+                  }
                   className="font-data"
                 />
               </div>
@@ -503,19 +650,26 @@ export function PoliciesPage() {
 
             {/* Test expression */}
             <div className="space-y-2">
-              <Label className={T.formLabel}>Test Expression (optional)</Label>
+              <Label className={T.formLabel}>
+                Test Expression (optional)
+              </Label>
               <div className="flex items-center gap-2">
                 <Input
                   value={testDomain}
-                  onChange={(e) => { setTestDomain(e.target.value); setTestResult(null); }}
+                  onChange={(e) => {
+                    setTestDomain(e.target.value);
+                    setTestResult(null);
+                  }}
                   placeholder="ads.example.com"
                   className="font-data flex-1"
+                  data-testid="test-domain"
                 />
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={handleTest}
                   disabled={!formLogic.trim() || !testDomain.trim()}
+                  data-testid="test-button"
                 >
                   <Play className="h-3 w-3 mr-1" />
                   Test
@@ -527,16 +681,22 @@ export function PoliciesPage() {
                     "rounded-md px-3 py-2 text-xs",
                     testResult.valid
                       ? "border border-gh-green/30 bg-gh-green/10 text-gh-green"
-                      : "border border-gh-red/30 bg-gh-red/10 text-gh-red"
+                      : "border border-gh-red/30 bg-gh-red/10 text-gh-red",
                   )}
+                  data-testid="test-result"
                 >
-                  {testResult.valid ? "Expression matched" : testResult.error || "Expression did not match"}
+                  {testResult.valid
+                    ? "Expression matched"
+                    : testResult.error || "Expression did not match"}
                 </div>
               )}
             </div>
 
             <div className="flex items-center gap-2">
-              <Switch checked={formEnabled} onCheckedChange={setFormEnabled} />
+              <Switch
+                checked={formEnabled}
+                onCheckedChange={setFormEnabled}
+              />
               <Label className="text-sm">Enabled</Label>
             </div>
           </div>
@@ -545,8 +705,16 @@ export function PoliciesPage() {
             <Button variant="outline" onClick={() => setDialogOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={handleSave} disabled={saving || !formName || !formLogic}>
-              {saving ? "Saving..." : editingPolicy ? "Update" : "Create"}
+            <Button
+              onClick={handleSave}
+              disabled={saving || !formName || !formLogic}
+              data-testid="save-policy"
+            >
+              {saving
+                ? "Saving..."
+                : editingPolicy
+                  ? "Update"
+                  : "Create"}
             </Button>
           </DialogFooter>
         </DialogContent>

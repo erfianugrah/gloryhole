@@ -1,0 +1,26 @@
+services:
+  glory-hole:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: glory-hole-e2e
+    ports:
+      - "18080:8080"
+    # Use a named volume for config so atomic rename works.
+    # The entrypoint copies our config into the volume.
+    volumes:
+      - e2e-config:/etc/glory-hole
+      - ./config.e2e.yml:/tmp/config.e2e.yml:ro
+    entrypoint: ["/bin/sh", "-c", "cp /tmp/config.e2e.yml /etc/glory-hole/config.yml && chown -R glory-hole:glory-hole /etc/glory-hole && exec /usr/local/bin/docker-entrypoint.sh \"$$@\"", "--"]
+    command: ["-config", "/etc/glory-hole/config.yml"]
+    cap_add:
+      - NET_BIND_SERVICE
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/health"]
+      interval: 5s
+      timeout: 3s
+      start_period: 15s
+      retries: 5
+
+volumes:
+  e2e-config:
