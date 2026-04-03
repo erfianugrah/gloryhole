@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"strconv"
 	"strings"
@@ -255,6 +256,23 @@ func (s *Server) handleGetConfig(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response := convertConfigResponse(cfg)
+
+	// Overlay dynamic state from SQLite (source of truth for allowed_clients)
+	if s.storage != nil {
+		aclJSON, err := s.storage.GetDynamicConfig(r.Context(), "allowed_clients")
+		if err == nil && aclJSON != "" {
+			var clients []string
+			if json.Unmarshal([]byte(aclJSON), &clients) == nil {
+				response.Server.AllowedClients = clients
+			}
+		} else {
+			// No DB entry yet — show whatever is in the YAML config (or empty)
+			if response.Server.AllowedClients == nil {
+				response.Server.AllowedClients = []string{}
+			}
+		}
+	}
+
 	s.writeJSON(w, http.StatusOK, response)
 }
 
