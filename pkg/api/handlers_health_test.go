@@ -119,6 +119,30 @@ func (m *mockStorageForHealth) DeleteClientGroup(ctx context.Context, name strin
 	return nil
 }
 
+func (m *mockStorageForHealth) GetPolicyRules(ctx context.Context) ([]*storage.PolicyRule, error) {
+	return []*storage.PolicyRule{}, nil
+}
+
+func (m *mockStorageForHealth) CreatePolicyRule(ctx context.Context, rule *storage.PolicyRule) (int64, error) {
+	return 0, nil
+}
+
+func (m *mockStorageForHealth) UpdatePolicyRule(ctx context.Context, id int64, rule *storage.PolicyRule) error {
+	return nil
+}
+
+func (m *mockStorageForHealth) DeletePolicyRule(ctx context.Context, id int64) error {
+	return nil
+}
+
+func (m *mockStorageForHealth) GetDynamicConfig(ctx context.Context, key string) (string, error) {
+	return "", nil
+}
+
+func (m *mockStorageForHealth) SetDynamicConfig(ctx context.Context, key, value string) error {
+	return nil
+}
+
 // TestHandleLiveness tests the liveness probe endpoint
 func TestHandleLiveness(t *testing.T) {
 	server := New(&Config{

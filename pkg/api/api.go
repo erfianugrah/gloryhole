@@ -38,6 +38,7 @@ type Server struct {
 	killSwitch        *KillSwitchManager  // For duration-based temporary disabling
 	configSnapshot    *config.Config      // Used when watcher is unavailable (tests, static configs)
 	dnsHandler        *dns.Handler        // DNS handler for DNS-over-HTTPS (DoH) queries
+	dnsServer         *dns.Server         // DNS server for ACL updates
 	unboundSupervisor *unbound.Supervisor // Unbound process supervisor (nil if disabled)
 	startTime         time.Time
 	version           string
@@ -176,6 +177,7 @@ func New(cfg *Config) *Server {
 	mux.HandleFunc("PUT /api/config/logging", s.handleUpdateLogging)
 	mux.HandleFunc("PUT /api/config/tls", s.handleUpdateTLS)
 	mux.HandleFunc("PUT /api/config/block-page", s.handleUpdateBlockPage)
+	mux.HandleFunc("PUT /api/config/allowed-clients", s.handleUpdateAllowedClients)
 
 	// UI page routes (Astro pre-rendered)
 	mux.HandleFunc("GET /queries", s.handleQueriesPage)
@@ -345,6 +347,11 @@ func (s *Server) SetPolicyEngine(pe *policy.Engine) {
 // SetUnboundSupervisor updates the Unbound supervisor reference.
 func (s *Server) SetUnboundSupervisor(sup *unbound.Supervisor) {
 	s.unboundSupervisor = sup
+}
+
+// SetDNSServer sets the DNS server reference for ACL updates.
+func (s *Server) SetDNSServer(srv *dns.Server) {
+	s.dnsServer = srv
 }
 
 // SetLogger updates the server logger reference.

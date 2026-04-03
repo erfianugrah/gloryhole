@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -10,17 +11,18 @@ import (
 	"strings"
 	"time"
 
-	"glory-hole/pkg/config"
 	"glory-hole/pkg/policy"
+	"glory-hole/pkg/storage"
 )
 
-// PolicyResponse represents a policy rule in API responses
+// PolicyResponse represents a policy rule in API responses.
+// ID is a stable auto-increment integer from SQLite (not an array index).
 type PolicyResponse struct {
 	Name       string `json:"name"`
 	Logic      string `json:"logic"`
 	Action     string `json:"action"`
 	ActionData string `json:"action_data,omitempty"`
-	ID         int    `json:"id"`
+	ID         int64  `json:"id"`
 	Enabled    bool   `json:"enabled"`
 }
 
@@ -39,77 +41,125 @@ type PolicyRequest struct {
 	Enabled    bool   `json:"enabled"`
 }
 
-// handleGetPolicies returns all policies
-func (s *Server) handleGetPolicies(w http.ResponseWriter, r *http.Request) {
-	// If policy engine is not configured, return empty list
-	var policies []PolicyResponse
+// ─── Helpers ────────────────────────────────────────────────────────
 
+func policyRuleToResponse(r *storage.PolicyRule) PolicyResponse {
+	return PolicyResponse{
+		ID:         r.ID,
+		Name:       r.Name,
+		Logic:      r.Logic,
+		Action:     r.Action,
+		ActionData: r.ActionData,
+		Enabled:    r.Enabled,
+	}
+}
+
+// loadPolicyResponses reads policy rules from SQLite (or falls back to
+// the in-memory engine when storage is unavailable, e.g. in tests).
+func (s *Server) loadPolicyResponses(ctx context.Context) ([]PolicyResponse, error) {
+	if s.storage != nil {
+		rules, err := s.storage.GetPolicyRules(ctx)
+		if err != nil {
+			return nil, err
+		}
+		out := make([]PolicyResponse, 0, len(rules))
+		for _, r := range rules {
+			out = append(out, policyRuleToResponse(r))
+		}
+		return out, nil
+	}
+	// Fallback: read from in-memory engine (tests, no-storage mode)
 	if s.policyEngine != nil {
 		rules := s.policyEngine.GetRules()
-		policies = make([]PolicyResponse, 0, len(rules))
-
-		for i, rule := range rules {
-			policies = append(policies, PolicyResponse{
-				ID:         i,
-				Name:       rule.Name,
-				Logic:      rule.Logic,
-				Action:     rule.Action,
-				ActionData: rule.ActionData,
-				Enabled:    rule.Enabled,
+		out := make([]PolicyResponse, 0, len(rules))
+		for i, r := range rules {
+			out = append(out, PolicyResponse{
+				ID: int64(i), Name: r.Name, Logic: r.Logic,
+				Action: r.Action, ActionData: r.ActionData, Enabled: r.Enabled,
 			})
 		}
-	} else {
-		policies = make([]PolicyResponse, 0)
+		return out, nil
+	}
+	return []PolicyResponse{}, nil
+}
+
+// rebuildPolicyEngine reloads ALL rules from SQLite into the in-memory
+// policy engine. Called after every create/update/delete so the engine
+// stays in sync with the database.
+func (s *Server) rebuildPolicyEngine(ctx context.Context) error {
+	if s.policyEngine == nil {
+		return nil
+	}
+	rules, err := s.storage.GetPolicyRules(ctx)
+	if err != nil {
+		return fmt.Errorf("load rules from DB: %w", err)
 	}
 
+	s.policyEngine.Clear()
+	for _, r := range rules {
+		rule := &policy.Rule{
+			Name:       r.Name,
+			Logic:      r.Logic,
+			Action:     r.Action,
+			ActionData: r.ActionData,
+			Enabled:    r.Enabled,
+		}
+		if err := s.policyEngine.AddRule(rule); err != nil {
+			s.logger.Error("Failed to compile policy rule from DB",
+				"id", r.ID, "name", r.Name, "error", err)
+			// Continue loading other rules
+		}
+	}
+	return nil
+}
+
+// ─── Handlers ───────────────────────────────────────────────────────
+
+// handleGetPolicies returns all policies from SQLite.
+func (s *Server) handleGetPolicies(w http.ResponseWriter, r *http.Request) {
+	policies, err := s.loadPolicyResponses(r.Context())
+	if err != nil {
+		s.writeError(w, http.StatusInternalServerError, "Failed to load policies: "+err.Error())
+		return
+	}
 	s.writeJSON(w, http.StatusOK, PolicyListResponse{
 		Policies: policies,
 		Total:    len(policies),
 	})
 }
 
-// handleGetPolicy returns a specific policy by ID
+// handleGetPolicy returns a specific policy by ID.
 func (s *Server) handleGetPolicy(w http.ResponseWriter, r *http.Request) {
-	if s.policyEngine == nil {
-		s.writeError(w, http.StatusNotFound, "Policy engine not configured")
-		return
-	}
-
 	idStr := r.PathValue("id")
-	id, err := strconv.Atoi(idStr)
+	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
 		s.writeError(w, http.StatusBadRequest, "Invalid policy ID")
 		return
 	}
 
-	rules := s.policyEngine.GetRules()
-	if id < 0 || id >= len(rules) {
-		s.writeError(w, http.StatusNotFound, "Policy not found")
+	policies, loadErr := s.loadPolicyResponses(r.Context())
+	if loadErr != nil {
+		s.writeError(w, http.StatusInternalServerError, "Failed to load policies")
 		return
 	}
 
-	rule := rules[id]
-	s.writeJSON(w, http.StatusOK, PolicyResponse{
-		ID:         id,
-		Name:       rule.Name,
-		Logic:      rule.Logic,
-		Action:     rule.Action,
-		ActionData: rule.ActionData,
-		Enabled:    rule.Enabled,
-	})
+	for _, p := range policies {
+		if p.ID == id {
+			s.writeJSON(w, http.StatusOK, p)
+			return
+		}
+	}
+	s.writeError(w, http.StatusNotFound, "Policy not found")
 }
 
-// handleAddPolicy adds a new policy
+// handleAddPolicy creates a new policy in SQLite and rebuilds the engine.
 func (s *Server) handleAddPolicy(w http.ResponseWriter, r *http.Request) {
 	if s.policyEngine == nil {
 		s.writeError(w, http.StatusBadRequest, "Policy engine not configured - enable policies in config to add rules")
 		return
 	}
 
-	// Limit request body size to 10MB
 	r.Body = http.MaxBytesReader(w, r.Body, 10*1024*1024)
-
-	// Parse request body
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		s.writeError(w, http.StatusBadRequest, "Failed to read request body")
@@ -123,126 +173,84 @@ func (s *Server) handleAddPolicy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Validate request
-	if req.Name == "" {
-		s.writeError(w, http.StatusBadRequest, "Policy name is required")
-		return
-	}
-	if req.Logic == "" {
-		s.writeError(w, http.StatusBadRequest, "Policy logic is required")
-		return
-	}
-	if req.Action == "" {
-		s.writeError(w, http.StatusBadRequest, "Policy action is required")
+	if err := validatePolicyRequest(&req); err != nil {
+		s.writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
-	// Validate action
-	validActions := []string{policy.ActionBlock, policy.ActionAllow, policy.ActionRedirect, policy.ActionForward}
-	validAction := false
-	for _, a := range validActions {
-		if req.Action == a {
-			validAction = true
-			break
+	// Validate expression compiles before persisting
+	testRule := &policy.Rule{
+		Name: req.Name, Logic: req.Logic, Action: req.Action,
+		ActionData: req.ActionData, Enabled: req.Enabled,
+	}
+	testEngine := policy.NewEngine(nil)
+	if err := testEngine.AddRule(testRule); err != nil {
+		s.writeError(w, http.StatusBadRequest, fmt.Sprintf("Failed to compile expression: %v", err))
+		return
+	}
+
+	var newID int64
+
+	if s.storage != nil {
+		// Determine sort_order (append at end)
+		existing, _ := s.storage.GetPolicyRules(r.Context())
+		sortOrder := len(existing)
+
+		dbRule := &storage.PolicyRule{
+			Name:       req.Name,
+			Logic:      req.Logic,
+			Action:     req.Action,
+			ActionData: req.ActionData,
+			Enabled:    req.Enabled,
+			SortOrder:  sortOrder,
 		}
-	}
-	if !validAction {
-		s.writeError(w, http.StatusBadRequest, fmt.Sprintf("Invalid action: %s (must be BLOCK, ALLOW, REDIRECT, or FORWARD)", req.Action))
-		return
-	}
-
-	// Validate action_data requirements
-	if req.Action == policy.ActionRedirect && req.ActionData == "" {
-		s.writeError(w, http.StatusBadRequest, "action_data (redirect IP) is required for REDIRECT action")
-		return
-	}
-	if req.Action == policy.ActionForward {
-		if req.ActionData == "" {
-			s.writeError(w, http.StatusBadRequest, "action_data (upstream DNS servers) is required for FORWARD action")
+		var createErr error
+		newID, createErr = s.storage.CreatePolicyRule(r.Context(), dbRule)
+		if createErr != nil {
+			s.writeError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to save policy: %v", createErr))
 			return
 		}
-		// Validate upstream format
-		if _, err := policy.ParseUpstreams(req.ActionData); err != nil {
-			s.writeError(w, http.StatusBadRequest, fmt.Sprintf("Invalid upstream format: %v", err))
+
+		// Rebuild the in-memory engine from DB
+		if err := s.rebuildPolicyEngine(r.Context()); err != nil {
+			s.logger.Error("Failed to rebuild policy engine after add", "error", err)
+		}
+	} else {
+		// No storage — just add to in-memory engine (tests)
+		if err := s.policyEngine.AddRule(testRule); err != nil {
+			s.writeError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to add policy: %v", err))
 			return
 		}
+		newID = int64(s.policyEngine.Count() - 1)
 	}
 
-	// Create and add rule
-	rule := &policy.Rule{
-		Name:       req.Name,
-		Logic:      req.Logic,
-		Action:     req.Action,
-		ActionData: req.ActionData,
-		Enabled:    req.Enabled,
-	}
-
-	if err := s.policyEngine.AddRule(rule); err != nil {
-		s.writeError(w, http.StatusBadRequest, fmt.Sprintf("Failed to add policy: %v", err))
-		return
-	}
-
-	// Persist to config file if available
-	if err := s.persistPoliciesConfig(func(cfg *config.Config) error {
-		cfg.Policy.Rules = append(cfg.Policy.Rules, config.PolicyRuleEntry{
-			Name:       rule.Name,
-			Logic:      rule.Logic,
-			Action:     rule.Action,
-			ActionData: rule.ActionData,
-			Enabled:    rule.Enabled,
-		})
-		return nil
-	}); err != nil {
-		_ = s.policyEngine.RemoveRule(rule.Name) // rollback in-memory to stay in sync
-		s.logger.Error("Failed to persist new policy to config", "error", err)
-		s.writeError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to save policy to config: %v", err))
-		return
-	}
-
-	s.logger.Info("Policy added via API",
-		"name", req.Name,
-		"action", req.Action,
-		"enabled", req.Enabled)
-
-	// Return the created policy
-	rules := s.policyEngine.GetRules()
-	newID := len(rules) - 1
+	s.logger.Info("Policy added via API", "id", newID, "name", req.Name, "action", req.Action)
 
 	s.writeJSON(w, http.StatusCreated, PolicyResponse{
 		ID:         newID,
-		Name:       rule.Name,
-		Logic:      rule.Logic,
-		Action:     rule.Action,
-		ActionData: rule.ActionData,
-		Enabled:    rule.Enabled,
+		Name:       req.Name,
+		Logic:      req.Logic,
+		Action:     req.Action,
+		ActionData: req.ActionData,
+		Enabled:    req.Enabled,
 	})
 }
 
-// handleUpdatePolicy updates an existing policy
+// handleUpdatePolicy updates an existing policy in SQLite and rebuilds the engine.
 func (s *Server) handleUpdatePolicy(w http.ResponseWriter, r *http.Request) {
 	if s.policyEngine == nil {
-		s.writeError(w, http.StatusBadRequest, "Policy engine not configured - enable policies in config to update rules")
+		s.writeError(w, http.StatusBadRequest, "Policy engine not configured")
 		return
 	}
 
 	idStr := r.PathValue("id")
-	id, err := strconv.Atoi(idStr)
+	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
 		s.writeError(w, http.StatusBadRequest, "Invalid policy ID")
 		return
 	}
 
-	// Verify rule exists
-	rules := s.policyEngine.GetRules()
-	if id < 0 || id >= len(rules) {
-		s.writeError(w, http.StatusNotFound, "Policy not found")
-		return
-	}
-
-	// Limit request body size to 10MB
 	r.Body = http.MaxBytesReader(w, r.Body, 10*1024*1024)
-
-	// Parse request body
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		s.writeError(w, http.StatusBadRequest, "Failed to read request body")
@@ -256,217 +264,136 @@ func (s *Server) handleUpdatePolicy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Validate request
-	if req.Name == "" {
-		s.writeError(w, http.StatusBadRequest, "Policy name is required")
-		return
-	}
-	if req.Logic == "" {
-		s.writeError(w, http.StatusBadRequest, "Policy logic is required")
-		return
-	}
-	if req.Action == "" {
-		s.writeError(w, http.StatusBadRequest, "Policy action is required")
+	if err := validatePolicyRequest(&req); err != nil {
+		s.writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
-	// Validate action
-	validActions := []string{policy.ActionBlock, policy.ActionAllow, policy.ActionRedirect, policy.ActionForward}
-	validAction := false
-	for _, a := range validActions {
-		if req.Action == a {
-			validAction = true
-			break
+	// Validate expression compiles
+	testRule := &policy.Rule{
+		Name: req.Name, Logic: req.Logic, Action: req.Action,
+		ActionData: req.ActionData, Enabled: req.Enabled,
+	}
+	testEngine := policy.NewEngine(nil)
+	if err := testEngine.AddRule(testRule); err != nil {
+		s.writeError(w, http.StatusBadRequest, fmt.Sprintf("Failed to compile expression: %v", err))
+		return
+	}
+
+	if s.storage != nil {
+		// Update in SQLite
+		dbRule := &storage.PolicyRule{
+			Name:       req.Name,
+			Logic:      req.Logic,
+			Action:     req.Action,
+			ActionData: req.ActionData,
+			Enabled:    req.Enabled,
 		}
-	}
-	if !validAction {
-		s.writeError(w, http.StatusBadRequest, fmt.Sprintf("Invalid action: %s (must be BLOCK, ALLOW, REDIRECT, or FORWARD)", req.Action))
-		return
-	}
-
-	// Validate action_data requirements
-	if req.Action == policy.ActionRedirect && req.ActionData == "" {
-		s.writeError(w, http.StatusBadRequest, "action_data (redirect IP) is required for REDIRECT action")
-		return
-	}
-	if req.Action == policy.ActionForward {
-		if req.ActionData == "" {
-			s.writeError(w, http.StatusBadRequest, "action_data (upstream DNS servers) is required for FORWARD action")
+		if err := s.storage.UpdatePolicyRule(r.Context(), id, dbRule); err != nil {
+			s.writeError(w, http.StatusNotFound, fmt.Sprintf("Failed to update policy: %v", err))
 			return
 		}
-		// Validate upstream format
-		if _, err := policy.ParseUpstreams(req.ActionData); err != nil {
-			s.writeError(w, http.StatusBadRequest, fmt.Sprintf("Invalid upstream format: %v", err))
+		if err := s.rebuildPolicyEngine(r.Context()); err != nil {
+			s.logger.Error("Failed to rebuild policy engine after update", "error", err)
+		}
+	} else if s.policyEngine != nil {
+		// No storage — update in-memory engine directly (tests)
+		rules := s.policyEngine.GetRules()
+		if int(id) < 0 || int(id) >= len(rules) {
+			s.writeError(w, http.StatusNotFound, "Policy not found")
+			return
+		}
+		if err := s.policyEngine.UpdateRule(int(id), testRule); err != nil {
+			s.writeError(w, http.StatusBadRequest, fmt.Sprintf("Failed to update policy: %v", err))
 			return
 		}
 	}
 
-	// Update rule in-place to preserve evaluation order
-	newRule := &policy.Rule{
+	s.logger.Info("Policy updated via API", "id", id, "name", req.Name, "action", req.Action)
+
+	s.writeJSON(w, http.StatusOK, PolicyResponse{
+		ID:         id,
 		Name:       req.Name,
 		Logic:      req.Logic,
 		Action:     req.Action,
 		ActionData: req.ActionData,
 		Enabled:    req.Enabled,
-	}
-
-	if err := s.policyEngine.UpdateRule(id, newRule); err != nil {
-		s.writeError(w, http.StatusBadRequest, fmt.Sprintf("Failed to update policy: %v", err))
-		return
-	}
-
-	if err := s.persistPoliciesConfig(func(cfg *config.Config) error {
-		if id >= len(cfg.Policy.Rules) {
-			return fmt.Errorf("policy index out of range in config")
-		}
-		cfg.Policy.Rules[id] = config.PolicyRuleEntry{
-			Name:       newRule.Name,
-			Logic:      newRule.Logic,
-			Action:     newRule.Action,
-			ActionData: newRule.ActionData,
-			Enabled:    newRule.Enabled,
-		}
-		return nil
-	}); err != nil {
-		s.logger.Error("Failed to persist updated policy to config", "error", err, "id", id, "name", newRule.Name)
-		s.writeError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to save policy to config: %v", err))
-		return
-	}
-
-	s.logger.Info("Policy updated via API",
-		"id", id,
-		"name", req.Name,
-		"action", req.Action)
-
-	s.writeJSON(w, http.StatusOK, PolicyResponse{
-		ID:         id,
-		Name:       newRule.Name,
-		Logic:      newRule.Logic,
-		Action:     newRule.Action,
-		ActionData: newRule.ActionData,
-		Enabled:    newRule.Enabled,
 	})
 }
 
-// handleDeletePolicy deletes a policy
+// handleDeletePolicy deletes a policy from SQLite and rebuilds the engine.
 func (s *Server) handleDeletePolicy(w http.ResponseWriter, r *http.Request) {
-	if s.policyEngine == nil {
-		s.writeError(w, http.StatusNotFound, "Policy engine not configured")
-		return
-	}
-
 	idStr := r.PathValue("id")
-	id, err := strconv.Atoi(idStr)
+	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
 		s.writeError(w, http.StatusBadRequest, "Invalid policy ID")
 		return
 	}
 
-	// Get existing rule
-	rules := s.policyEngine.GetRules()
-	if id < 0 || id >= len(rules) {
+	var ruleName string
+
+	if s.storage != nil {
+		// Look up rule name from DB
+		rules, _ := s.storage.GetPolicyRules(r.Context())
+		for _, r := range rules {
+			if r.ID == id {
+				ruleName = r.Name
+				break
+			}
+		}
+		if ruleName == "" {
+			s.writeError(w, http.StatusNotFound, "Policy not found")
+			return
+		}
+
+		if err := s.storage.DeletePolicyRule(r.Context(), id); err != nil {
+			s.writeError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to delete policy: %v", err))
+			return
+		}
+		if err := s.rebuildPolicyEngine(r.Context()); err != nil {
+			s.logger.Error("Failed to rebuild policy engine after delete", "error", err)
+		}
+	} else if s.policyEngine != nil {
+		// No storage — delete from in-memory engine (tests)
+		rules := s.policyEngine.GetRules()
+		idx := int(id)
+		if idx < 0 || idx >= len(rules) {
+			s.writeError(w, http.StatusNotFound, "Policy not found")
+			return
+		}
+		ruleName = rules[idx].Name
+		s.policyEngine.RemoveRule(ruleName)
+	} else {
 		s.writeError(w, http.StatusNotFound, "Policy not found")
 		return
 	}
 
-	rule := rules[id]
-
-	// Persist removal first so config file matches desired state
-	if err := s.persistPoliciesConfig(func(cfg *config.Config) error {
-		if id >= len(cfg.Policy.Rules) {
-			return fmt.Errorf("policy index out of range in config")
-		}
-		cfg.Policy.Rules = append(cfg.Policy.Rules[:id], cfg.Policy.Rules[id+1:]...)
-		return nil
-	}); err != nil {
-		s.logger.Error("Failed to persist policy deletion to config", "error", err, "id", id, "name", rule.Name)
-		s.writeError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to save policy removal: %v", err))
-		return
-	}
-
-	// Remove from in-memory engine
-	if !s.policyEngine.RemoveRule(rule.Name) {
-		s.writeError(w, http.StatusInternalServerError, "Failed to remove policy")
-		return
-	}
-
-	s.logger.Info("Policy deleted via API",
-		"id", id,
-		"name", rule.Name)
+	s.logger.Info("Policy deleted via API", "id", id, "name", ruleName)
 
 	s.writeJSON(w, http.StatusOK, map[string]interface{}{
 		"message": "Policy deleted successfully",
 		"id":      id,
-		"name":    rule.Name,
+		"name":    ruleName,
 	})
 }
 
-// persistPoliciesConfig safely applies a mutation to the Config and writes it to disk if possible.
-func (s *Server) persistPoliciesConfig(mutator func(cfg *config.Config) error) error {
-	if s.configPath == "" {
-		// In tests or ephemeral runs without a config file, keep policies in-memory only.
-		return nil
-	}
-	cfg := s.currentConfig()
-	if cfg == nil {
-		return fmt.Errorf("configuration not available")
-	}
-
-	cloned, err := cfg.Clone()
-	if err != nil {
-		return fmt.Errorf("failed to clone config: %w", err)
-	}
-
-	if err := mutator(cloned); err != nil {
-		return err
-	}
-
-	if err := config.Save(s.configPath, cloned); err != nil {
-		return fmt.Errorf("failed to save config: %w", err)
-	}
-
-	// Force reload config from disk to update in-memory cache
-	// (fsnotify may not work reliably in all environments like WSL)
-	if s.configWatcher != nil {
-		if err := s.configWatcher.Reload(); err != nil {
-			s.logger.Warn("Failed to reload config after persist", "error", err)
-			// Don't fail - the file was saved successfully
-		}
-	} else {
-		// Update in-memory snapshot when watcher is not running
-		s.configSnapshot = cloned
-	}
-
-	return nil
-}
-
-// handleExportPolicies returns the current policies as a downloadable JSON file.
+// handleExportPolicies returns all policies as a downloadable JSON file.
 func (s *Server) handleExportPolicies(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		s.writeError(w, http.StatusMethodNotAllowed, "Method not allowed")
 		return
 	}
 
-	// Export empty list if policy engine not configured
-	var policies []PolicyResponse
-	if s.policyEngine != nil {
-		rules := s.policyEngine.GetRules()
-		policies = make([]PolicyResponse, 0, len(rules))
-		for i, rule := range rules {
-			policies = append(policies, PolicyResponse{
-				ID:         i,
-				Name:       rule.Name,
-				Logic:      rule.Logic,
-				Action:     rule.Action,
-				ActionData: rule.ActionData,
-				Enabled:    rule.Enabled,
-			})
-		}
-	} else {
-		policies = make([]PolicyResponse, 0)
+	policies, err := s.loadPolicyResponses(r.Context())
+	if err != nil {
+		s.writeError(w, http.StatusInternalServerError, "Failed to load policies")
+		return
 	}
 
-	payload := PolicyListResponse{
+	payload := struct {
+		Policies []PolicyResponse `json:"policies"`
+		Total    int              `json:"total"`
+	}{
 		Policies: policies,
 		Total:    len(policies),
 	}
@@ -524,7 +451,6 @@ func (s *Server) handleTestPolicy(w http.ResponseWriter, r *http.Request) {
 		req.QueryType = "A"
 	}
 
-	// Test handler doesn't need rate limiting, pass nil logger
 	engine := policy.NewEngine(nil)
 	rule := &policy.Rule{
 		Name:    "tester",
@@ -539,7 +465,7 @@ func (s *Server) handleTestPolicy(w http.ResponseWriter, r *http.Request) {
 	}
 
 	now := time.Now()
-	ctx := policy.Context{
+	pCtx := policy.Context{
 		Time:      now,
 		Domain:    req.Domain,
 		ClientIP:  req.ClientIP,
@@ -551,8 +477,43 @@ func (s *Server) handleTestPolicy(w http.ResponseWriter, r *http.Request) {
 		Weekday:   int(now.Weekday()),
 	}
 
-	matched, _ := engine.Evaluate(ctx)
+	matched, _ := engine.Evaluate(pCtx)
 	s.writeJSON(w, http.StatusOK, map[string]any{
 		"matched": matched,
 	})
+}
+
+// ─── Validation ─────────────────────────────────────────────────────
+
+func validatePolicyRequest(req *PolicyRequest) error {
+	if req.Name == "" {
+		return fmt.Errorf("policy name is required")
+	}
+	if req.Logic == "" {
+		return fmt.Errorf("policy logic is required")
+	}
+	if req.Action == "" {
+		return fmt.Errorf("policy action is required")
+	}
+
+	validActions := map[string]bool{
+		policy.ActionBlock: true, policy.ActionAllow: true,
+		policy.ActionRedirect: true, policy.ActionForward: true,
+	}
+	if !validActions[req.Action] {
+		return fmt.Errorf("invalid action: %s (must be BLOCK, ALLOW, REDIRECT, or FORWARD)", req.Action)
+	}
+
+	if req.Action == policy.ActionRedirect && req.ActionData == "" {
+		return fmt.Errorf("action_data (redirect IP) is required for REDIRECT action")
+	}
+	if req.Action == policy.ActionForward {
+		if req.ActionData == "" {
+			return fmt.Errorf("action_data (upstream DNS servers) is required for FORWARD action")
+		}
+		if _, err := policy.ParseUpstreams(req.ActionData); err != nil {
+			return fmt.Errorf("invalid upstream format: %v", err)
+		}
+	}
+	return nil
 }

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { Save, Trash2, AlertTriangle, Shield, Key, Lock, Server } from "lucide-react";
+import { Save, Trash2, AlertTriangle, Shield, Key, Lock, Server, Plus, X } from "lucide-react";
 import type { UnboundStatus } from "@/lib/api";
 import { fetchUnboundStatus } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -35,6 +35,7 @@ import {
   updateLoggingConfig,
   updateTLSConfig,
   updateBlockPageConfig,
+  updateAllowedClients,
   purgeCache,
   resetStorage,
 } from "@/lib/api";
@@ -109,6 +110,11 @@ export function SettingsPage() {
   const [blockPageIP, setBlockPageIP] = useState("");
   const [savingBlockPage, setSavingBlockPage] = useState(false);
 
+  // Client ACL form state
+  const [allowedClients, setAllowedClients] = useState<string[]>([]);
+  const [newClient, setNewClient] = useState("");
+  const [savingACL, setSavingACL] = useState(false);
+
   const loadData = useCallback(async () => {
     try {
       const [cfg, h] = await Promise.all([fetchConfig(), fetchHealth()]);
@@ -163,6 +169,13 @@ export function SettingsPage() {
       if (blockPage) {
         setBlockPageEnabled(blockPage.enabled as boolean ?? false);
         setBlockPageIP(String(blockPage.block_ip ?? ""));
+      }
+
+      // Populate client ACL
+      if (cfg.server?.allowed_clients) {
+        setAllowedClients(cfg.server.allowed_clients);
+      } else {
+        setAllowedClients([]);
       }
 
       // Check resolver status (non-blocking)
@@ -289,6 +302,30 @@ export function SettingsPage() {
     }
   }
 
+  function handleAddClient() {
+    const entry = newClient.trim();
+    if (!entry || allowedClients.includes(entry)) return;
+    setAllowedClients([...allowedClients, entry]);
+    setNewClient("");
+  }
+
+  function handleRemoveClient(index: number) {
+    setAllowedClients(allowedClients.filter((_, i) => i !== index));
+  }
+
+  async function handleSaveACL() {
+    setSavingACL(true);
+    try {
+      await updateAllowedClients(allowedClients);
+      showSuccess("Client ACL updated");
+      await loadData();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save client ACL");
+    } finally {
+      setSavingACL(false);
+    }
+  }
+
   async function handlePurgeCache() {
     try {
       await purgeCache();
@@ -342,6 +379,7 @@ export function SettingsPage() {
           <TabsTrigger value="cache">Cache</TabsTrigger>
           <TabsTrigger value="logging">Logging</TabsTrigger>
           <TabsTrigger value="tls">TLS</TabsTrigger>
+          <TabsTrigger value="acl">Client ACL</TabsTrigger>
           <TabsTrigger value="blockpage">Block Page</TabsTrigger>
           <TabsTrigger value="auth">Authentication</TabsTrigger>
           <TabsTrigger value="danger">Danger Zone</TabsTrigger>
@@ -647,6 +685,82 @@ export function SettingsPage() {
               >
                 <Save className="h-3.5 w-3.5 mr-1" />
                 {savingTLS ? "Saving..." : "Save"}
+              </Button>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Client ACL */}
+        <TabsContent value="acl">
+          <Card>
+            <CardHeader>
+              <CardTitle className={T.cardTitle}>
+                <Shield className="h-4 w-4 inline mr-1.5" />
+                Client ACL
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className={T.mutedSm}>
+                Restrict plain DNS (port 53 UDP/TCP) to specific IPs and CIDRs.
+                When the list is empty, all clients are allowed (open resolver).
+                DoT and DoH bypass this ACL — they have their own auth layers.
+              </p>
+
+              {allowedClients.length === 0 ? (
+                <div className="rounded-md border border-gh-yellow/30 bg-gh-yellow/10 px-3 py-2 text-xs text-gh-yellow">
+                  No client restrictions — port 53 is open to all IPs
+                </div>
+              ) : (
+                <div className="space-y-1.5">
+                  {allowedClients.map((client, i) => (
+                    <div
+                      key={`${client}-${i}`}
+                      className="flex items-center gap-2 rounded-md border border-border bg-muted/30 px-3 py-1.5"
+                    >
+                      <code className="text-xs font-data flex-1">{client}</code>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveClient(i)}
+                        className="text-muted-foreground hover:text-gh-red transition-colors"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="flex items-center gap-2">
+                <Input
+                  value={newClient}
+                  onChange={(e) => setNewClient(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      handleAddClient();
+                    }
+                  }}
+                  placeholder="192.168.1.0/24 or 10.0.0.1 or fd00::/8"
+                  className="font-data max-w-sm"
+                />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleAddClient}
+                  disabled={!newClient.trim()}
+                >
+                  <Plus className="h-3.5 w-3.5 mr-1" />
+                  Add
+                </Button>
+              </div>
+
+              <Button
+                size="sm"
+                onClick={handleSaveACL}
+                disabled={savingACL}
+              >
+                <Save className="h-3.5 w-3.5 mr-1" />
+                {savingACL ? "Saving..." : "Save"}
               </Button>
             </CardContent>
           </Card>

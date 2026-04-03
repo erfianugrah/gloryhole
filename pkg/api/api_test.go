@@ -149,6 +149,30 @@ func (m *mockStorage) DeleteClientGroup(ctx context.Context, name string) error 
 	return nil
 }
 
+func (m *mockStorage) GetPolicyRules(ctx context.Context) ([]*storage.PolicyRule, error) {
+	return []*storage.PolicyRule{}, nil
+}
+
+func (m *mockStorage) CreatePolicyRule(ctx context.Context, rule *storage.PolicyRule) (int64, error) {
+	return 0, nil
+}
+
+func (m *mockStorage) UpdatePolicyRule(ctx context.Context, id int64, rule *storage.PolicyRule) error {
+	return nil
+}
+
+func (m *mockStorage) DeletePolicyRule(ctx context.Context, id int64) error {
+	return nil
+}
+
+func (m *mockStorage) GetDynamicConfig(ctx context.Context, key string) (string, error) {
+	return "", nil
+}
+
+func (m *mockStorage) SetDynamicConfig(ctx context.Context, key, value string) error {
+	return nil
+}
+
 func newConfigTestServer(t *testing.T, mutate func(*config.Config)) (*Server, string) {
 	t.Helper()
 

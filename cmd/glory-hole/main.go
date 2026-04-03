@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"net"
@@ -523,32 +524,66 @@ func main() {
 		)
 	}
 
-	// Initialize policy engine so the API/UI can add rules even when none exist yet.
-	// Evaluation is gated by the runtime kill-switch (server.enable_policies).
+	// Initialize policy engine from SQLite (source of truth for runtime state).
+	// On first boot, seed from YAML config for backward compatibility.
 	policyEngine := policy.NewEngine(logger)
 
-	for _, entry := range cfg.Policy.Rules {
-		rule := &policy.Rule{
-			Name:       entry.Name,
-			Logic:      entry.Logic,
-			Action:     entry.Action,
-			ActionData: entry.ActionData,
-			Enabled:    entry.Enabled,
+	if stor != nil {
+		dbRules, dbErr := stor.GetPolicyRules(ctx)
+		if dbErr != nil {
+			logger.Error("Failed to load policies from database", "error", dbErr)
 		}
 
-		if addErr := policyEngine.AddRule(rule); addErr != nil {
-			logger.Error("Failed to add policy rule",
-				"name", entry.Name,
-				"error", addErr,
-			)
-			continue
+		// First-boot seed: import YAML rules into SQLite if DB is empty
+		if len(dbRules) == 0 && len(cfg.Policy.Rules) > 0 {
+			logger.Info("Seeding policies from config into database",
+				"count", len(cfg.Policy.Rules))
+			for i, entry := range cfg.Policy.Rules {
+				_, seedErr := stor.CreatePolicyRule(ctx, &storage.PolicyRule{
+					Name:       entry.Name,
+					Logic:      entry.Logic,
+					Action:     entry.Action,
+					ActionData: entry.ActionData,
+					Enabled:    entry.Enabled,
+					SortOrder:  i,
+				})
+				if seedErr != nil {
+					logger.Error("Failed to seed policy rule",
+						"name", entry.Name, "error", seedErr)
+				}
+			}
+			dbRules, _ = stor.GetPolicyRules(ctx)
 		}
 
-		logger.Debug("Added policy rule",
-			"name", entry.Name,
-			"action", entry.Action,
-			"enabled", entry.Enabled,
-		)
+		// Build engine from DB rules
+		for _, r := range dbRules {
+			rule := &policy.Rule{
+				Name:       r.Name,
+				Logic:      r.Logic,
+				Action:     r.Action,
+				ActionData: r.ActionData,
+				Enabled:    r.Enabled,
+			}
+			if addErr := policyEngine.AddRule(rule); addErr != nil {
+				logger.Error("Failed to compile policy rule from DB",
+					"id", r.ID, "name", r.Name, "error", addErr)
+			}
+		}
+	} else {
+		// No storage — load directly from YAML (tests, ephemeral runs)
+		for _, entry := range cfg.Policy.Rules {
+			rule := &policy.Rule{
+				Name:       entry.Name,
+				Logic:      entry.Logic,
+				Action:     entry.Action,
+				ActionData: entry.ActionData,
+				Enabled:    entry.Enabled,
+			}
+			if addErr := policyEngine.AddRule(rule); addErr != nil {
+				logger.Error("Failed to add policy rule",
+					"name", entry.Name, "error", addErr)
+			}
+		}
 	}
 
 	handler.SetPolicyEngine(policyEngine)
@@ -556,6 +591,24 @@ func main() {
 		"total_rules", policyEngine.Count(),
 		"enabled", cfg.Server.EnablePolicies,
 	)
+
+	// Load allowed_clients from SQLite (fallback to YAML for first boot)
+	if stor != nil {
+		aclJSON, aclErr := stor.GetDynamicConfig(ctx, "allowed_clients")
+		if aclErr == nil && aclJSON != "" {
+			var aclEntries []string
+			if json.Unmarshal([]byte(aclJSON), &aclEntries) == nil {
+				cfg.Server.AllowedClients = aclEntries
+				logger.Info("Loaded client ACL from database", "entries", len(aclEntries))
+			}
+		} else if len(cfg.Server.AllowedClients) > 0 {
+			// Seed from YAML on first boot
+			data, _ := json.Marshal(cfg.Server.AllowedClients)
+			_ = stor.SetDynamicConfig(ctx, "allowed_clients", string(data))
+			logger.Info("Seeded client ACL from config into database",
+				"entries", len(cfg.Server.AllowedClients))
+		}
+	}
 
 	// Initialize conditional forwarding rule evaluator
 	if cfg.ConditionalForwarding.Enabled {
@@ -654,6 +707,7 @@ func main() {
 		KillSwitch:        killSwitch,  // For duration-based temporary disabling
 	})
 	apiServer.SetCache(dnsCache)
+	apiServer.SetDNSServer(server)
 
 	// Setup config change callback now that all components are created
 	// This enables hot-reload for configuration changes
@@ -667,10 +721,8 @@ func main() {
 
 		handler.SetDecisionTrace(newCfg.Server.DecisionTrace)
 
-		// Hot-reload client ACL
-		if !equalStringSlice(cfg.Server.AllowedClients, newCfg.Server.AllowedClients) {
-			server.UpdateClientACL(newCfg.Server.AllowedClients)
-		}
+		// NOTE: Policy rules and allowed_clients are now in SQLite.
+		// They are NOT hot-reloaded from YAML — the API/UI writes directly to the DB.
 
 		if !equalStringSlice(cfg.UpstreamDNSServers, newCfg.UpstreamDNSServers) {
 			logger.Info("Upstream DNS servers changed")
@@ -693,43 +745,6 @@ func main() {
 				logger.Error("Failed to reload blocklists", "error", err)
 			} else {
 				logger.Info("Blocklists reloaded", "domains", blocklistMgr.Size())
-			}
-		}
-
-		// Hot-reload policy engine when config toggles or rules change
-		if !equalPolicyConfig(&cfg.Policy, &newCfg.Policy) {
-			if newCfg.Policy.Enabled {
-				if policyEngine == nil {
-					logger.Info("Policy engine enabled; creating new engine")
-					policyEngine = policy.NewEngine(logger)
-				} else {
-					policyEngine.Clear()
-				}
-
-				for _, entry := range newCfg.Policy.Rules {
-					rule := &policy.Rule{
-						Name:       entry.Name,
-						Logic:      entry.Logic,
-						Action:     entry.Action,
-						ActionData: entry.ActionData,
-						Enabled:    entry.Enabled,
-					}
-					if err := policyEngine.AddRule(rule); err != nil {
-						logger.Error("Failed to add policy rule during hot-reload",
-							"name", entry.Name,
-							"error", err,
-						)
-					}
-				}
-
-				handler.SetPolicyEngine(policyEngine)
-				apiServer.SetPolicyEngine(policyEngine)
-				logger.Info("Policy engine reloaded", "total_rules", policyEngine.Count())
-			} else {
-				logger.Info("Policy engine disabled via config")
-				policyEngine = nil
-				handler.SetPolicyEngine(nil)
-				apiServer.SetPolicyEngine(nil)
 			}
 		}
 

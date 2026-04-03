@@ -233,6 +233,64 @@ func (s *Server) handleUpdateBlockPage(w http.ResponseWriter, r *http.Request) {
 	s.respondConfigUpdate(w, r, "", "block_page", "Block page settings updated", data)
 }
 
+// handleUpdateAllowedClients handles PUT /api/config/allowed-clients
+// Persists to SQLite (dynamic_config table) instead of YAML.
+func (s *Server) handleUpdateAllowedClients(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPut {
+		s.writeError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		return
+	}
+
+	r.Body = http.MaxBytesReader(w, r.Body, maxConfigPayloadSize)
+
+	var payload struct {
+		Clients []string `json:"clients"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		s.writeError(w, http.StatusBadRequest, "Invalid request body: "+err.Error())
+		return
+	}
+
+	// Validate each entry is a valid IP or CIDR
+	validated := make([]string, 0, len(payload.Clients))
+	for _, entry := range payload.Clients {
+		entry = strings.TrimSpace(entry)
+		if entry == "" {
+			continue
+		}
+		if _, _, err := net.ParseCIDR(entry); err == nil {
+			validated = append(validated, entry)
+			continue
+		}
+		if ip := net.ParseIP(entry); ip != nil {
+			validated = append(validated, entry)
+			continue
+		}
+		s.writeError(w, http.StatusBadRequest, fmt.Sprintf("Invalid IP or CIDR: %q", entry))
+		return
+	}
+
+	// Persist to SQLite
+	if s.storage != nil {
+		data, _ := json.Marshal(validated)
+		if err := s.storage.SetDynamicConfig(r.Context(), "allowed_clients", string(data)); err != nil {
+			s.writeError(w, http.StatusInternalServerError, "Failed to save ACL: "+err.Error())
+			return
+		}
+	}
+
+	// Hot-reload: update the DNS server ACL
+	if s.dnsServer != nil {
+		s.dnsServer.UpdateClientACL(validated)
+	}
+
+	s.writeJSON(w, http.StatusOK, map[string]interface{}{
+		"status":  "ok",
+		"message": "Client ACL updated",
+		"clients": validated,
+	})
+}
+
 func parseUpstreamServers(r *http.Request) ([]string, error) {
 	type request struct {
 		Servers []string `json:"servers"`

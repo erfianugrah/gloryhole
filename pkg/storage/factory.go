@@ -161,6 +161,36 @@ func (n *NoOpStorage) DeleteClientGroup(ctx context.Context, name string) error 
 	return ErrNotEnabled
 }
 
+// GetPolicyRules returns empty slice
+func (n *NoOpStorage) GetPolicyRules(ctx context.Context) ([]*PolicyRule, error) {
+	return []*PolicyRule{}, nil
+}
+
+// CreatePolicyRule is a no-op
+func (n *NoOpStorage) CreatePolicyRule(ctx context.Context, rule *PolicyRule) (int64, error) {
+	return 0, nil
+}
+
+// UpdatePolicyRule is a no-op
+func (n *NoOpStorage) UpdatePolicyRule(ctx context.Context, id int64, rule *PolicyRule) error {
+	return nil
+}
+
+// DeletePolicyRule is a no-op
+func (n *NoOpStorage) DeletePolicyRule(ctx context.Context, id int64) error {
+	return nil
+}
+
+// GetDynamicConfig returns empty string
+func (n *NoOpStorage) GetDynamicConfig(ctx context.Context, key string) (string, error) {
+	return "", nil
+}
+
+// SetDynamicConfig is a no-op
+func (n *NoOpStorage) SetDynamicConfig(ctx context.Context, key, value string) error {
+	return nil
+}
+
 // Cleanup does nothing
 func (n *NoOpStorage) Cleanup(ctx context.Context, olderThan time.Time) error {
 	return nil

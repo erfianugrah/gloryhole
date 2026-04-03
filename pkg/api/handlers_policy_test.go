@@ -531,7 +531,7 @@ func TestHandleGetPolicies_MultiplePolicies(t *testing.T) {
 
 	// Verify all policies are present with correct IDs
 	for i, rule := range rules {
-		if result.Policies[i].ID != i {
+		if result.Policies[i].ID != int64(i) {
 			t.Errorf("Expected policy %d to have ID %d, got %d", i, i, result.Policies[i].ID)
 		}
 

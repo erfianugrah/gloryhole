@@ -10,6 +10,10 @@ set -e
 #      - Drops privileges to glory-hole (UID 1000) via su-exec
 #   2. Running as non-root (Kubernetes securityContext, --user flag):
 #      - Executes the binary directly
+#
+# Dynamic state (policies, ACL, etc.) is stored in SQLite on the persistent
+# volume (/var/lib/glory-hole/), NOT in the config file. The config file
+# is read-only and only provides static infrastructure settings.
 
 GLORY_USER="glory-hole"
 GLORY_UID=1000
@@ -17,8 +21,6 @@ GLORY_GID=1000
 
 if [ "$(id -u)" = "0" ]; then
     # Fix ownership on all app directories so glory-hole user can read/write.
-    # /etc/glory-hole needs write access for config persistence (policy saves
-    # write a .tmp file then rename).
     chown -R "${GLORY_UID}:${GLORY_GID}" \
         /etc/glory-hole \
         /var/lib/glory-hole \

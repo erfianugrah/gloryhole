@@ -260,6 +260,7 @@ type ConfigServerResponse struct {
 	DecisionTrace      bool              `json:"decision_trace"`
 	DotEnabled         bool              `json:"dot_enabled"`
 	DotAddress         string            `json:"dot_address"`
+	AllowedClients     []string          `json:"allowed_clients"`
 	CORSAllowedOrigins []string          `json:"cors_allowed_origins"`
 	TLS                ConfigTLSResponse `json:"tls"`
 }
@@ -309,6 +310,7 @@ func convertConfigResponse(cfg *config.Config) ConfigResponse {
 			DecisionTrace:      cfg.Server.DecisionTrace,
 			DotEnabled:         cfg.Server.DotEnabled,
 			DotAddress:         cfg.Server.DotAddress,
+			AllowedClients:     cfg.Server.AllowedClients,
 			CORSAllowedOrigins: cfg.Server.CORSAllowedOrigins,
 			TLS: ConfigTLSResponse{
 				CertFile: cfg.Server.TLS.CertFile,

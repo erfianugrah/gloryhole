@@ -232,6 +232,35 @@ var migrations = []Migration{
 			ALTER TABLE queries ADD COLUMN dnssec_validated BOOLEAN NOT NULL DEFAULT 0;
 		`,
 	},
+	{
+		Version:     12,
+		Description: "Create policy_rules table for persistent policy storage",
+		SQL: `
+			CREATE TABLE IF NOT EXISTS policy_rules (
+				id          INTEGER PRIMARY KEY AUTOINCREMENT,
+				name        TEXT    NOT NULL,
+				logic       TEXT    NOT NULL,
+				action      TEXT    NOT NULL CHECK(action IN ('BLOCK','ALLOW','REDIRECT','FORWARD')),
+				action_data TEXT    NOT NULL DEFAULT '',
+				enabled     INTEGER NOT NULL DEFAULT 1,
+				sort_order  INTEGER NOT NULL DEFAULT 0,
+				created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+				updated_at  DATETIME DEFAULT CURRENT_TIMESTAMP
+			);
+			CREATE INDEX IF NOT EXISTS idx_policy_rules_sort ON policy_rules(sort_order);
+		`,
+	},
+	{
+		Version:     13,
+		Description: "Create dynamic_config key-value table for ACL and other runtime state",
+		SQL: `
+			CREATE TABLE IF NOT EXISTS dynamic_config (
+				key        TEXT PRIMARY KEY,
+				value      TEXT NOT NULL,
+				updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+			);
+		`,
+	},
 }
 
 // getMigrations returns all migrations sorted by version

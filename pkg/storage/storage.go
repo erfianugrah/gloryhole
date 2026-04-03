@@ -35,6 +35,16 @@ type Storage interface {
 	UpsertClientGroup(ctx context.Context, group *ClientGroup) error
 	DeleteClientGroup(ctx context.Context, name string) error
 
+	// Policy Rules (persistent dynamic state — survives redeploys)
+	GetPolicyRules(ctx context.Context) ([]*PolicyRule, error)
+	CreatePolicyRule(ctx context.Context, rule *PolicyRule) (int64, error)
+	UpdatePolicyRule(ctx context.Context, id int64, rule *PolicyRule) error
+	DeletePolicyRule(ctx context.Context, id int64) error
+
+	// Dynamic Config (key-value store for ACL, feature flags, etc.)
+	GetDynamicConfig(ctx context.Context, key string) (string, error)
+	SetDynamicConfig(ctx context.Context, key, value string) error
+
 	// Maintenance
 	Cleanup(ctx context.Context, olderThan time.Time) error
 	Reset(ctx context.Context) error
@@ -273,6 +283,18 @@ func (c *Config) Validate() error {
 	}
 
 	return nil
+}
+
+// PolicyRule represents a policy rule stored in SQLite.
+// This is the persistent representation — survives container redeploys.
+type PolicyRule struct {
+	ID         int64  `json:"id"`
+	Name       string `json:"name"`
+	Logic      string `json:"logic"`
+	Action     string `json:"action"`
+	ActionData string `json:"action_data"`
+	SortOrder  int    `json:"sort_order"`
+	Enabled    bool   `json:"enabled"`
 }
 
 // TimeSeriesPoint represents aggregated query statistics for a specific time bucket.

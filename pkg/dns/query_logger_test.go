@@ -115,6 +115,30 @@ func (m *mockStorage) Ping(ctx context.Context) error {
 	return nil
 }
 
+func (m *mockStorage) GetPolicyRules(ctx context.Context) ([]*storage.PolicyRule, error) {
+	return []*storage.PolicyRule{}, nil
+}
+
+func (m *mockStorage) CreatePolicyRule(ctx context.Context, rule *storage.PolicyRule) (int64, error) {
+	return 0, nil
+}
+
+func (m *mockStorage) UpdatePolicyRule(ctx context.Context, id int64, rule *storage.PolicyRule) error {
+	return nil
+}
+
+func (m *mockStorage) DeletePolicyRule(ctx context.Context, id int64) error {
+	return nil
+}
+
+func (m *mockStorage) GetDynamicConfig(ctx context.Context, key string) (string, error) {
+	return "", nil
+}
+
+func (m *mockStorage) SetDynamicConfig(ctx context.Context, key, value string) error {
+	return nil
+}
+
 func TestQueryLogger_BasicOperation(t *testing.T) {
 	stor := newMockStorage()
 	ql := NewQueryLogger(stor, nil, 100, 2)

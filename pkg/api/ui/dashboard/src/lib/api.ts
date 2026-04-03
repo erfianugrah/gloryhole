@@ -225,6 +225,7 @@ export interface ConfigResponse {
     decision_trace: boolean;
     dot_enabled: boolean;
     dot_address: string;
+    allowed_clients: string[];
     cors_allowed_origins: string[];
     tls: {
       cert_file: string;
@@ -614,6 +615,17 @@ export function updateBlockPageConfig(
   return apiFetch<void>("/api/config/block-page", {
     method: "PUT",
     body: JSON.stringify(config),
+  });
+}
+
+// ─── Client ACL ──────────────────────────────────────────────────────
+
+export function updateAllowedClients(
+  clients: string[]
+): Promise<void> {
+  return apiFetch<void>("/api/config/allowed-clients", {
+    method: "PUT",
+    body: JSON.stringify({ clients }),
   });
 }
 
