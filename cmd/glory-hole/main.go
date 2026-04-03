@@ -45,62 +45,68 @@ var (
 	gitCommit = "unknown" // Set via -ldflags "-X main.gitCommit=$(git rev-parse --short HEAD)"
 )
 
-// migrateWhitelistToPolicies converts whitelist entries to ALLOW policies and removes the whitelist.
-// This is a one-time migration that runs on startup if whitelist entries exist.
-func migrateWhitelistToPolicies(cfg *config.Config, configPath string, logger *logging.Logger) bool {
+// migrateWhitelistToPolicies converts whitelist entries to ALLOW policies.
+// Writes directly to SQLite if storage is available, otherwise appends to
+// cfg.Policy.Rules for the first-boot YAML seed path to pick up.
+func migrateWhitelistToPolicies(cfg *config.Config, stor storage.Storage, logger *logging.Logger) bool {
 	if len(cfg.Whitelist) == 0 {
 		return false
 	}
 
 	logger.Info("Migrating whitelist entries to policies", "count", len(cfg.Whitelist))
 
-	for _, entry := range cfg.Whitelist {
+	ctx := context.Background()
+	var migratedCount int
+
+	for i, entry := range cfg.Whitelist {
 		var logic string
 		var name string
 
 		if strings.HasPrefix(entry, "*.") {
-			// Wildcard pattern: *.example.com
-			// Match the base domain and all subdomains
 			baseDomain := strings.TrimPrefix(entry, "*.")
 			logic = fmt.Sprintf(`Domain == "%s" || DomainEndsWith(Domain, ".%s")`, baseDomain, baseDomain)
 			name = fmt.Sprintf("Allow *.%s (migrated)", baseDomain)
 		} else if strings.ContainsAny(entry, "()[]{}^$|\\+?") {
-			// Regex pattern
 			logic = fmt.Sprintf(`DomainMatches(Domain, "%s")`, entry)
 			name = fmt.Sprintf("Allow pattern %s (migrated)", entry)
 		} else {
-			// Exact match
 			logic = fmt.Sprintf(`Domain == "%s"`, entry)
 			name = fmt.Sprintf("Allow %s (migrated)", entry)
 		}
 
-		// Create the policy rule
-		rule := config.PolicyRuleEntry{
-			Name:    name,
-			Logic:   logic,
-			Action:  "ALLOW",
-			Enabled: true,
+		if stor != nil {
+			// Write directly to SQLite
+			_, err := stor.CreatePolicyRule(ctx, &storage.PolicyRule{
+				Name:      name,
+				Logic:     logic,
+				Action:    "ALLOW",
+				Enabled:   true,
+				SortOrder: i,
+			})
+			if err != nil {
+				logger.Error("Failed to migrate whitelist entry to DB",
+					"entry", entry, "error", err)
+				continue
+			}
+		} else {
+			// No storage — append to config for YAML seed path
+			cfg.Policy.Rules = append(cfg.Policy.Rules, config.PolicyRuleEntry{
+				Name:    name,
+				Logic:   logic,
+				Action:  "ALLOW",
+				Enabled: true,
+			})
 		}
-
-		cfg.Policy.Rules = append(cfg.Policy.Rules, rule)
-		cfg.Policy.Enabled = true
+		migratedCount++
 	}
 
-	// Clear whitelist
-	migratedCount := len(cfg.Whitelist)
+	cfg.Policy.Enabled = true
 	cfg.Whitelist = nil
 
-	// Save the updated config
-	if err := config.Save(configPath, cfg); err != nil {
-		logger.Error("Failed to save migrated config", "error", err)
-		return false
-	}
-
 	logger.Info("Whitelist migration complete",
-		"migrated", migratedCount,
-		"new_policies", migratedCount)
+		"migrated", migratedCount)
 
-	return true
+	return migratedCount > 0
 }
 
 func main() {
@@ -237,13 +243,8 @@ func main() {
 		// Download deferred to after Unbound startup (see below)
 	}
 
-	// Migrate whitelist entries to policies (one-time migration)
-	if migrateWhitelistToPolicies(cfg, *configPath, logger) {
-		// Migration happened - reload config to get the updated version
-		cfg = cfgWatcher.Config()
-	}
-
 	// Initialize storage (database for query logging)
+	// Must happen before whitelist migration since it writes to SQLite.
 	var stor storage.Storage
 	if cfg.Database.Enabled {
 		logger.Info("Initializing storage",
@@ -319,6 +320,11 @@ func main() {
 					"workers", workers)
 			}
 		}
+	}
+
+	// Migrate whitelist entries to policies (one-time migration)
+	if migrateWhitelistToPolicies(cfg, stor, logger) {
+		logger.Info("Whitelist migration complete — entries converted to ALLOW policies")
 	}
 
 	// Initialize local DNS records if configured
@@ -1079,23 +1085,6 @@ func main() {
 // equalBlocklistConfig compares two blocklist configurations
 func equalBlocklistConfig(a, b []string) bool {
 	return equalStringSlice(a, b)
-}
-
-// equalPolicyConfig compares two policy configurations
-func equalPolicyConfig(a, b *config.PolicyConfig) bool {
-	if a.Enabled != b.Enabled || len(a.Rules) != len(b.Rules) {
-		return false
-	}
-	for i := range a.Rules {
-		if a.Rules[i].Name != b.Rules[i].Name ||
-			a.Rules[i].Logic != b.Rules[i].Logic ||
-			a.Rules[i].Action != b.Rules[i].Action ||
-			a.Rules[i].ActionData != b.Rules[i].ActionData ||
-			a.Rules[i].Enabled != b.Rules[i].Enabled {
-			return false
-		}
-	}
-	return true
 }
 
 func equalCacheConfig(a, b *config.CacheConfig) bool {

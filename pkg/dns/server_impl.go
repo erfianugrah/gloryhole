@@ -100,12 +100,19 @@ func (s *Server) Start(ctx context.Context) error {
 	}
 	s.running = true
 
-	// Wrap handler with telemetry, logging, and ACL
-	wrappedHandler := &wrappedHandler{
-		handler:   s.handler,
-		logger:    s.logger,
-		metrics:   s.metrics,
-		clientACL: s.clientACL,
+	// Each listener gets its own handler with the correct transport label.
+	// Plain DNS (port 53) enforces the client ACL; DoT does not.
+	udpHandler := &wrappedHandler{
+		handler: s.handler, logger: s.logger, metrics: s.metrics,
+		clientACL: s.clientACL, transport: "udp",
+	}
+	tcpHandler := &wrappedHandler{
+		handler: s.handler, logger: s.logger, metrics: s.metrics,
+		clientACL: s.clientACL, transport: "tcp",
+	}
+	dotHandler := &wrappedHandler{
+		handler: s.handler, logger: s.logger, metrics: s.metrics,
+		transport: "dot", // no clientACL — DoT bypasses ACL
 	}
 
 	errChan := make(chan error, 4)
@@ -115,7 +122,7 @@ func (s *Server) Start(ctx context.Context) error {
 		s.udpServer = &dns.Server{
 			Addr:    s.cfg.Server.UDPAddr(),
 			Net:     "udp",
-			Handler: dns.HandlerFunc(wrappedHandler.serveDNS),
+			Handler: dns.HandlerFunc(udpHandler.serveDNS),
 		}
 	}
 
@@ -124,7 +131,7 @@ func (s *Server) Start(ctx context.Context) error {
 		s.tcpServer = &dns.Server{
 			Addr:    s.cfg.Server.TCPAddr(),
 			Net:     "tcp",
-			Handler: dns.HandlerFunc(wrappedHandler.serveDNS),
+			Handler: dns.HandlerFunc(tcpHandler.serveDNS),
 		}
 	}
 
@@ -133,7 +140,7 @@ func (s *Server) Start(ctx context.Context) error {
 		s.dotServer = &dns.Server{
 			Addr:      s.cfg.Server.DotAddress,
 			Net:       "tcp-tls",
-			Handler:   dns.HandlerFunc(wrappedHandler.serveDNS),
+			Handler:   dns.HandlerFunc(dotHandler.serveDNS),
 			TLSConfig: s.tlsConfig,
 		}
 	}
@@ -283,12 +290,15 @@ func (s *Server) IsRunning() bool {
 	return s.running
 }
 
-// wrappedHandler wraps the DNS handler with logging, metrics, and ACL
+// wrappedHandler wraps the DNS handler with logging, metrics, and ACL.
+// Each DNS listener (UDP, TCP, DoT) gets its own instance with the
+// correct transport label and ACL configuration.
 type wrappedHandler struct {
 	handler   *Handler
 	logger    *logging.Logger
 	metrics   *telemetry.Metrics
 	clientACL *ClientACL
+	transport string // "udp", "tcp", or "dot" — set at creation, not inferred
 }
 
 // serveDNS is the DNS request handler wrapper that adds observability.
@@ -310,9 +320,8 @@ func (w *wrappedHandler) serveDNS(rw dns.ResponseWriter, r *dns.Msg) {
 	startTime := time.Now()
 	ctx := context.Background()
 
-	// Client ACL: enforce on plain DNS (UDP/TCP) only. DoT and DoH bypass.
-	transport := w.transportLabel(rw)
-	if w.clientACL != nil && (transport == "udp" || transport == "tcp") {
+	// Client ACL: enforce only when set (plain DNS handlers have it, DoT does not).
+	if w.clientACL != nil {
 		clientIP := getClientIP(rw)
 		if !w.clientACL.IsAllowed(clientIP) {
 			msg := new(dns.Msg)
@@ -320,7 +329,7 @@ func (w *wrappedHandler) serveDNS(rw dns.ResponseWriter, r *dns.Msg) {
 			_ = rw.WriteMsg(msg)
 			w.logger.Warn("DNS query refused by client ACL",
 				"client", clientIP,
-				"transport", transport,
+				"transport", w.transport,
 			)
 			return
 		}
@@ -386,18 +395,14 @@ func (w *wrappedHandler) serveDNS(rw dns.ResponseWriter, r *dns.Msg) {
 	)
 }
 
-// transportLabel infers a human-readable transport for metrics/logs.
-func (w *wrappedHandler) transportLabel(rw dns.ResponseWriter) string {
-	switch rw.LocalAddr().Network() {
-	case "udp":
-		return "udp"
-	case "tcp":
-		return "tcp"
-	case "tcp-tls":
-		return "dot"
-	default:
-		return "unknown"
+// transportLabel returns the transport for metrics/logs.
+// Uses the label set at handler creation — network-level inference
+// can't distinguish plain TCP from DoT (both report "tcp").
+func (w *wrappedHandler) transportLabel(_ dns.ResponseWriter) string {
+	if w.transport != "" {
+		return w.transport
 	}
+	return "unknown"
 }
 
 // getClientIP extracts the client IP address from the DNS ResponseWriter.
