@@ -10,6 +10,7 @@ async function apiFetch<T>(
     ...init,
     headers: {
       "Content-Type": "application/json",
+      "X-Requested-With": "glory-hole-dashboard",
       ...init?.headers,
     },
   });

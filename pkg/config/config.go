@@ -77,7 +77,8 @@ type ServerConfig struct {
 	AllowedClients     []string          `yaml:"allowed_clients"` // IP/CIDR allowlist for plain DNS (port 53). Empty = open. DoT/DoH bypass this.
 	ProxyProtocol      bool              `yaml:"proxy_protocol"`  // Enable PROXY protocol on TCP listeners (for Fly.io / load balancers)
 	TLS                TLSConfig         `yaml:"tls"`
-	QueryLogger        QueryLoggerConfig `yaml:"query_logger"` // Worker pool config for async query logging
+	QueryLogger        QueryLoggerConfig `yaml:"query_logger"`    // Worker pool config for async query logging
+	TrustedProxies     []string          `yaml:"trusted_proxies"` // CIDRs whose X-Forwarded-For/X-Real-IP headers are trusted
 }
 
 // QueryLoggerConfig holds query logger worker pool settings

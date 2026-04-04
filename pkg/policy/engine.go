@@ -17,6 +17,24 @@ import (
 	"github.com/expr-lang/expr/vm"
 )
 
+// asString safely converts a parameter to string, returning an error instead of panicking.
+func asString(p any, name string) (string, error) {
+	s, ok := p.(string)
+	if !ok {
+		return "", fmt.Errorf("%s: expected string, got %T", name, p)
+	}
+	return s, nil
+}
+
+// asInt safely converts a parameter to int.
+func asInt(p any, name string) (int, error) {
+	i, ok := p.(int)
+	if !ok {
+		return 0, fmt.Errorf("%s: expected int, got %T", name, p)
+	}
+	return i, nil
+}
+
 // Engine is the policy engine that evaluates filtering rules
 type Engine struct {
 	rules  []*Rule
@@ -87,82 +105,162 @@ func (e *Engine) AddRule(rule *Rule) error {
 		return fmt.Errorf("invalid rule '%s': %w", rule.Name, err)
 	}
 
-	// Compile the expression with environment and helper functions
+	// Compile the expression with environment and safe helper function wrappers.
+	// All type assertions use asString/asInt to return errors instead of panicking.
 	program, err := expr.Compile(rule.Logic,
 		expr.Env(Context{}),
 		// Domain matching functions
 		expr.Function("DomainMatches",
 			func(params ...any) (any, error) {
-				return DomainMatches(params[0].(string), params[1].(string)), nil
+				a, e := asString(params[0], "DomainMatches.domain")
+				if e != nil {
+					return false, e
+				}
+				b, e := asString(params[1], "DomainMatches.pattern")
+				if e != nil {
+					return false, e
+				}
+				return DomainMatches(a, b), nil
 			},
 			new(func(string, string) bool),
 		),
 		expr.Function("DomainEndsWith",
 			func(params ...any) (any, error) {
-				return DomainEndsWith(params[0].(string), params[1].(string)), nil
+				a, e := asString(params[0], "DomainEndsWith.domain")
+				if e != nil {
+					return false, e
+				}
+				b, e := asString(params[1], "DomainEndsWith.suffix")
+				if e != nil {
+					return false, e
+				}
+				return DomainEndsWith(a, b), nil
 			},
 			new(func(string, string) bool),
 		),
 		expr.Function("DomainStartsWith",
 			func(params ...any) (any, error) {
-				return DomainStartsWith(params[0].(string), params[1].(string)), nil
+				a, e := asString(params[0], "DomainStartsWith.domain")
+				if e != nil {
+					return false, e
+				}
+				b, e := asString(params[1], "DomainStartsWith.prefix")
+				if e != nil {
+					return false, e
+				}
+				return DomainStartsWith(a, b), nil
 			},
 			new(func(string, string) bool),
 		),
 		expr.Function("DomainRegex",
 			func(params ...any) (any, error) {
-				result, err := DomainRegex(params[0].(string), params[1].(string))
-				if err != nil {
-					return false, err
+				a, e := asString(params[0], "DomainRegex.domain")
+				if e != nil {
+					return false, e
 				}
-				return result, nil
+				b, e := asString(params[1], "DomainRegex.pattern")
+				if e != nil {
+					return false, e
+				}
+				return DomainRegex(a, b)
 			},
 			new(func(string, string) bool),
 		),
 		expr.Function("DomainLevelCount",
 			func(params ...any) (any, error) {
-				return DomainLevelCount(params[0].(string)), nil
+				a, e := asString(params[0], "DomainLevelCount.domain")
+				if e != nil {
+					return 0, e
+				}
+				return DomainLevelCount(a), nil
 			},
 			new(func(string) int),
 		),
 		// IP matching functions
 		expr.Function("IPInCIDR",
 			func(params ...any) (any, error) {
-				return IPInCIDR(params[0].(string), params[1].(string)), nil
+				a, e := asString(params[0], "IPInCIDR.ip")
+				if e != nil {
+					return false, e
+				}
+				b, e := asString(params[1], "IPInCIDR.cidr")
+				if e != nil {
+					return false, e
+				}
+				return IPInCIDR(a, b), nil
 			},
 			new(func(string, string) bool),
 		),
 		expr.Function("IPEquals",
 			func(params ...any) (any, error) {
-				return IPEquals(params[0].(string), params[1].(string)), nil
+				a, e := asString(params[0], "IPEquals.ip")
+				if e != nil {
+					return false, e
+				}
+				b, e := asString(params[1], "IPEquals.target")
+				if e != nil {
+					return false, e
+				}
+				return IPEquals(a, b), nil
 			},
 			new(func(string, string) bool),
 		),
 		// Query type functions
 		expr.Function("QueryTypeIn",
 			func(params ...any) (any, error) {
-				queryType := params[0].(string)
+				qt, e := asString(params[0], "QueryTypeIn.queryType")
+				if e != nil {
+					return false, e
+				}
 				types := make([]string, len(params)-1)
 				for i := 1; i < len(params); i++ {
-					types[i-1] = params[i].(string)
+					t, tErr := asString(params[i], fmt.Sprintf("QueryTypeIn.type[%d]", i-1))
+					if tErr != nil {
+						return false, tErr
+					}
+					types[i-1] = t
 				}
-				return QueryTypeIn(queryType, types...), nil
+				return QueryTypeIn(qt, types...), nil
 			},
 		),
 		// Time functions
 		expr.Function("IsWeekend",
 			func(params ...any) (any, error) {
-				return IsWeekend(params[0].(int)), nil
+				a, e := asInt(params[0], "IsWeekend.dayOfWeek")
+				if e != nil {
+					return false, e
+				}
+				return IsWeekend(a), nil
 			},
 			new(func(int) bool),
 		),
 		expr.Function("InTimeRange",
 			func(params ...any) (any, error) {
-				return InTimeRange(
-					params[0].(int), params[1].(int),
-					params[2].(int), params[3].(int),
-					params[4].(int), params[5].(int),
-				), nil
+				h, e := asInt(params[0], "InTimeRange.hour")
+				if e != nil {
+					return false, e
+				}
+				m, e := asInt(params[1], "InTimeRange.minute")
+				if e != nil {
+					return false, e
+				}
+				sh, e := asInt(params[2], "InTimeRange.startHour")
+				if e != nil {
+					return false, e
+				}
+				sm, e := asInt(params[3], "InTimeRange.startMin")
+				if e != nil {
+					return false, e
+				}
+				eh, e := asInt(params[4], "InTimeRange.endHour")
+				if e != nil {
+					return false, e
+				}
+				em, e := asInt(params[5], "InTimeRange.endMin")
+				if e != nil {
+					return false, e
+				}
+				return InTimeRange(h, m, sh, sm, eh, em), nil
 			},
 			new(func(int, int, int, int, int, int) bool),
 		),
@@ -364,21 +462,52 @@ func (e *Engine) Stop() {
 
 // Helper functions that can be used in expressions
 
-// DomainMatches checks if domain matches a pattern (case-insensitive)
+// DomainMatches checks if a domain matches a pattern using domain-boundary
+// aware matching (case-insensitive). Unlike a raw substring check, the pattern
+// must align on dot boundaries to prevent false positives like "ad" matching
+// "readme.io".
+//
+// Matching rules:
+//   - Exact match: "facebook.com" matches "facebook.com"
+//   - Subdomain: "api.facebook.com" matches "facebook.com" (dot-boundary suffix)
+//   - Label prefix: "facebook.com" matches "facebook" (pattern is a label prefix at a dot boundary)
+//   - Leading dot: ".facebook.com" matches "www.facebook.com" and "facebook.com"
 func DomainMatches(domain, pattern string) bool {
-	domain = strings.ToLower(domain)
-	pattern = strings.ToLower(pattern)
+	domain = strings.ToLower(strings.TrimSuffix(domain, "."))
+	pattern = strings.ToLower(strings.TrimSuffix(pattern, "."))
 
-	// Simple contains check
-	if strings.Contains(domain, pattern) {
+	if domain == pattern {
 		return true
 	}
 
-	// Suffix check (e.g., ".facebook.com" matches "www.facebook.com" or "facebook.com")
+	// Leading-dot pattern: ".facebook.com" matches subdomains and the apex
 	if strings.HasPrefix(pattern, ".") {
-		suffix := pattern[1:] // Remove leading dot
-		// Match if domain ends with pattern OR equals pattern without dot
-		return strings.HasSuffix(domain, pattern) || domain == suffix
+		suffix := pattern[1:]
+		return domain == suffix || strings.HasSuffix(domain, pattern)
+	}
+
+	// Pattern is a full domain: "facebook.com" matches "api.facebook.com"
+	if strings.HasSuffix(domain, "."+pattern) {
+		return true
+	}
+
+	// Pattern is a label (no dots): "facebook" matches "facebook.com" or "api.facebook.com"
+	// but NOT "myfacebook.com" — must be on a dot boundary
+	if !strings.Contains(pattern, ".") {
+		// Match if domain starts with pattern. or has .pattern. inside
+		if domain == pattern {
+			return true
+		}
+		if strings.HasPrefix(domain, pattern+".") {
+			return true
+		}
+		if strings.Contains(domain, "."+pattern+".") {
+			return true
+		}
+		// Match if domain has .pattern at the end (label is the SLD)
+		if strings.HasSuffix(domain, "."+pattern) {
+			return true
+		}
 	}
 
 	return false

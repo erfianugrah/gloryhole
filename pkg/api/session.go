@@ -135,7 +135,7 @@ func (s *Server) createSession(w http.ResponseWriter, r *http.Request, subject s
 	if err != nil {
 		return err
 	}
-	secure := r != nil && r.TLS != nil
+	secure := r != nil && (r.TLS != nil || (s.isBehindTrustedProxy(r) && r.Header.Get("X-Forwarded-Proto") == "https"))
 	maxAge := int(time.Until(expiry).Seconds())
 	if maxAge < 0 {
 		maxAge = 0
@@ -161,7 +161,7 @@ func (s *Server) revokeSession(w http.ResponseWriter, r *http.Request) {
 	if s.sessionManager != nil && token != "" {
 		s.sessionManager.Revoke(token)
 	}
-	secure := r != nil && r.TLS != nil
+	secure := r != nil && (r.TLS != nil || (s.isBehindTrustedProxy(r) && r.Header.Get("X-Forwarded-Proto") == "https"))
 	http.SetCookie(w, &http.Cookie{
 		Name:     sessionCookieName,
 		Value:    "",

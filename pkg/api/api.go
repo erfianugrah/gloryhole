@@ -42,9 +42,10 @@ type Server struct {
 	unboundSupervisor *unbound.Supervisor // Unbound process supervisor (nil if disabled)
 	startTime         time.Time
 	version           string
-	configPath        string   // Path to config file for persistence
-	allowedOrigins    []string // Allowed CORS origins
-	blockPageEnabled  bool     // Serve block page for unrecognized hosts
+	configPath        string       // Path to config file for persistence
+	allowedOrigins    []string     // Allowed CORS origins
+	blockPageEnabled  bool         // Serve block page for unrecognized hosts
+	trustedProxies    []*net.IPNet // CIDRs whose proxy headers (X-Forwarded-For) are trusted
 	authMu            sync.RWMutex
 	authEnabled       bool
 	authHeader        string
@@ -106,6 +107,29 @@ func New(cfg *Config) *Server {
 			cfg.Logger.Warn("CORS allows all origins (*) - not recommended for production")
 		} else {
 			cfg.Logger.Info("CORS configured", "allowed_origins", s.allowedOrigins)
+		}
+
+		// Parse trusted proxy CIDRs for X-Forwarded-For / X-Real-IP
+		for _, entry := range cfg.InitialConfig.Server.TrustedProxies {
+			_, ipNet, err := net.ParseCIDR(entry)
+			if err != nil {
+				// Try as bare IP
+				ip := net.ParseIP(entry)
+				if ip == nil {
+					cfg.Logger.Warn("Ignoring invalid trusted proxy entry", "entry", entry)
+					continue
+				}
+				// Convert bare IP to /32 or /128
+				bits := 32
+				if ip.To4() == nil {
+					bits = 128
+				}
+				ipNet = &net.IPNet{IP: ip, Mask: net.CIDRMask(bits, bits)}
+			}
+			s.trustedProxies = append(s.trustedProxies, ipNet)
+		}
+		if len(s.trustedProxies) > 0 {
+			cfg.Logger.Info("Trusted proxies configured", "count", len(s.trustedProxies))
 		}
 	}
 
@@ -234,9 +258,10 @@ func New(cfg *Config) *Server {
 		cfg.Logger.Warn("Failed to initialize Astro dist file server", "error", err)
 	}
 
-	// Apply middleware
+	// Apply middleware (outermost runs first)
 	handler := http.Handler(mux)
 	handler = s.authMiddleware(handler)
+	handler = s.rateLimitMiddleware(handler)
 	handler = s.loggingMiddleware(handler)
 	handler = s.securityHeadersMiddleware(handler)
 	handler = s.corsMiddleware(handler)
@@ -415,31 +440,60 @@ func (s *Server) getUptime() string {
 	return fmt.Sprintf("%ds", seconds)
 }
 
-// getClientIP extracts the client IP address from the request
-// Checks X-Forwarded-For and X-Real-IP headers if behind a trusted proxy
+// getClientIP extracts the client IP address from the request.
+// Proxy headers (X-Forwarded-For, X-Real-IP) are only trusted when the
+// direct peer is in the configured trusted_proxies list.
 func (s *Server) getClientIP(r *http.Request) string {
-	// Check X-Forwarded-For header (proxied requests)
-	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		// X-Forwarded-For can contain multiple IPs (client, proxy1, proxy2, ...)
-		// We want the first IP (original client)
-		ips := strings.Split(xff, ",")
-		if len(ips) > 0 {
-			clientIP := strings.TrimSpace(ips[0])
-			if clientIP != "" {
-				return clientIP
+	remoteHost, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		remoteHost = r.RemoteAddr
+	}
+
+	// Only trust proxy headers when the direct peer is a configured trusted proxy
+	if s.isTrustedProxy(remoteHost) {
+		// Check X-Forwarded-For header (proxied requests)
+		if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+			ips := strings.Split(xff, ",")
+			if len(ips) > 0 {
+				clientIP := strings.TrimSpace(ips[0])
+				if clientIP != "" {
+					return clientIP
+				}
 			}
+		}
+
+		// Check X-Real-IP header (single IP from reverse proxy)
+		if xri := r.Header.Get("X-Real-IP"); xri != "" {
+			return strings.TrimSpace(xri)
 		}
 	}
 
-	// Check X-Real-IP header (single IP from reverse proxy)
-	if xri := r.Header.Get("X-Real-IP"); xri != "" {
-		return strings.TrimSpace(xri)
-	}
+	return remoteHost
+}
 
-	// Fall back to remote address
-	host, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err != nil {
-		return r.RemoteAddr
+// isTrustedProxy checks whether an IP is in the configured trusted_proxies list.
+func (s *Server) isTrustedProxy(ip string) bool {
+	if len(s.trustedProxies) == 0 {
+		return false
 	}
-	return host
+	parsed := net.ParseIP(ip)
+	if parsed == nil {
+		return false
+	}
+	for _, cidr := range s.trustedProxies {
+		if cidr.Contains(parsed) {
+			return true
+		}
+	}
+	return false
+}
+
+// isBehindTrustedProxy returns true if the request came through a trusted proxy
+// and the proxy indicates HTTPS was used on the external connection.
+func (s *Server) isBehindTrustedProxy(r *http.Request) bool {
+	remoteHost, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		remoteHost = r.RemoteAddr
+	}
+	return s.isTrustedProxy(remoteHost)
 }

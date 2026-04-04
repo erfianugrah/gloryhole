@@ -177,15 +177,15 @@ func TestRealWorldPolicies(t *testing.T) {
 		wantOR  bool
 		wantAND bool
 	}{
-		{"creativecloud.adobe.com", true, false}, // contains "adobe.com" but not "adobe.io"
-		{"api.adobe.io", true, false},            // contains "adobe.io" but not "adobe.com"
+		{"creativecloud.adobe.com", true, false}, // subdomain of "adobe.com" but not "adobe.io"
+		{"api.adobe.io", true, false},            // subdomain of "adobe.io" but not "adobe.com"
 		{"license.adobe.io", true, false},
 		{"exchange.adobe.com", true, false},
-		{"cdn.adobe.io.adobe.com", true, true},   // contains both
-		{"google.com", false, false},             // contains neither
-		{"notadobe.io.example.com", true, false}, // substring "adobe.io" IS in "notadobe.io..."
-		{"adobe.io", true, false},                // exact
-		{"adobe.com", true, false},               // exact
+		{"cdn.adobe.io.adobe.com", true, false},   // subdomain of "adobe.com" only — "adobe.io" is not at a valid boundary
+		{"google.com", false, false},              // matches neither
+		{"notadobe.io.example.com", false, false}, // "adobe.io" is NOT at a dot boundary — properly rejected
+		{"adobe.io", true, false},                 // exact
+		{"adobe.com", true, false},                // exact
 	}
 
 	t.Run("Adobe/OR", func(t *testing.T) {
@@ -236,7 +236,7 @@ func TestRealWorldPolicies(t *testing.T) {
 		{"o123456.ingest.sentry.io", true},
 		{"browser.sentry-cdn.com", false}, // "sentry.io" not in "sentry-cdn.com"
 		{"api.sentry.io", true},
-		{"sentry.io.example.com", true}, // substring match
+		{"sentry.io.example.com", false}, // "sentry.io" is NOT at a dot boundary — properly rejected
 		{"google.com", false},
 	}
 

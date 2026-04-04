@@ -68,11 +68,6 @@ func NewSQLiteStorage(cfg *Config, metrics MetricsRecorder) (Storage, error) {
 		return nil, fmt.Errorf("%w: %v", ErrConnectionFailed, err)
 	}
 
-	// Restrict database file permissions — query logs contain client IPs and domains (PII)
-	if chmodErr := os.Chmod(cfg.SQLite.Path, 0600); chmodErr != nil {
-		slog.Default().Warn("Failed to set database file permissions", "error", chmodErr)
-	}
-
 	// Configure connection pool.
 	// WAL mode allows concurrent readers with a single writer.
 	// Multiple read connections improve throughput for dashboard/API queries.
@@ -80,10 +75,18 @@ func NewSQLiteStorage(cfg *Config, metrics MetricsRecorder) (Storage, error) {
 	db.SetMaxIdleConns(4)
 	db.SetConnMaxLifetime(0)
 
-	// Test connection
+	// Test connection (also creates the file if it doesn't exist)
 	if pingErr := db.Ping(); pingErr != nil {
 		_ = db.Close()
 		return nil, fmt.Errorf("%w: %v", ErrConnectionFailed, pingErr)
+	}
+
+	// Restrict database file permissions — query logs contain client IPs and domains (PII).
+	// Done after Ping so the file is guaranteed to exist.
+	if cfg.SQLite.Path != ":memory:" {
+		if chmodErr := os.Chmod(cfg.SQLite.Path, 0600); chmodErr != nil {
+			slog.Default().Warn("Failed to set database file permissions", "error", chmodErr)
+		}
 	}
 
 	// Apply SQLite pragmas for performance

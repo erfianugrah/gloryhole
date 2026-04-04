@@ -186,8 +186,14 @@ stub-zone:
 {{- end }}
 `
 
-// WriteConfig renders the Unbound config and writes it atomically.
+// WriteConfig validates all user-supplied fields, renders the Unbound config,
+// and writes it atomically.
 func WriteConfig(cfg *UnboundServerConfig, path string) error {
+	// Sanitize all string fields before template rendering to prevent injection
+	if err := SanitizeConfig(cfg); err != nil {
+		return fmt.Errorf("config validation: %w", err)
+	}
+
 	var buf bytes.Buffer
 	if err := confTemplate.Execute(&buf, cfg); err != nil {
 		return fmt.Errorf("render unbound.conf: %w", err)
