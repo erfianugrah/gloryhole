@@ -96,11 +96,14 @@ RUN addgroup -g 1000 glory-hole && \
 RUN mkdir -p /etc/glory-hole /var/lib/glory-hole /var/log/glory-hole && \
 	chown -R glory-hole:glory-hole /etc/glory-hole /var/lib/glory-hole /var/log/glory-hole
 
-# Copy Unbound static binaries from build stage
+# Copy Unbound binaries from build stage
 COPY --from=unbound-builder /opt/unbound/sbin/unbound /usr/local/bin/unbound
 COPY --from=unbound-builder /opt/unbound/sbin/unbound-control /usr/local/bin/unbound-control
 COPY --from=unbound-builder /opt/unbound/sbin/unbound-checkconf /usr/local/bin/unbound-checkconf
 COPY --from=unbound-builder /opt/unbound/sbin/unbound-anchor /usr/local/bin/unbound-anchor
+
+# Copy libunbound shared library (needed by unbound-anchor for DNSSEC bootstrapping)
+COPY --from=unbound-builder /opt/unbound/lib/libunbound.so.8 /usr/lib/libunbound.so.8
 
 # Copy default Unbound config and root hints
 COPY deploy/unbound/unbound.conf /etc/unbound/unbound.conf
