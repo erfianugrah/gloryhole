@@ -1,6 +1,8 @@
-# Fly.io deployment — layers config onto the pre-built image
+# Fly.io deployment — layers config + entrypoint onto the pre-built image
 ARG VERSION=latest
 FROM erfianugrah/glory-hole:${VERSION}
 
-# Bake in Fly.io config
+# Bake in Fly.io config and updated entrypoint (for config persistence)
 COPY config.fly.yml /etc/glory-hole/config.yml
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh

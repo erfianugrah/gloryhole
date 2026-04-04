@@ -30,18 +30,17 @@ if [ -f "$BAKED_CONFIG" ] && [ -d "/var/lib/glory-hole" ]; then
         echo "glory-hole: first boot — copying config to persistent volume"
         cp "$BAKED_CONFIG" "$LIVE_CONFIG"
     fi
-    # Rewrite the -config flag to point at the persistent copy.
-    # Only do this if the user hasn't overridden it.
-    ARGS=""
-    CONFIG_OVERRIDDEN=false
+    # Rewrite args: replace the baked config path with the persistent copy.
+    # This preserves any other flags the user may have set.
+    NEW_ARGS=""
     for arg in "$@"; do
-        if [ "$arg" = "-config" ] || [ "$arg" = "--config" ]; then
-            CONFIG_OVERRIDDEN=true
+        if [ "$arg" = "$BAKED_CONFIG" ]; then
+            NEW_ARGS="$NEW_ARGS $LIVE_CONFIG"
+        else
+            NEW_ARGS="$NEW_ARGS $arg"
         fi
     done
-    if [ "$CONFIG_OVERRIDDEN" = "false" ]; then
-        set -- "-config" "$LIVE_CONFIG" "$@"
-    fi
+    set -- $NEW_ARGS
 fi
 
 if [ "$(id -u)" = "0" ]; then
