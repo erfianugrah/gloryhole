@@ -189,6 +189,7 @@ func New(cfg *Config) *Server {
 	mux.HandleFunc("GET /clients", s.handleClientsPage)
 	mux.HandleFunc("GET /blocklists", s.handleBlocklistsPage)
 	mux.HandleFunc("GET /resolver", s.handleResolverPage)
+	mux.HandleFunc("GET /resolver/queries", s.handleResolverQueriesPage)
 	mux.HandleFunc("GET /resolver/settings", s.handleResolverSettingsPage)
 	mux.HandleFunc("GET /resolver/zones", s.handleResolverZonesPage)
 	mux.HandleFunc("GET /login", s.handleLoginPage)
@@ -221,6 +222,8 @@ func New(cfg *Config) *Server {
 	mux.HandleFunc("DELETE /api/unbound/forward-zones/{name}", s.unboundGuard(s.handleDeleteForwardZone))
 	mux.HandleFunc("POST /api/unbound/reload", s.unboundGuard(s.handleUnboundReload))
 	mux.HandleFunc("POST /api/unbound/flush-cache", s.unboundGuard(s.handleUnboundFlushCache))
+	mux.HandleFunc("GET /api/unbound/queries", s.handleGetUnboundQueries)
+	mux.HandleFunc("GET /api/unbound/query-stats", s.handleGetUnboundQueryStats)
 
 	// Astro build output: serve /_astro/* assets and /favicon.svg from dist/
 	if distFS, err := getAstroDistFS(); err == nil {

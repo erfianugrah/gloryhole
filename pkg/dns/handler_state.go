@@ -15,6 +15,11 @@ type serveDNSOutcome struct {
 	upstreamError    string // EDE (Extended DNS Error) text from upstream
 	responseCode     int
 	upstreamDuration time.Duration
+
+	// Unbound enrichment (populated via dnstap reply buffer)
+	unboundCached   *bool
+	unboundDuration *float64
+	unboundRespSize *int
 }
 
 // outcomePool provides object pooling for serveDNSOutcome to reduce allocations.

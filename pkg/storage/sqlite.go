@@ -111,8 +111,8 @@ func NewSQLiteStorage(cfg *Config, metrics MetricsRecorder) (Storage, error) {
 	// Prepare statements
 	stmtInsert, err := db.Prepare(`
 		INSERT INTO queries
-		(timestamp, client_ip, domain, query_type, response_code, blocked, cached, response_time_ms, upstream, upstream_time_ms, block_trace, upstream_error, dnssec_validated)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		(timestamp, client_ip, domain, query_type, response_code, blocked, cached, response_time_ms, upstream, upstream_time_ms, block_trace, upstream_error, dnssec_validated, unbound_cached, unbound_duration_ms, unbound_resp_size)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`)
 	if err != nil {
 		_ = db.Close()
@@ -330,6 +330,9 @@ func (s *SQLiteStorage) flushBatch(queries []*QueryLog) error {
 			traceValue,
 			query.UpstreamError,
 			query.DNSSECValidated,
+			query.UnboundCached,
+			query.UnboundDurationMs,
+			query.UnboundRespSize,
 		)
 		if err != nil {
 			return fmt.Errorf("%w: %v", ErrQueryFailed, err)
@@ -643,7 +646,8 @@ func (s *SQLiteStorage) GetRecentQueries(ctx context.Context, limit, offset int)
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, timestamp, client_ip, domain, query_type, response_code,
 		       blocked, cached, response_time_ms, upstream, upstream_time_ms, block_trace,
-		       upstream_error, dnssec_validated
+		       upstream_error, dnssec_validated,
+		       unbound_cached, unbound_duration_ms, unbound_resp_size
 		FROM queries
 		ORDER BY timestamp DESC
 		LIMIT ? OFFSET ?
@@ -668,7 +672,8 @@ func (s *SQLiteStorage) GetQueriesByDomain(ctx context.Context, domain string, l
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, timestamp, client_ip, domain, query_type, response_code,
 		       blocked, cached, response_time_ms, upstream, upstream_time_ms, block_trace,
-		       upstream_error, dnssec_validated
+		       upstream_error, dnssec_validated,
+		       unbound_cached, unbound_duration_ms, unbound_resp_size
 		FROM queries
 		WHERE domain = ?
 		ORDER BY timestamp DESC
@@ -694,7 +699,8 @@ func (s *SQLiteStorage) GetQueriesByClientIP(ctx context.Context, clientIP strin
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, timestamp, client_ip, domain, query_type, response_code,
 		       blocked, cached, response_time_ms, upstream, upstream_time_ms, block_trace,
-		       upstream_error, dnssec_validated
+		       upstream_error, dnssec_validated,
+		       unbound_cached, unbound_duration_ms, unbound_resp_size
 		FROM queries
 		WHERE client_ip = ?
 		ORDER BY timestamp DESC
@@ -1096,7 +1102,8 @@ func (s *SQLiteStorage) GetQueriesFiltered(ctx context.Context, filter QueryFilt
 	query := `
 		SELECT id, timestamp, client_ip, domain, query_type, response_code,
 		       blocked, cached, response_time_ms, upstream, upstream_time_ms, block_trace,
-		       upstream_error, dnssec_validated
+		       upstream_error, dnssec_validated,
+		       unbound_cached, unbound_duration_ms, unbound_resp_size
 		FROM queries
 	`
 	conditions := make([]string, 0)
@@ -1237,6 +1244,13 @@ func (s *SQLiteStorage) Cleanup(ctx context.Context, olderThan time.Time) error 
 	_, _ = s.db.ExecContext(ctx, `
 		DELETE FROM hourly_stats WHERE hour < ?
 	`, FormatTimestamp(olderThan))
+
+	// Clean up old Unbound dnstap entries
+	_, _ = s.db.ExecContext(ctx, `
+		DELETE FROM unbound_queries WHERE rowid IN (
+			SELECT rowid FROM unbound_queries WHERE timestamp < ? LIMIT 50000
+		)
+	`, olderThan)
 
 	// Incremental vacuum to reclaim space
 	if totalDeleted > 10000 {
@@ -1427,6 +1441,9 @@ func scanQueryLogs(rows *sql.Rows) ([]*QueryLog, error) {
 		var upstream sql.NullString
 		var trace sql.NullString
 		var upstreamError sql.NullString
+		var unboundCached sql.NullBool
+		var unboundDurationMs sql.NullFloat64
+		var unboundRespSize sql.NullInt64
 
 		err := rows.Scan(
 			&q.ID,
@@ -1443,6 +1460,9 @@ func scanQueryLogs(rows *sql.Rows) ([]*QueryLog, error) {
 			&trace,
 			&upstreamError,
 			&q.DNSSECValidated,
+			&unboundCached,
+			&unboundDurationMs,
+			&unboundRespSize,
 		)
 		if err != nil {
 			return nil, err
@@ -1453,6 +1473,18 @@ func scanQueryLogs(rows *sql.Rows) ([]*QueryLog, error) {
 		}
 		if upstreamError.Valid {
 			q.UpstreamError = upstreamError.String
+		}
+		if unboundCached.Valid {
+			v := unboundCached.Bool
+			q.UnboundCached = &v
+		}
+		if unboundDurationMs.Valid {
+			v := unboundDurationMs.Float64
+			q.UnboundDurationMs = &v
+		}
+		if unboundRespSize.Valid {
+			v := int(unboundRespSize.Int64)
+			q.UnboundRespSize = &v
 		}
 
 		entries, err := decodeBlockTrace(trace)
@@ -1469,4 +1501,201 @@ func scanQueryLogs(rows *sql.Rows) ([]*QueryLog, error) {
 	}
 
 	return queries, nil
+}
+
+// --- Unbound Query Log (dnstap) ---
+
+// LogUnboundQuery inserts a single Unbound dnstap event.
+func (s *SQLiteStorage) LogUnboundQuery(ctx context.Context, query *UnboundQueryLog) error {
+	s.mu.RLock()
+	if s.closed {
+		s.mu.RUnlock()
+		return ErrClosed
+	}
+	s.mu.RUnlock()
+
+	_, err := s.db.ExecContext(ctx, `
+		INSERT INTO unbound_queries
+		(timestamp, message_type, domain, query_type, response_code, duration_ms,
+		 dnssec_validated, answer_count, response_size, client_ip, server_ip, cached_in_unbound)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`,
+		FormatTimestamp(query.Timestamp),
+		query.MessageType,
+		query.Domain,
+		query.QueryType,
+		query.ResponseCode,
+		query.DurationMs,
+		query.DNSSECValidated,
+		query.AnswerCount,
+		query.ResponseSize,
+		query.ClientIP,
+		query.ServerIP,
+		query.CachedInUnbound,
+	)
+	if err != nil {
+		return fmt.Errorf("%w: %v", ErrQueryFailed, err)
+	}
+	return nil
+}
+
+// GetUnboundQueries returns filtered Unbound dnstap events.
+func (s *SQLiteStorage) GetUnboundQueries(ctx context.Context, filter UnboundQueryFilter, limit, offset int) ([]*UnboundQueryLog, error) {
+	s.mu.RLock()
+	if s.closed {
+		s.mu.RUnlock()
+		return nil, ErrClosed
+	}
+	s.mu.RUnlock()
+
+	query := `
+		SELECT id, timestamp, message_type, domain, query_type, response_code,
+		       duration_ms, dnssec_validated, answer_count, response_size,
+		       client_ip, server_ip, cached_in_unbound
+		FROM unbound_queries
+	`
+	conditions := make([]string, 0)
+	args := make([]any, 0)
+
+	if filter.Domain != "" {
+		conditions = append(conditions, "LOWER(domain) LIKE ?")
+		args = append(args, "%"+filter.Domain+"%")
+	}
+	if filter.QueryType != "" {
+		conditions = append(conditions, "query_type = ?")
+		args = append(args, filter.QueryType)
+	}
+	if filter.MessageType != "" {
+		conditions = append(conditions, "message_type = ?")
+		args = append(args, filter.MessageType)
+	}
+	if filter.RCode != "" {
+		conditions = append(conditions, "response_code = ?")
+		args = append(args, filter.RCode)
+	}
+	if filter.Cached != nil {
+		conditions = append(conditions, "cached_in_unbound = ?")
+		args = append(args, *filter.Cached)
+	}
+	if filter.Start != "" {
+		conditions = append(conditions, "timestamp >= ?")
+		args = append(args, filter.Start)
+	}
+	if filter.End != "" {
+		conditions = append(conditions, "timestamp <= ?")
+		args = append(args, filter.End)
+	}
+
+	if len(conditions) > 0 {
+		query += " WHERE " + conditions[0]
+		for _, c := range conditions[1:] {
+			query += " AND " + c
+		}
+	}
+
+	query += " ORDER BY timestamp DESC LIMIT ? OFFSET ?"
+	args = append(args, limit, offset)
+
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrQueryFailed, err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var results []*UnboundQueryLog
+	for rows.Next() {
+		var q UnboundQueryLog
+		var respCode sql.NullString
+		var serverIP sql.NullString
+
+		err := rows.Scan(
+			&q.ID, &q.Timestamp, &q.MessageType, &q.Domain, &q.QueryType,
+			&respCode, &q.DurationMs, &q.DNSSECValidated, &q.AnswerCount,
+			&q.ResponseSize, &q.ClientIP, &serverIP, &q.CachedInUnbound,
+		)
+		if err != nil {
+			return nil, err
+		}
+		if respCode.Valid {
+			q.ResponseCode = respCode.String
+		}
+		if serverIP.Valid {
+			q.ServerIP = serverIP.String
+		}
+		results = append(results, &q)
+	}
+	return results, rows.Err()
+}
+
+// GetUnboundQueryStats returns aggregated stats from Unbound dnstap events.
+func (s *SQLiteStorage) GetUnboundQueryStats(ctx context.Context, since time.Time) (*UnboundQueryStats, error) {
+	s.mu.RLock()
+	if s.closed {
+		s.mu.RUnlock()
+		return nil, ErrClosed
+	}
+	s.mu.RUnlock()
+
+	stats := &UnboundQueryStats{
+		ResponseCodes: make(map[string]int64),
+	}
+
+	sinceStr := FormatTimestamp(since)
+
+	// Aggregate CLIENT_RESPONSE entries
+	row := s.db.QueryRowContext(ctx, `
+		SELECT
+			COUNT(*),
+			COALESCE(SUM(CASE WHEN cached_in_unbound = 1 THEN 1 ELSE 0 END), 0),
+			COALESCE(SUM(CASE WHEN cached_in_unbound = 0 THEN 1 ELSE 0 END), 0),
+			AVG(CASE WHEN cached_in_unbound = 0 AND duration_ms > 0 THEN duration_ms END),
+			AVG(CASE WHEN cached_in_unbound = 1 AND duration_ms > 0 THEN duration_ms END),
+			COALESCE(SUM(CASE WHEN dnssec_validated = 1 THEN 1 ELSE 0 END), 0)
+		FROM unbound_queries
+		WHERE message_type = 'CLIENT_RESPONSE' AND timestamp >= ?
+	`, sinceStr)
+
+	var total, cacheHits, recursive, dnssecCount int64
+	var avgRecMs, avgCachedMs sql.NullFloat64
+
+	if err := row.Scan(&total, &cacheHits, &recursive, &avgRecMs, &avgCachedMs, &dnssecCount); err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrQueryFailed, err)
+	}
+
+	stats.TotalQueries = total
+	stats.CacheHits = cacheHits
+	stats.RecursiveQueries = recursive
+	if total > 0 {
+		stats.CacheHitRate = float64(cacheHits) / float64(total) * 100
+		stats.DNSSECValidatedPct = float64(dnssecCount) / float64(total) * 100
+	}
+	if avgRecMs.Valid {
+		stats.AvgRecursiveMs = avgRecMs.Float64
+	}
+	if avgCachedMs.Valid {
+		stats.AvgCachedMs = avgCachedMs.Float64
+	}
+
+	// Response code breakdown
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT response_code, COUNT(*)
+		FROM unbound_queries
+		WHERE message_type = 'CLIENT_RESPONSE' AND timestamp >= ? AND response_code IS NOT NULL
+		GROUP BY response_code
+	`, sinceStr)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrQueryFailed, err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	for rows.Next() {
+		var code string
+		var count int64
+		if err := rows.Scan(&code, &count); err != nil {
+			return nil, err
+		}
+		stats.ResponseCodes[code] = count
+	}
+
+	return stats, rows.Err()
 }

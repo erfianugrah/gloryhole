@@ -652,6 +652,36 @@ func main() {
 
 		unboundSupervisor = unbound.NewSupervisor(&cfg.Unbound, logger)
 
+		// Wire dnstap callback: writes to storage and populates the reply buffer
+		replyBuffer := unbound.NewReplyBuffer(2000)
+		handler.UnboundReplyBuffer = replyBuffer
+
+		unboundSupervisor.SetDnstapCallback(func(entry *unbound.UnboundQueryLog) {
+			// Feed the reply buffer for inline enrichment of Glory-Hole's query log
+			replyBuffer.Add(entry)
+
+			// Persist to SQLite for the Unbound query log view
+			if stor != nil {
+				unboundQL := &storage.UnboundQueryLog{
+					Timestamp:       entry.Timestamp,
+					MessageType:     entry.MessageType,
+					Domain:          entry.Domain,
+					QueryType:       entry.QueryType,
+					ResponseCode:    entry.ResponseCode,
+					DurationMs:      entry.DurationMs,
+					DNSSECValidated: entry.DNSSECValidated,
+					AnswerCount:     entry.AnswerCount,
+					ResponseSize:    entry.ResponseSize,
+					ClientIP:        entry.ClientIP,
+					ServerIP:        entry.ServerIP,
+					CachedInUnbound: entry.CachedInUnbound,
+				}
+				if logErr := stor.LogUnboundQuery(context.Background(), unboundQL); logErr != nil {
+					logger.Debug("Failed to log Unbound query", "error", logErr)
+				}
+			}
+		})
+
 		if startErr := unboundSupervisor.Start(ctx); startErr != nil {
 			logger.Error("Unbound failed to start, falling back to direct forwarding",
 				"error", startErr,

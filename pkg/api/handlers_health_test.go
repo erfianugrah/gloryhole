@@ -143,6 +143,18 @@ func (m *mockStorageForHealth) SetDynamicConfig(ctx context.Context, key, value 
 	return nil
 }
 
+func (m *mockStorageForHealth) LogUnboundQuery(ctx context.Context, query *storage.UnboundQueryLog) error {
+	return nil
+}
+
+func (m *mockStorageForHealth) GetUnboundQueries(ctx context.Context, filter storage.UnboundQueryFilter, limit, offset int) ([]*storage.UnboundQueryLog, error) {
+	return nil, nil
+}
+
+func (m *mockStorageForHealth) GetUnboundQueryStats(ctx context.Context, since time.Time) (*storage.UnboundQueryStats, error) {
+	return &storage.UnboundQueryStats{ResponseCodes: map[string]int64{}}, nil
+}
+
 // TestHandleLiveness tests the liveness probe endpoint
 func TestHandleLiveness(t *testing.T) {
 	server := New(&Config{

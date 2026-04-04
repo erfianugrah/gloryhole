@@ -66,6 +66,9 @@ func (h *Handler) handleConditionalForwarding(ctx context.Context, w dns.Respons
 		}
 	}
 
+	// Enrich with Unbound dnstap data (best-effort inline correlation)
+	h.enrichFromUnbound(r, outcome)
+
 	if h.Cache != nil {
 		h.Cache.Set(ctx, r, resp)
 	}
@@ -109,6 +112,9 @@ func (h *Handler) forwardToUpstream(ctx context.Context, w dns.ResponseWriter, r
 			outcome.upstreamError = codeName
 		}
 	}
+
+	// Enrich with Unbound dnstap data (best-effort inline correlation)
+	h.enrichFromUnbound(r, outcome)
 
 	if h.Cache != nil {
 		h.Cache.Set(ctx, r, resp)

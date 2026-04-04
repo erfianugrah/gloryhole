@@ -80,6 +80,17 @@ func DefaultServerConfig(listenPort int, controlSocket string) *UnboundServerCon
 			},
 		},
 
+		Dnstap: DnstapConfig{
+			Enabled:                     true,
+			SocketPath:                  "/var/run/unbound/dnstap.sock",
+			SendIdentity:                true,
+			SendVersion:                 true,
+			LogClientQueryMessages:      true,
+			LogClientResponseMessages:   true,
+			LogResolverQueryMessages:    true,
+			LogResolverResponseMessages: true,
+		},
+
 		RemoteControl: RemoteControl{
 			Enabled:          true,
 			ControlInterface: controlSocket,

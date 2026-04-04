@@ -4,6 +4,7 @@ package unbound
 // Glory-Hole owns this config and always writes the complete file.
 type UnboundServerConfig struct {
 	Server        ServerBlock   `yaml:"server" json:"server"`
+	Dnstap        DnstapConfig  `yaml:"dnstap" json:"dnstap"`
 	ForwardZones  []ForwardZone `yaml:"forward_zones" json:"forward_zones"`
 	StubZones     []StubZone    `yaml:"stub_zones" json:"stub_zones"`
 	RemoteControl RemoteControl `yaml:"remote_control" json:"remote_control"`
@@ -100,6 +101,20 @@ type StubZone struct {
 	StubAddrs []string `yaml:"stub_addrs" json:"stub_addrs"`
 	StubPrime bool     `yaml:"stub_prime,omitempty" json:"stub_prime,omitempty"`
 	StubFirst bool     `yaml:"stub_first,omitempty" json:"stub_first,omitempty"`
+}
+
+// DnstapConfig holds the dnstap: section of unbound.conf.
+// dnstap provides structured binary logging of DNS queries and responses
+// via a Unix socket, giving visibility into Unbound's resolution process.
+type DnstapConfig struct {
+	Enabled                     bool   `yaml:"enabled" json:"enabled"`
+	SocketPath                  string `yaml:"socket_path" json:"socket_path"`
+	SendIdentity                bool   `yaml:"send_identity,omitempty" json:"send_identity,omitempty"`
+	SendVersion                 bool   `yaml:"send_version,omitempty" json:"send_version,omitempty"`
+	LogClientQueryMessages      bool   `yaml:"log_client_query_messages" json:"log_client_query_messages"`
+	LogClientResponseMessages   bool   `yaml:"log_client_response_messages" json:"log_client_response_messages"`
+	LogResolverQueryMessages    bool   `yaml:"log_resolver_query_messages" json:"log_resolver_query_messages"`
+	LogResolverResponseMessages bool   `yaml:"log_resolver_response_messages" json:"log_resolver_response_messages"`
 }
 
 // RemoteControl represents the remote-control: block.

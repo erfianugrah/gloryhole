@@ -261,6 +261,34 @@ var migrations = []Migration{
 			);
 		`,
 	},
+	{
+		Version:     14,
+		Description: "Create unbound_queries table for dnstap query/response logging and add Unbound enrichment columns to queries",
+		SQL: `
+			CREATE TABLE IF NOT EXISTS unbound_queries (
+				id                INTEGER PRIMARY KEY AUTOINCREMENT,
+				timestamp         DATETIME NOT NULL,
+				message_type      TEXT NOT NULL,
+				domain            TEXT NOT NULL,
+				query_type        TEXT NOT NULL,
+				response_code     TEXT,
+				duration_ms       REAL,
+				dnssec_validated  BOOLEAN NOT NULL DEFAULT 0,
+				answer_count      INTEGER,
+				response_size     INTEGER,
+				client_ip         TEXT,
+				server_ip         TEXT,
+				cached_in_unbound BOOLEAN NOT NULL DEFAULT 0
+			);
+			CREATE INDEX IF NOT EXISTS idx_unbound_ts ON unbound_queries(timestamp);
+			CREATE INDEX IF NOT EXISTS idx_unbound_domain ON unbound_queries(domain);
+			CREATE INDEX IF NOT EXISTS idx_unbound_msgtype ON unbound_queries(message_type);
+
+			ALTER TABLE queries ADD COLUMN unbound_cached BOOLEAN;
+			ALTER TABLE queries ADD COLUMN unbound_duration_ms REAL;
+			ALTER TABLE queries ADD COLUMN unbound_resp_size INTEGER;
+		`,
+	},
 }
 
 // getMigrations returns all migrations sorted by version

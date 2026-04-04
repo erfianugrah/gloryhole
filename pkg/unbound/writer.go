@@ -141,6 +141,20 @@ remote-control:
     control-interface: {{ .RemoteControl.ControlInterface }}
     control-use-cert: {{ yesno .RemoteControl.ControlUseCert }}
 
+{{- if .Dnstap.Enabled }}
+
+# dnstap (structured binary query/response logging)
+dnstap:
+    dnstap-enable: yes
+    dnstap-socket-path: "{{ .Dnstap.SocketPath }}"
+    dnstap-send-identity: {{ yesno .Dnstap.SendIdentity }}
+    dnstap-send-version: {{ yesno .Dnstap.SendVersion }}
+    dnstap-log-client-query-messages: {{ yesno .Dnstap.LogClientQueryMessages }}
+    dnstap-log-client-response-messages: {{ yesno .Dnstap.LogClientResponseMessages }}
+    dnstap-log-resolver-query-messages: {{ yesno .Dnstap.LogResolverQueryMessages }}
+    dnstap-log-resolver-response-messages: {{ yesno .Dnstap.LogResolverResponseMessages }}
+{{- end }}
+
 {{- range .ForwardZones }}
 
 forward-zone:

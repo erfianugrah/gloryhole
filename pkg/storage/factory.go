@@ -191,6 +191,21 @@ func (n *NoOpStorage) SetDynamicConfig(ctx context.Context, key, value string) e
 	return nil
 }
 
+// LogUnboundQuery is a no-op
+func (n *NoOpStorage) LogUnboundQuery(ctx context.Context, query *UnboundQueryLog) error {
+	return nil
+}
+
+// GetUnboundQueries returns empty for no-op
+func (n *NoOpStorage) GetUnboundQueries(ctx context.Context, filter UnboundQueryFilter, limit, offset int) ([]*UnboundQueryLog, error) {
+	return nil, nil
+}
+
+// GetUnboundQueryStats returns empty for no-op
+func (n *NoOpStorage) GetUnboundQueryStats(ctx context.Context, since time.Time) (*UnboundQueryStats, error) {
+	return &UnboundQueryStats{ResponseCodes: map[string]int64{}}, nil
+}
+
 // Cleanup does nothing
 func (n *NoOpStorage) Cleanup(ctx context.Context, olderThan time.Time) error {
 	return nil

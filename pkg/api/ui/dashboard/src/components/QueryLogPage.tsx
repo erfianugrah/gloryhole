@@ -415,6 +415,19 @@ function QueryDetail({ query }: { query: QueryLog }) {
         {query.blocked && <DetailRow label="Status" value="Blocked" className="text-gh-red" />}
         {query.cached && <DetailRow label="Status" value="Cached" className="text-gh-blue" />}
         <DetailRow label="DNSSEC" value={query.dnssec_validated ? "Validated" : "No"} className={query.dnssec_validated ? "text-gh-green" : ""} />
+        {query.unbound_cached != null && (
+          <DetailRow
+            label="Unbound Cache"
+            value={query.unbound_cached ? "Hit" : "Recursive"}
+            className={query.unbound_cached ? "text-gh-green" : "text-gh-peach"}
+          />
+        )}
+        {query.unbound_duration_ms != null && (
+          <DetailRow label="Unbound Time" value={`${query.unbound_duration_ms.toFixed(2)}ms`} />
+        )}
+        {query.unbound_resp_size != null && (
+          <DetailRow label="Response Size" value={`${query.unbound_resp_size} bytes`} />
+        )}
         {query.upstream_error && (
           <DetailRow label="Upstream Error" value={query.upstream_error} className="text-gh-red" />
         )}

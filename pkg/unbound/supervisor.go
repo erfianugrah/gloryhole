@@ -53,6 +53,10 @@ type Supervisor struct {
 	checkconfBin string
 	anchorBin    string
 	listenAddr   string
+
+	// dnstap
+	dnstapReader   *DnstapReader
+	dnstapCallback DnstapCallback
 }
 
 // NewSupervisor creates a new Unbound process supervisor.
@@ -63,6 +67,12 @@ func NewSupervisor(cfg *config.UnboundConfig, logger *logging.Logger) *Superviso
 		state:      StateStopped,
 		listenAddr: fmt.Sprintf("127.0.0.1:%d", cfg.ListenPort),
 	}
+}
+
+// SetDnstapCallback sets a function to be called for each dnstap event.
+// Must be called before Start().
+func (s *Supervisor) SetDnstapCallback(cb DnstapCallback) {
+	s.dnstapCallback = cb
 }
 
 // State returns the current supervisor state and last error.
@@ -226,6 +236,16 @@ func (s *Supervisor) Stop() error {
 	s.mu.Unlock()
 
 	s.stopProcess()
+
+	// Stop dnstap reader after Unbound process
+	s.mu.Lock()
+	dnstapR := s.dnstapReader
+	s.dnstapReader = nil
+	s.mu.Unlock()
+	if dnstapR != nil {
+		dnstapR.Stop()
+	}
+
 	s.setState(StateStopped, nil)
 	s.logger.Info("Unbound resolver stopped")
 	return nil
@@ -321,6 +341,21 @@ func (s *Supervisor) checkPort() error {
 }
 
 func (s *Supervisor) startProcess(ctx context.Context) error {
+	// Start dnstap reader BEFORE Unbound so the socket exists when Unbound connects
+	s.mu.Lock()
+	serverCfg := s.serverConfig
+	s.mu.Unlock()
+	if serverCfg != nil && serverCfg.Dnstap.Enabled && s.dnstapCallback != nil {
+		reader := NewDnstapReader(serverCfg.Dnstap.SocketPath, s.dnstapCallback, s.logger)
+		if err := reader.Start(ctx); err != nil {
+			s.logger.Error("Failed to start dnstap reader (continuing without)", "error", err)
+		} else {
+			s.mu.Lock()
+			s.dnstapReader = reader
+			s.mu.Unlock()
+		}
+	}
+
 	procCtx, procCancel := context.WithCancel(ctx)
 
 	cmd := exec.CommandContext(procCtx, s.binaryPath, "-d", "-c", s.cfg.ConfigPath)

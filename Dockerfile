@@ -6,7 +6,7 @@ FROM alpine:3.21 AS unbound-builder
 
 ARG UNBOUND_VERSION=1.24.2
 
-RUN apk add --no-cache build-base openssl-dev libexpat expat-dev libevent-dev curl
+RUN apk add --no-cache build-base openssl-dev libexpat expat-dev libevent-dev fstrm-dev protobuf-c-dev curl
 
 RUN curl -fsSL "https://nlnetlabs.nl/downloads/unbound/unbound-${UNBOUND_VERSION}.tar.gz" \
         -o unbound.tar.gz && \
@@ -18,7 +18,7 @@ RUN ./configure \
         --prefix=/opt/unbound \
         --with-libevent \
         --with-ssl \
-        --disable-shared \
+        --enable-dnstap \
         --disable-flto \
         --without-pythonmodule \
         --without-pyunbound && \
@@ -84,6 +84,8 @@ RUN apk --no-cache add \
 	libcap \
 	libevent \
 	libexpat \
+	fstrm \
+	protobuf-c \
 	&& rm -rf /var/cache/apk/*
 
 # Create non-root user

@@ -16,6 +16,7 @@ import (
 	"glory-hole/pkg/telemetry"
 
 	"github.com/miekg/dns"
+	proxyproto "github.com/pires/go-proxyproto"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 )
@@ -128,20 +129,59 @@ func (s *Server) Start(ctx context.Context) error {
 
 	// Create and assign TCP server
 	if s.cfg.Server.TCPEnabled {
-		s.tcpServer = &dns.Server{
-			Addr:    s.cfg.Server.TCPAddr(),
-			Net:     "tcp",
-			Handler: dns.HandlerFunc(tcpHandler.serveDNS),
+		if s.cfg.Server.ProxyProtocol {
+			// PROXY protocol: create raw TCP listener wrapped with proxyproto
+			rawLn, err := net.Listen("tcp", s.cfg.Server.TCPAddr())
+			if err != nil {
+				s.mu.Unlock()
+				return fmt.Errorf("TCP DNS listen: %w", err)
+			}
+			proxyLn := &proxyproto.Listener{
+				Listener:          rawLn,
+				ReadHeaderTimeout: 5 * time.Second,
+			}
+			s.tcpServer = &dns.Server{
+				Listener: proxyLn,
+				Net:      "tcp",
+				Handler:  dns.HandlerFunc(tcpHandler.serveDNS),
+			}
+		} else {
+			s.tcpServer = &dns.Server{
+				Addr:    s.cfg.Server.TCPAddr(),
+				Net:     "tcp",
+				Handler: dns.HandlerFunc(tcpHandler.serveDNS),
+			}
 		}
 	}
 
 	// Create DoT server if enabled and TLS is available
 	if s.cfg.Server.DotEnabled && s.tlsConfig != nil {
-		s.dotServer = &dns.Server{
-			Addr:      s.cfg.Server.DotAddress,
-			Net:       "tcp-tls",
-			Handler:   dns.HandlerFunc(dotHandler.serveDNS),
-			TLSConfig: s.tlsConfig,
+		if s.cfg.Server.ProxyProtocol {
+			// PROXY protocol + TLS: raw TCP → proxyproto → TLS
+			// Fly.io sends PROXY header before TLS ClientHello, so
+			// the proxy layer must sit between raw TCP and TLS.
+			rawLn, err := net.Listen("tcp", s.cfg.Server.DotAddress)
+			if err != nil {
+				s.mu.Unlock()
+				return fmt.Errorf("DoT listen: %w", err)
+			}
+			proxyLn := &proxyproto.Listener{
+				Listener:          rawLn,
+				ReadHeaderTimeout: 5 * time.Second,
+			}
+			tlsLn := tls.NewListener(proxyLn, s.tlsConfig)
+			s.dotServer = &dns.Server{
+				Listener: tlsLn,
+				Net:      "tcp-tls",
+				Handler:  dns.HandlerFunc(dotHandler.serveDNS),
+			}
+		} else {
+			s.dotServer = &dns.Server{
+				Addr:      s.cfg.Server.DotAddress,
+				Net:       "tcp-tls",
+				Handler:   dns.HandlerFunc(dotHandler.serveDNS),
+				TLSConfig: s.tlsConfig,
+			}
 		}
 	}
 
@@ -164,11 +204,19 @@ func (s *Server) Start(ctx context.Context) error {
 	// Start TCP server in goroutine
 	if s.cfg.Server.TCPEnabled {
 		go func() {
-			s.logger.Info("Starting TCP DNS server", "address", s.cfg.Server.TCPAddr())
+			s.logger.Info("Starting TCP DNS server",
+				"address", s.cfg.Server.TCPAddr(),
+				"proxy_protocol", s.cfg.Server.ProxyProtocol)
 			s.mu.RLock()
 			tcpSrv := s.tcpServer
 			s.mu.RUnlock()
-			if err := tcpSrv.ListenAndServe(); err != nil {
+			var err error
+			if s.cfg.Server.ProxyProtocol {
+				err = tcpSrv.ActivateAndServe()
+			} else {
+				err = tcpSrv.ListenAndServe()
+			}
+			if err != nil {
 				errChan <- fmt.Errorf("TCP server failed: %w", err)
 			}
 		}()
@@ -177,11 +225,19 @@ func (s *Server) Start(ctx context.Context) error {
 	// Start DoT server
 	if s.dotServer != nil {
 		go func() {
-			s.logger.Info("Starting DoT server", "address", s.cfg.Server.DotAddress)
+			s.logger.Info("Starting DoT server",
+				"address", s.cfg.Server.DotAddress,
+				"proxy_protocol", s.cfg.Server.ProxyProtocol)
 			s.mu.RLock()
 			dotSrv := s.dotServer
 			s.mu.RUnlock()
-			if err := dotSrv.ListenAndServe(); err != nil {
+			var err error
+			if s.cfg.Server.ProxyProtocol {
+				err = dotSrv.ActivateAndServe()
+			} else {
+				err = dotSrv.ListenAndServe()
+			}
+			if err != nil {
 				errChan <- fmt.Errorf("DoT server failed: %w", err)
 			}
 		}()

@@ -173,6 +173,18 @@ func (m *mockStorage) SetDynamicConfig(ctx context.Context, key, value string) e
 	return nil
 }
 
+func (m *mockStorage) LogUnboundQuery(ctx context.Context, query *storage.UnboundQueryLog) error {
+	return nil
+}
+
+func (m *mockStorage) GetUnboundQueries(ctx context.Context, filter storage.UnboundQueryFilter, limit, offset int) ([]*storage.UnboundQueryLog, error) {
+	return nil, nil
+}
+
+func (m *mockStorage) GetUnboundQueryStats(ctx context.Context, since time.Time) (*storage.UnboundQueryStats, error) {
+	return &storage.UnboundQueryStats{ResponseCodes: map[string]int64{}}, nil
+}
+
 func newConfigTestServer(t *testing.T, mutate func(*config.Config)) (*Server, string) {
 	t.Helper()
 

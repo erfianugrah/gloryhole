@@ -13,6 +13,10 @@ server:
   enable_blocklist: true  # Runtime kill-switch for blocklists (API/UI toggle)
   enable_policies: true   # Runtime kill-switch for policy engine (API/UI toggle)
   decision_trace: false   # Capture detailed block breadcrumbs (higher storage cost)
+  # proxy_protocol: false   # Enable PROXY protocol parsing on TCP listeners (DoT + TCP DNS).
+                             # Required when behind Fly.io or HAProxy with proxy_proto handler.
+                             # Only affects TCP-based listeners; UDP is unaffected.
+                             # Do NOT enable for direct/local deployments.
   allowed_clients: []     # IP/CIDR allowlist for plain DNS (port 53). Empty = open resolver.
     # - "192.168.1.0/24"  # DoT (port 853) and DoH bypass this — they have their own auth.
     # - "10.0.0.0/8"
@@ -362,6 +366,13 @@ unbound:
   config_path: "/etc/unbound/unbound.conf"
   listen_port: 5353              # Port Unbound listens on (loopback only)
   control_socket: "/var/run/unbound/control.sock"
+  # Unbound's server config is managed automatically by Glory-Hole.
+  # dnstap (structured binary query/response logging) is enabled by default
+  # when Unbound is managed. It provides per-query visibility into Unbound's
+  # resolution process (cache hits, recursive lookups, DNSSEC validation).
+  # The data feeds the Resolver > Query Log page in the dashboard.
+  # To disable dnstap, set the Unbound server config via the API:
+  #   PUT /api/unbound/config/server { "dnstap": { "enabled": false } }
 
 # Telemetry (OpenTelemetry)
 telemetry:

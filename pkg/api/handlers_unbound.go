@@ -1,10 +1,14 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
+	"strconv"
 	"strings"
+	"time"
 
+	"glory-hole/pkg/storage"
 	"glory-hole/pkg/unbound"
 )
 
@@ -344,4 +348,81 @@ func sanitizeZoneName(name string) string {
 		return name + "."
 	}
 	return name
+}
+
+// --- Unbound Query Log (dnstap) ---
+
+// handleGetUnboundQueries handles GET /api/unbound/queries
+func (s *Server) handleGetUnboundQueries(w http.ResponseWriter, r *http.Request) {
+	if s.storage == nil {
+		s.writeError(w, http.StatusServiceUnavailable, "Storage not available")
+		return
+	}
+
+	limit := 100
+	if l, err := strconv.Atoi(r.URL.Query().Get("limit")); err == nil && l > 0 && l <= 1000 {
+		limit = l
+	}
+	offset := 0
+	if o, err := strconv.Atoi(r.URL.Query().Get("offset")); err == nil && o >= 0 {
+		offset = o
+	}
+
+	filter := storage.UnboundQueryFilter{
+		Domain:      r.URL.Query().Get("domain"),
+		QueryType:   r.URL.Query().Get("type"),
+		MessageType: r.URL.Query().Get("message_type"),
+		RCode:       r.URL.Query().Get("rcode"),
+		Start:       r.URL.Query().Get("start"),
+		End:         r.URL.Query().Get("end"),
+	}
+
+	if cached := r.URL.Query().Get("cached"); cached != "" {
+		v := cached == "true" || cached == "1"
+		filter.Cached = &v
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+
+	queries, err := s.storage.GetUnboundQueries(ctx, filter, limit, offset)
+	if err != nil {
+		s.logger.Error("Failed to get Unbound queries", "error", err)
+		s.writeError(w, http.StatusInternalServerError, "Failed to retrieve Unbound queries")
+		return
+	}
+
+	s.writeJSON(w, http.StatusOK, map[string]any{
+		"queries": queries,
+		"total":   len(queries),
+		"limit":   limit,
+		"offset":  offset,
+	})
+}
+
+// handleGetUnboundQueryStats handles GET /api/unbound/query-stats
+func (s *Server) handleGetUnboundQueryStats(w http.ResponseWriter, r *http.Request) {
+	if s.storage == nil {
+		s.writeError(w, http.StatusServiceUnavailable, "Storage not available")
+		return
+	}
+
+	since := time.Now().Add(-24 * time.Hour) // Default: last 24 hours
+	if sinceParam := r.URL.Query().Get("since"); sinceParam != "" {
+		if t, err := time.Parse(time.RFC3339, sinceParam); err == nil {
+			since = t
+		}
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+
+	stats, err := s.storage.GetUnboundQueryStats(ctx, since)
+	if err != nil {
+		s.logger.Error("Failed to get Unbound query stats", "error", err)
+		s.writeError(w, http.StatusInternalServerError, "Failed to retrieve Unbound query stats")
+		return
+	}
+
+	s.writeJSON(w, http.StatusOK, stats)
 }

@@ -45,6 +45,11 @@ type Storage interface {
 	GetDynamicConfig(ctx context.Context, key string) (string, error)
 	SetDynamicConfig(ctx context.Context, key, value string) error
 
+	// Unbound Query Log (dnstap)
+	LogUnboundQuery(ctx context.Context, query *UnboundQueryLog) error
+	GetUnboundQueries(ctx context.Context, filter UnboundQueryFilter, limit, offset int) ([]*UnboundQueryLog, error)
+	GetUnboundQueryStats(ctx context.Context, since time.Time) (*UnboundQueryStats, error)
+
 	// Maintenance
 	Cleanup(ctx context.Context, olderThan time.Time) error
 	Reset(ctx context.Context) error
@@ -68,6 +73,11 @@ type QueryLog struct {
 	Cached          bool              `json:"cached"`
 	DNSSECValidated bool              `json:"dnssec_validated,omitempty"`
 	BlockTrace      []BlockTraceEntry `json:"block_trace,omitempty"`
+
+	// Unbound enrichment (populated when upstream is Unbound via dnstap correlation)
+	UnboundCached     *bool    `json:"unbound_cached,omitempty"`
+	UnboundDurationMs *float64 `json:"unbound_duration_ms,omitempty"`
+	UnboundRespSize   *int     `json:"unbound_resp_size,omitempty"`
 }
 
 // BlockTraceEntry captures a single decision step explaining how a query was handled.
@@ -78,6 +88,46 @@ type BlockTraceEntry struct {
 	Source   string            `json:"source,omitempty"`
 	Detail   string            `json:"detail,omitempty"`
 	Metadata map[string]string `json:"metadata,omitempty"`
+}
+
+// UnboundQueryLog represents a single dnstap event from Unbound.
+type UnboundQueryLog struct {
+	ID              int64     `json:"id"`
+	Timestamp       time.Time `json:"timestamp"`
+	MessageType     string    `json:"message_type"`
+	Domain          string    `json:"domain"`
+	QueryType       string    `json:"query_type"`
+	ResponseCode    string    `json:"response_code,omitempty"`
+	DurationMs      float64   `json:"duration_ms,omitempty"`
+	DNSSECValidated bool      `json:"dnssec_validated"`
+	AnswerCount     int       `json:"answer_count,omitempty"`
+	ResponseSize    int       `json:"response_size,omitempty"`
+	ClientIP        string    `json:"client_ip"`
+	ServerIP        string    `json:"server_ip,omitempty"`
+	CachedInUnbound bool      `json:"cached_in_unbound"`
+}
+
+// UnboundQueryFilter holds filtering options for the unbound_queries table.
+type UnboundQueryFilter struct {
+	Domain      string `json:"domain,omitempty"`
+	QueryType   string `json:"query_type,omitempty"`
+	MessageType string `json:"message_type,omitempty"`
+	RCode       string `json:"rcode,omitempty"`
+	Cached      *bool  `json:"cached,omitempty"`
+	Start       string `json:"start,omitempty"`
+	End         string `json:"end,omitempty"`
+}
+
+// UnboundQueryStats holds aggregated statistics from the unbound_queries table.
+type UnboundQueryStats struct {
+	TotalQueries       int64            `json:"total_queries"`
+	CacheHits          int64            `json:"cache_hits"`
+	CacheHitRate       float64          `json:"cache_hit_rate"`
+	RecursiveQueries   int64            `json:"recursive_queries"`
+	AvgRecursiveMs     float64          `json:"avg_recursive_ms"`
+	AvgCachedMs        float64          `json:"avg_cached_ms"`
+	DNSSECValidatedPct float64          `json:"dnssec_validated_pct"`
+	ResponseCodes      map[string]int64 `json:"response_codes"`
 }
 
 // Statistics represents aggregated query statistics

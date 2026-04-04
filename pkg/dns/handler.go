@@ -19,6 +19,7 @@ import (
 	"glory-hole/pkg/policy"
 	"glory-hole/pkg/storage"
 	"glory-hole/pkg/telemetry"
+	"glory-hole/pkg/unbound"
 
 	"github.com/miekg/dns"
 )
@@ -68,24 +69,25 @@ type KillSwitchChecker interface {
 }
 
 type Handler struct {
-	Storage          storage.Storage // Legacy: kept for backwards compatibility
-	QueryLogger      *QueryLogger    // New: worker pool for async query logging
-	BlocklistManager *blocklist.Manager
-	Blocklist        map[string]struct{}
-	Overrides        map[string]net.IP
-	CNAMEOverrides   map[string]string
-	LocalRecords     *localrecords.Manager
-	PolicyEngine     *policy.Engine
-	RuleEvaluator    *forwarder.RuleEvaluator
-	Forwarder        *forwarder.Forwarder
-	Cache            cache.Interface
-	ConfigWatcher    *config.Watcher   // For kill-switch feature (hot-reload config access)
-	KillSwitch       KillSwitchChecker // For duration-based temporary disabling
-	DecisionTrace    bool
-	BlockPageIP      string // If set, blocked domains resolve to this IP instead of NXDOMAIN
-	Metrics          *telemetry.Metrics
-	Logger           *logging.Logger
-	lookupMu         sync.RWMutex
+	Storage            storage.Storage // Legacy: kept for backwards compatibility
+	QueryLogger        *QueryLogger    // New: worker pool for async query logging
+	BlocklistManager   *blocklist.Manager
+	Blocklist          map[string]struct{}
+	Overrides          map[string]net.IP
+	CNAMEOverrides     map[string]string
+	LocalRecords       *localrecords.Manager
+	PolicyEngine       *policy.Engine
+	RuleEvaluator      *forwarder.RuleEvaluator
+	Forwarder          *forwarder.Forwarder
+	Cache              cache.Interface
+	ConfigWatcher      *config.Watcher   // For kill-switch feature (hot-reload config access)
+	KillSwitch         KillSwitchChecker // For duration-based temporary disabling
+	DecisionTrace      bool
+	BlockPageIP        string               // If set, blocked domains resolve to this IP instead of NXDOMAIN
+	UnboundReplyBuffer *unbound.ReplyBuffer // dnstap reply buffer for inline enrichment
+	Metrics            *telemetry.Metrics
+	Logger             *logging.Logger
+	lookupMu           sync.RWMutex
 }
 
 // NewHandler creates a new DNS handler
@@ -120,6 +122,21 @@ func (h *Handler) SetStorage(s storage.Storage) {
 // SetQueryLogger sets the query logger worker pool
 func (h *Handler) SetQueryLogger(ql *QueryLogger) {
 	h.QueryLogger = ql
+}
+
+// enrichFromUnbound attempts to match dnstap reply data from the Unbound
+// reply buffer and populate the outcome with Unbound-specific fields.
+func (h *Handler) enrichFromUnbound(r *dns.Msg, outcome *serveDNSOutcome) {
+	if h.UnboundReplyBuffer == nil || len(r.Question) == 0 {
+		return
+	}
+	domain := r.Question[0].Name
+	qtype := dns.TypeToString[r.Question[0].Qtype]
+	if match := h.UnboundReplyBuffer.FindReply(domain, qtype, 500*time.Millisecond); match != nil {
+		outcome.unboundCached = &match.CachedInUnbound
+		outcome.unboundDuration = &match.DurationMs
+		outcome.unboundRespSize = &match.ResponseSize
+	}
 }
 
 // SetLocalRecords sets the local DNS records manager
@@ -181,6 +198,7 @@ func (h *Handler) serveFromCache(ctx context.Context, w dns.ResponseWriter, r, m
 
 	outcome.cached = true
 	outcome.responseCode = cachedResp.Rcode
+	outcome.dnssecValidated = cachedResp.AuthenticatedData
 
 	// Append any trace from cache (e.g., ALLOW/FORWARD policy that led to upstream lookup)
 	trace.Append(cachedTrace)
@@ -297,19 +315,22 @@ func (h *Handler) asyncLogQuery(startTime time.Time, r *dns.Msg, clientIP string
 	}
 
 	queryLog := &storage.QueryLog{
-		Timestamp:       startTime,
-		ClientIP:        clientIP,
-		Domain:          domain,
-		QueryType:       queryType,
-		ResponseCode:    outcome.responseCode,
-		Blocked:         outcome.blocked,
-		Cached:          outcome.cached,
-		DNSSECValidated: outcome.dnssecValidated,
-		ResponseTimeMs:  time.Since(startTime).Seconds() * 1000,
-		UpstreamTimeMs:  outcome.upstreamDuration.Seconds() * 1000,
-		Upstream:        outcome.upstream,
-		UpstreamError:   outcome.upstreamError,
-		BlockTrace:      trace.Entries(),
+		Timestamp:         startTime,
+		ClientIP:          clientIP,
+		Domain:            domain,
+		QueryType:         queryType,
+		ResponseCode:      outcome.responseCode,
+		Blocked:           outcome.blocked,
+		Cached:            outcome.cached,
+		DNSSECValidated:   outcome.dnssecValidated,
+		ResponseTimeMs:    time.Since(startTime).Seconds() * 1000,
+		UpstreamTimeMs:    outcome.upstreamDuration.Seconds() * 1000,
+		Upstream:          outcome.upstream,
+		UpstreamError:     outcome.upstreamError,
+		BlockTrace:        trace.Entries(),
+		UnboundCached:     outcome.unboundCached,
+		UnboundDurationMs: outcome.unboundDuration,
+		UnboundRespSize:   outcome.unboundRespSize,
 	}
 
 	// New path: use worker pool (no goroutine spawn)

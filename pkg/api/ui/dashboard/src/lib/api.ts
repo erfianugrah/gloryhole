@@ -99,6 +99,10 @@ export interface QueryLog {
   response_time_ms: number;
   upstream_response_ms: number;
   block_trace?: BlockTraceEntry[];
+  // Unbound enrichment (populated when upstream is Unbound via dnstap)
+  unbound_cached?: boolean | null;
+  unbound_duration_ms?: number | null;
+  unbound_resp_size?: number | null;
 }
 
 export interface BlockTraceEntry {
@@ -771,4 +775,73 @@ export function reloadUnbound(): Promise<void> {
 
 export function flushUnboundCache(): Promise<void> {
   return apiFetch<void>("/api/unbound/flush-cache", { method: "POST" });
+}
+
+// ─── Unbound Query Log (dnstap) ─────────────────────────────────────
+
+export interface UnboundQueryLog {
+  id: number;
+  timestamp: string;
+  message_type: string;
+  domain: string;
+  query_type: string;
+  response_code?: string;
+  duration_ms?: number;
+  dnssec_validated: boolean;
+  answer_count?: number;
+  response_size?: number;
+  client_ip: string;
+  server_ip?: string;
+  cached_in_unbound: boolean;
+}
+
+export interface UnboundQueryFilter {
+  limit?: number;
+  offset?: number;
+  domain?: string;
+  query_type?: string;
+  message_type?: string;
+  rcode?: string;
+  cached?: boolean;
+  since?: string;
+}
+
+export interface UnboundQueryStatsResponse {
+  total_queries: number;
+  cache_hits: number;
+  cache_hit_rate: number;
+  recursive_queries: number;
+  avg_recursive_ms: number;
+  avg_cached_ms: number;
+  dnssec_validated_pct: number;
+  response_codes: Record<string, number>;
+}
+
+export async function fetchUnboundQueries(
+  filter: UnboundQueryFilter = {}
+): Promise<UnboundQueryLog[]> {
+  const params = new URLSearchParams();
+  if (filter.limit) params.set("limit", String(filter.limit));
+  if (filter.offset) params.set("offset", String(filter.offset));
+  if (filter.domain) params.set("domain", filter.domain);
+  if (filter.query_type) params.set("type", filter.query_type);
+  if (filter.message_type) params.set("message_type", filter.message_type);
+  if (filter.rcode) params.set("rcode", filter.rcode);
+  if (filter.cached !== undefined) params.set("cached", String(filter.cached));
+  if (filter.since) {
+    const ms = filter.since.endsWith("h")
+      ? parseInt(filter.since) * 3600000
+      : filter.since.endsWith("d")
+        ? parseInt(filter.since) * 86400000
+        : 86400000;
+    params.set("start", new Date(Date.now() - ms).toISOString());
+  }
+  const res = await apiFetch<{ queries: UnboundQueryLog[] }>(
+    `/api/unbound/queries?${params}`
+  );
+  return res.queries ?? [];
+}
+
+export function fetchUnboundQueryStats(): Promise<UnboundQueryStatsResponse> {
+  return apiFetch<UnboundQueryStatsResponse>("/api/unbound/query-stats");
 }

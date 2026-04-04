@@ -169,6 +169,9 @@ func (h *Handler) handlePolicyAllow(ctx context.Context, w dns.ResponseWriter, r
 		}
 	}
 
+	// Enrich with Unbound dnstap data (best-effort inline correlation)
+	h.enrichFromUnbound(r, outcome)
+
 	if h.Cache != nil {
 		h.Cache.Set(ctx, r, resp)
 	}
@@ -301,6 +304,9 @@ func (h *Handler) handlePolicyForward(ctx context.Context, w dns.ResponseWriter,
 			outcome.upstreamError = codeName
 		}
 	}
+
+	// Enrich with Unbound dnstap data (best-effort inline correlation)
+	h.enrichFromUnbound(r, outcome)
 
 	if h.Cache != nil {
 		h.Cache.Set(ctx, r, resp)

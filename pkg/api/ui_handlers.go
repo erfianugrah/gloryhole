@@ -172,3 +172,8 @@ func (s *Server) handleResolverSettingsPage(w http.ResponseWriter, r *http.Reque
 func (s *Server) handleResolverZonesPage(w http.ResponseWriter, r *http.Request) {
 	s.serveAstroPage(w, r, "resolver/zones/index.html")
 }
+
+// handleResolverQueriesPage serves the Unbound query log page (Astro pre-rendered).
+func (s *Server) handleResolverQueriesPage(w http.ResponseWriter, r *http.Request) {
+	s.serveAstroPage(w, r, "resolver/queries/index.html")
+}
