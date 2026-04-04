@@ -125,12 +125,21 @@ func (d *Downloader) parseHostsFile(r io.Reader) (map[string]struct{}, error) {
 
 // extractDomain extracts a domain from various blocklist formats
 func (d *Downloader) extractDomain(line string) string {
+	// Strip inline comments (e.g., "domain.com # comment")
+	if idx := strings.Index(line, " #"); idx >= 0 {
+		line = line[:idx]
+	}
+
 	// Adblock format: ||domain.com^
 	if strings.HasPrefix(line, "||") && strings.Contains(line, "^") {
 		domain := strings.TrimPrefix(line, "||")
 		domain = strings.Split(domain, "^")[0]
 		return strings.TrimSpace(domain)
 	}
+
+	// Wildcard domain format: *.domain.com (used by OISD and others)
+	// Strip the "*." prefix — the blocklist manager's Match() already checks subdomains.
+	line = strings.TrimPrefix(line, "*.")
 
 	// Hosts file format: 0.0.0.0 domain.com or 127.0.0.1 domain.com
 	fields := strings.Fields(line)

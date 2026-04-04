@@ -404,43 +404,44 @@ func (s *Server) handleTopDomains(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleBlocklistReload handles POST /api/blocklist/reload
+// The reload runs asynchronously — the API returns 202 Accepted immediately
+// and the blocklist update proceeds in the background. The frontend polls
+// GET /api/blocklists to detect when the reload completes.
 func (s *Server) handleBlocklistReload(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		s.writeError(w, http.StatusMethodNotAllowed, "Method not allowed")
 		return
 	}
 
-	// Check if blocklist manager is available
 	if s.blocklistManager == nil {
 		s.writeError(w, http.StatusServiceUnavailable, "Blocklist manager not available")
 		return
 	}
 
-	// Reload blocklists
-	ctx, cancel := context.WithTimeout(r.Context(), 60*time.Second)
-	defer cancel()
+	// Run reload asynchronously so we don't hit WriteTimeout on large lists
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+		defer cancel()
 
-	if err := s.blocklistManager.Update(ctx); err != nil {
-		s.logger.Error("Failed to reload blocklists", "error", err)
-		s.writeError(w, http.StatusInternalServerError, "Failed to reload blocklists")
-		return
-	}
+		if err := s.blocklistManager.Update(ctx); err != nil {
+			s.logger.Error("Background blocklist reload failed", "error", err)
+			return
+		}
 
-	// Clear cached blocklist decisions so new blocklist takes effect immediately
-	if s.cache != nil {
-		s.cache.ClearBlocklistDecisions()
-		s.logger.Info("Cleared blocklist cache entries after reload")
-	}
+		// Clear cached blocklist decisions so new blocklist takes effect immediately
+		if s.cache != nil {
+			s.cache.ClearBlocklistDecisions()
+			s.logger.Info("Cleared blocklist cache entries after reload")
+		}
 
-	domains := s.blocklistManager.Size()
+		s.logger.Info("Background blocklist reload completed", "domains", s.blocklistManager.Size())
+	}()
 
-	response := BlocklistReloadResponse{
-		Status:  "ok",
-		Domains: domains,
-		Message: "Blocklists reloaded successfully",
-	}
-
-	s.writeJSON(w, http.StatusOK, response)
+	s.writeJSON(w, http.StatusAccepted, BlocklistReloadResponse{
+		Status:  "accepted",
+		Domains: s.blocklistManager.Size(),
+		Message: "Blocklist reload started",
+	})
 }
 
 // handleCachePurge handles POST /api/cache/purge

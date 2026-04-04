@@ -19,6 +19,31 @@ GLORY_USER="glory-hole"
 GLORY_UID=1000
 GLORY_GID=1000
 
+# Config persistence: on first boot, copy the baked-in config to the persistent
+# volume so API changes (local records, forwarding, blocklist sources) survive
+# container restarts and deploys. On subsequent boots, the volume copy is used.
+BAKED_CONFIG="/etc/glory-hole/config.yml"
+LIVE_CONFIG="/var/lib/glory-hole/config.yml"
+
+if [ -f "$BAKED_CONFIG" ] && [ -d "/var/lib/glory-hole" ]; then
+    if [ ! -f "$LIVE_CONFIG" ]; then
+        echo "glory-hole: first boot — copying config to persistent volume"
+        cp "$BAKED_CONFIG" "$LIVE_CONFIG"
+    fi
+    # Rewrite the -config flag to point at the persistent copy.
+    # Only do this if the user hasn't overridden it.
+    ARGS=""
+    CONFIG_OVERRIDDEN=false
+    for arg in "$@"; do
+        if [ "$arg" = "-config" ] || [ "$arg" = "--config" ]; then
+            CONFIG_OVERRIDDEN=true
+        fi
+    done
+    if [ "$CONFIG_OVERRIDDEN" = "false" ]; then
+        set -- "-config" "$LIVE_CONFIG" "$@"
+    fi
+fi
+
 if [ "$(id -u)" = "0" ]; then
     # Fix ownership on all app directories so glory-hole user can read/write.
     chown -R "${GLORY_UID}:${GLORY_GID}" \

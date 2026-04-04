@@ -306,11 +306,33 @@ func (m *Manager) Match(domain string) MatchResult {
 
 	blocklist := m.current.Load()
 	if blocklist != nil {
+		// Exact match on the full domain
 		if entry, ok := (*blocklist)[fqdn]; ok {
 			return MatchResult{
 				Blocked: true,
 				Kind:    "exact",
 				Sources: m.sourcesFromMask(entry.SourceMask, entry.Overflow),
+			}
+		}
+
+		// Walk parent domains to support wildcard-style lists (e.g., OISD *.domain.com).
+		// If "example.com." is in the blocklist, then "sub.example.com." is also blocked.
+		parent := fqdn
+		for {
+			idx := strings.Index(parent, ".")
+			if idx < 0 || idx+1 >= len(parent) {
+				break
+			}
+			parent = parent[idx+1:]
+			if parent == "." || parent == "" {
+				break
+			}
+			if entry, ok := (*blocklist)[parent]; ok {
+				return MatchResult{
+					Blocked: true,
+					Kind:    "subdomain",
+					Sources: m.sourcesFromMask(entry.SourceMask, entry.Overflow),
+				}
 			}
 		}
 	}

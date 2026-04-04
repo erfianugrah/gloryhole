@@ -74,7 +74,23 @@ export function BlocklistsPage() {
   async function handleReload() {
     setReloading(true);
     try {
-      await reloadBlocklists();
+      await reloadBlocklists(); // Returns 202 immediately; reload runs in background
+      // Poll until the domain count changes or timeout after 120s
+      const startDomains = info?.total_domains ?? 0;
+      const startTime = Date.now();
+      const poll = async () => {
+        while (Date.now() - startTime < 120_000) {
+          await new Promise((r) => setTimeout(r, 2000));
+          try {
+            await loadData();
+            // Reload is done when domain count changes or enough time has passed
+            if ((info?.total_domains ?? 0) !== startDomains || Date.now() - startTime > 10_000) {
+              return;
+            }
+          } catch { /* keep polling */ }
+        }
+      };
+      await poll();
       await loadData();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Reload failed");
