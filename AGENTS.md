@@ -61,12 +61,26 @@ make docker-push    # Build and push main image to DockerHub
 - shadcn/ui primitives live in `src/components/ui/`, page components in `src/components/`
 - Typography constants in `src/lib/typography.ts` (`T.pageTitle`, `T.cardTitle`, etc.)
 
+## Security
+
+- API has per-IP rate limiting (5/min login, 60/s API) in `pkg/api/middleware_ratelimit.go`
+- CSRF protection via `X-Requested-With` header on mutating `/api/*` calls
+- Trusted proxy config (`trusted_proxies` in ServerConfig) gates X-Forwarded-For trust
+- Unbound config template inputs are sanitized before rendering (reject newlines/quotes)
+- All request bodies have `MaxBytesReader` limits
+- Blocklist URLs must use http/https scheme; downloads limited to 100MB
+- Session cookies set `Secure` flag when behind trusted proxy with HTTPS
+
 ## Deployment
 
 - **Docker**: `Dockerfile` for the main multi-arch image, `Dockerfile.release` for GoReleaser
-- **Fly.io**: `Dockerfile.fly` bakes `config.fly.yml` into the image; `fly.toml` defines services
+- **Fly.io**: `Dockerfile.fly` bakes `config.fly.yml` + `docker-entrypoint.sh` into the image; `fly.toml` defines services
+  - Entrypoint copies baked config to persistent volume (`/var/lib/glory-hole/config.yml`) on first boot
+  - Subsequent deploys use the volume copy, preserving API-written changes (local records, forwarding, blocklists)
+  - To force a config reset: `fly ssh console` then `rm /var/lib/glory-hole/config.yml` and restart
   - Per-protocol listen: `udp_listen_address`/`tcp_listen_address` in `ServerConfig` override `listen_address`
   - ACME cert obtain is non-blocking; DNS/API start immediately, DoT comes online when cert is ready
+  - Deploy: `fly deploy --remote-only` (no local Docker needed)
   - CI deploys to Fly.io on tag push (see `.github/workflows/release.yml`)
 - **Config**: `config.fly.yml` (gitignored) for Fly, `config.yml` (gitignored) for local/router
 

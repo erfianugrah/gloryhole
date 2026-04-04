@@ -17,13 +17,20 @@ server:
                              # Required when behind Fly.io or HAProxy with proxy_proto handler.
                              # Only affects TCP-based listeners; UDP is unaffected.
                              # Do NOT enable for direct/local deployments.
-  allowed_clients: []     # IP/CIDR allowlist for plain DNS (port 53). Empty = open resolver.
+  allowed_clients: []     # IP/CIDR allowlist for plain DNS (port 53). Empty = open resolver (NOT recommended).
     # - "192.168.1.0/24"  # DoT (port 853) and DoH bypass this — they have their own auth.
     # - "10.0.0.0/8"
     # - "fd00::/8"
   cors_allowed_origins: [] # Allowed CORS origins (empty = no cross-origin, ["*"] = all origins)
     # - "https://admin.example.com"
     # - "http://localhost:3000"
+  trusted_proxies: []      # CIDRs whose X-Forwarded-For / X-Real-IP headers are trusted.
+    # - "172.16.0.0/12"   # Docker/Fly.io internal networks
+    # - "10.0.0.0/8"      # Required for correct client IPs behind reverse proxies.
+  query_logger:
+    enabled: true           # Enable async query logging worker pool
+    buffer_size: 5000       # Query log buffer (default: 5000; increase for high traffic)
+    workers: 2              # Worker goroutines (default: 2; increase for multi-core)
 
   tls:
     cert_file: ""               # PEM certificate for DoT (required if autocert disabled)
@@ -68,9 +75,11 @@ upstream_dns_servers:
 update_interval: "24h"
 auto_update_blocklists: true
 
-# Blocklists
+# Blocklists (supports hosts file, adblock, wildcard, and plain domain formats)
 blocklists:
-  - "https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts"
+  - "https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/ultimate.txt"
+  - "https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/tif.txt"
+  - "https://big.oisd.nl/domainswild"
 
 # Whitelist
 whitelist:
@@ -193,15 +202,15 @@ local_records:
 # Database (Query Logging & Statistics)
 database:
   enabled: true
-  backend: "sqlite"              # sqlite only (Cloudflare D1 temporarily unsupported)
+  backend: "sqlite"              # sqlite only
 
   # SQLite configuration
   sqlite:
     path: "./glory-hole.db"
     busy_timeout: 5000           # milliseconds
     wal_mode: true               # write-ahead logging for better concurrency
-    cache_size: 4096             # KB
-    mmap_size: 268435456         # bytes (256 MiB window)
+    cache_size: 2048             # KB (2 MiB — increase to 4096 for dedicated servers)
+    mmap_size: 33554432          # bytes (32 MiB — increase to 268435456/256MiB for dedicated servers)
 
   # Buffer settings (async writes for performance)
   buffer_size: 500               # queries to buffer before flush
@@ -224,9 +233,9 @@ cache:
   max_ttl: "24h"
   negative_ttl: "5m"  # TTL for upstream NXDOMAIN responses
   blocked_ttl: "1s"    # TTL for blocked domain responses (reduces repeated blocking logic)
-  shard_count: 0      # Number of cache shards (0 = non-sharded, 64 = recommended for high traffic)
+  shard_count: 0      # Number of cache shards (0 = default 4 shards)
                       # Sharding reduces lock contention on multi-core systems
-                      # Recommended: 64 shards for >100K QPS, 0 (disabled) for <10K QPS
+                      # Recommended: 4 for single-core, 16-64 for multi-core high-traffic
 
 # Logging
 logging:
@@ -381,5 +390,7 @@ telemetry:
   service_version: "dev"
   prometheus_enabled: true
   prometheus_port: 9090
+  metrics_username: ""       # Optional: basic auth for /metrics endpoint
+  metrics_password: ""       # Optional: basic auth for /metrics endpoint
   tracing_enabled: false
   tracing_endpoint: ""
