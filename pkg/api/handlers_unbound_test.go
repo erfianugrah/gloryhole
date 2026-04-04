@@ -222,7 +222,12 @@ func TestMergeServerBlock(t *testing.T) {
 		NumThreads:   4,
 	}
 
-	mergeServerBlock(base, partial)
+	// Simulate raw JSON with only the fields that were sent
+	raw := map[string]json.RawMessage{
+		"msg_cache_size": json.RawMessage(`"128m"`),
+		"num_threads":    json.RawMessage(`4`),
+	}
+	mergeServerBlock(base, partial, raw)
 
 	if base.MsgCacheSize != "128m" {
 		t.Errorf("expected merged msg_cache_size '128m', got %q", base.MsgCacheSize)

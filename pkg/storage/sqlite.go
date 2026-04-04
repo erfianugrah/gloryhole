@@ -34,7 +34,8 @@ type SQLiteStorage struct {
 	cfg                 *Config
 	metrics             MetricsRecorder
 	buffer              chan *QueryLog
-	domainStatsCh       chan []*QueryLog // Channel for domain stats updates (avoids goroutine per batch)
+	domainStatsCh       chan []*QueryLog      // Channel for domain stats updates (avoids goroutine per batch)
+	unboundBuffer       chan *UnboundQueryLog // Buffered channel for Unbound dnstap events
 	stmtInsertQuery     *sql.Stmt
 	wg                  sync.WaitGroup
 	mu                  sync.RWMutex
@@ -124,7 +125,8 @@ func NewSQLiteStorage(cfg *Config, metrics MetricsRecorder) (Storage, error) {
 		cfg:                 cfg,
 		metrics:             metrics,
 		buffer:              make(chan *QueryLog, cfg.BufferSize),
-		domainStatsCh:       make(chan []*QueryLog, 100), // Buffer for domain stats batches
+		domainStatsCh:       make(chan []*QueryLog, 100),        // Buffer for domain stats batches
+		unboundBuffer:       make(chan *UnboundQueryLog, 10000), // Buffered channel for dnstap events
 		stmtInsertQuery:     stmtInsert,
 		bufferHighWatermark: int(float64(cfg.BufferSize) * 0.8), // 80% threshold
 	}
@@ -136,6 +138,10 @@ func NewSQLiteStorage(cfg *Config, metrics MetricsRecorder) (Storage, error) {
 	// Start domain stats worker (avoids spawning goroutine per batch)
 	storage.wg.Add(1)
 	go storage.domainStatsWorker()
+
+	// Start Unbound query log flush worker
+	storage.wg.Add(1)
+	go storage.unboundFlushWorker()
 
 	return storage, nil
 }
@@ -1368,8 +1374,9 @@ func (s *SQLiteStorage) Close() error {
 		"buffer_capacity", stats.Capacity,
 		"buffer_utilization_pct", fmt.Sprintf("%.1f", stats.Utilization))
 
-	// Close buffer channel (flush worker will drain and exit)
+	// Close buffer channels (flush workers will drain and exit)
 	close(s.buffer)
+	close(s.unboundBuffer)
 
 	// Wait for workers to complete
 	s.wg.Wait()
@@ -1505,8 +1512,8 @@ func scanQueryLogs(rows *sql.Rows) ([]*QueryLog, error) {
 
 // --- Unbound Query Log (dnstap) ---
 
-// LogUnboundQuery inserts a single Unbound dnstap event.
-func (s *SQLiteStorage) LogUnboundQuery(ctx context.Context, query *UnboundQueryLog) error {
+// LogUnboundQuery buffers a dnstap event for batch insertion.
+func (s *SQLiteStorage) LogUnboundQuery(_ context.Context, query *UnboundQueryLog) error {
 	s.mu.RLock()
 	if s.closed {
 		s.mu.RUnlock()
@@ -1514,29 +1521,87 @@ func (s *SQLiteStorage) LogUnboundQuery(ctx context.Context, query *UnboundQuery
 	}
 	s.mu.RUnlock()
 
-	_, err := s.db.ExecContext(ctx, `
+	// Non-blocking write to buffer
+	select {
+	case s.unboundBuffer <- query:
+		return nil
+	default:
+		return ErrBufferFull
+	}
+}
+
+// unboundFlushWorker drains the Unbound query buffer and batch-inserts to SQLite.
+func (s *SQLiteStorage) unboundFlushWorker() {
+	defer s.wg.Done()
+
+	ticker := time.NewTicker(5 * time.Second)
+	defer ticker.Stop()
+
+	batch := make([]*UnboundQueryLog, 0, 100)
+
+	flush := func() {
+		if len(batch) == 0 {
+			return
+		}
+		if err := s.flushUnboundBatch(batch); err != nil {
+			slog.Default().Error("Failed to flush Unbound query batch", "error", err, "batch_size", len(batch))
+		}
+		batch = batch[:0]
+	}
+
+	for {
+		select {
+		case q, ok := <-s.unboundBuffer:
+			if !ok {
+				flush()
+				return
+			}
+			batch = append(batch, q)
+			if len(batch) >= 100 {
+				flush()
+			}
+		case <-ticker.C:
+			flush()
+		}
+	}
+}
+
+func (s *SQLiteStorage) flushUnboundBatch(queries []*UnboundQueryLog) error {
+	if len(queries) == 0 {
+		return nil
+	}
+
+	tx, err := s.db.Begin()
+	if err != nil {
+		return fmt.Errorf("%w: %v", ErrQueryFailed, err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	stmt, err := tx.Prepare(`
 		INSERT INTO unbound_queries
 		(timestamp, message_type, domain, query_type, response_code, duration_ms,
 		 dnssec_validated, answer_count, response_size, client_ip, server_ip, cached_in_unbound)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`,
-		FormatTimestamp(query.Timestamp),
-		query.MessageType,
-		query.Domain,
-		query.QueryType,
-		query.ResponseCode,
-		query.DurationMs,
-		query.DNSSECValidated,
-		query.AnswerCount,
-		query.ResponseSize,
-		query.ClientIP,
-		query.ServerIP,
-		query.CachedInUnbound,
-	)
+	`)
 	if err != nil {
 		return fmt.Errorf("%w: %v", ErrQueryFailed, err)
 	}
-	return nil
+	defer func() { _ = stmt.Close() }()
+
+	for _, q := range queries {
+		_, err := stmt.Exec(
+			FormatTimestamp(q.Timestamp),
+			q.MessageType, q.Domain, q.QueryType,
+			q.ResponseCode, q.DurationMs, q.DNSSECValidated,
+			q.AnswerCount, q.ResponseSize, q.ClientIP,
+			q.ServerIP, q.CachedInUnbound,
+		)
+		if err != nil {
+			return fmt.Errorf("%w: %v", ErrQueryFailed, err)
+		}
+	}
+
+	return tx.Commit()
 }
 
 // GetUnboundQueries returns filtered Unbound dnstap events.

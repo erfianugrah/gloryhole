@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -100,15 +101,27 @@ func (s *Server) handleGetUnboundConfig(w http.ResponseWriter, _ *http.Request) 
 }
 
 func (s *Server) handleUpdateUnboundServer(w http.ResponseWriter, r *http.Request) {
-	// Partial update: decode only the fields present in the request body
+	// Read body twice: once as raw map (to detect which fields were sent),
+	// once as typed struct (for easy access to values).
+	var raw map[string]json.RawMessage
+	bodyBytes, err := io.ReadAll(r.Body)
+	if err != nil {
+		s.writeError(w, http.StatusBadRequest, "Failed to read body")
+		return
+	}
+	if err := json.Unmarshal(bodyBytes, &raw); err != nil {
+		s.writeError(w, http.StatusBadRequest, "Invalid JSON: "+err.Error())
+		return
+	}
+
 	var partial unbound.ServerBlock
-	if err := json.NewDecoder(r.Body).Decode(&partial); err != nil {
+	if err := json.Unmarshal(bodyBytes, &partial); err != nil {
 		s.writeError(w, http.StatusBadRequest, "Invalid JSON: "+err.Error())
 		return
 	}
 
 	cfg := s.getUnboundServerConfig()
-	mergeServerBlock(&cfg.Server, &partial)
+	mergeServerBlock(&cfg.Server, &partial, raw)
 
 	if err := s.applyUnboundConfig(cfg); err != nil {
 		s.writeError(w, http.StatusBadRequest, err.Error())
@@ -287,8 +300,10 @@ func (s *Server) applyUnboundConfig(cfg *unbound.UnboundServerConfig) error {
 }
 
 // mergeServerBlock applies non-zero fields from partial onto base.
-// This enables partial updates via PUT.
-func mergeServerBlock(base, partial *unbound.ServerBlock) {
+// The raw map is used to detect which fields were actually sent in the request,
+// allowing boolean fields (where false is a valid value) to be properly merged.
+func mergeServerBlock(base, partial *unbound.ServerBlock, raw map[string]json.RawMessage) {
+	// String fields: non-empty means it was set
 	if partial.MsgCacheSize != "" {
 		base.MsgCacheSize = partial.MsgCacheSize
 	}
@@ -298,6 +313,11 @@ func mergeServerBlock(base, partial *unbound.ServerBlock) {
 	if partial.KeyCacheSize != "" {
 		base.KeyCacheSize = partial.KeyCacheSize
 	}
+	if partial.ModuleConfig != "" {
+		base.ModuleConfig = partial.ModuleConfig
+	}
+
+	// Numeric fields: non-zero means it was set
 	if partial.CacheMaxTTL != 0 {
 		base.CacheMaxTTL = partial.CacheMaxTTL
 	}
@@ -316,19 +336,37 @@ func mergeServerBlock(base, partial *unbound.ServerBlock) {
 	if partial.ServeExpiredTTL != 0 {
 		base.ServeExpiredTTL = partial.ServeExpiredTTL
 	}
-	if partial.ModuleConfig != "" {
-		base.ModuleConfig = partial.ModuleConfig
-	}
+
+	// Slice fields
 	if partial.DomainInsecure != nil {
 		base.DomainInsecure = partial.DomainInsecure
 	}
 
-	// Booleans — these are always applied since JSON decodes false explicitly
-	// The caller sends only the fields they want to change
-	_ = partial // suppress unused warning for bool fields we don't merge
-
-	// For boolean toggles, the UI should send the full server block for now.
-	// A proper PATCH semantic would require a map[string]interface{} approach.
+	// Boolean fields: use the raw map to detect if the field was actually sent.
+	// This distinguishes "user sent false" from "user didn't send this field".
+	mergeBool := func(key string, dst *bool, src bool) {
+		if _, ok := raw[key]; ok {
+			*dst = src
+		}
+	}
+	mergeBool("harden_glue", &base.HardenGlue, partial.HardenGlue)
+	mergeBool("harden_dnssec_stripped", &base.HardenDNSSEC, partial.HardenDNSSEC)
+	mergeBool("harden_below_nxdomain", &base.HardenBelowNX, partial.HardenBelowNX)
+	mergeBool("harden_algo_downgrade", &base.HardenAlgoDown, partial.HardenAlgoDown)
+	mergeBool("qname_minimisation", &base.QnameMin, partial.QnameMin)
+	mergeBool("aggressive_nsec", &base.AggressiveNSEC, partial.AggressiveNSEC)
+	mergeBool("serve_expired", &base.ServeExpired, partial.ServeExpired)
+	mergeBool("prefetch", &base.Prefetch, partial.Prefetch)
+	mergeBool("prefetch_key", &base.PrefetchKey, partial.PrefetchKey)
+	mergeBool("log_queries", &base.LogQueries, partial.LogQueries)
+	mergeBool("log_replies", &base.LogReplies, partial.LogReplies)
+	mergeBool("log_servfail", &base.LogServfail, partial.LogServfail)
+	mergeBool("hide_identity", &base.HideIdentity, partial.HideIdentity)
+	mergeBool("hide_version", &base.HideVersion, partial.HideVersion)
+	mergeBool("minimal_responses", &base.MinimalResponses, partial.MinimalResponses)
+	mergeBool("extended_statistics", &base.ExtendedStatistics, partial.ExtendedStatistics)
+	mergeBool("statistics_cumulative", &base.StatisticsCumulative, partial.StatisticsCumulative)
+	mergeBool("so_reuseport", &base.SoReusePort, partial.SoReusePort)
 }
 
 // writeError helper for compatibility — check if the method exists, otherwise inline it
