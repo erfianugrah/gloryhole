@@ -454,9 +454,9 @@ func (s *Server) calculateTTL(msg *dns.Msg) uint32 {
 func (s *Server) handleDOHError(w http.ResponseWriter, err error, statusCode int) {
 	s.logger.Error("DoH request error", "error", err, "status", statusCode)
 
-	// Return JSON error for better client debugging
+	// Return generic error to clients — details are logged server-side above
 	response := map[string]interface{}{
-		"error":  err.Error(),
+		"error":  http.StatusText(statusCode),
 		"status": statusCode,
 	}
 

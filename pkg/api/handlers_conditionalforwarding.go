@@ -98,7 +98,8 @@ func (s *Server) handleGetConditionalForwarding(w http.ResponseWriter, r *http.R
 
 // handleAddConditionalForwarding adds a new forwarding rule
 func (s *Server) handleAddConditionalForwarding(w http.ResponseWriter, r *http.Request) {
-	// Parse request body
+	// Parse request body (limit size)
+	r.Body = http.MaxBytesReader(w, r.Body, 1*1024*1024)
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		s.writeError(w, http.StatusBadRequest, "Failed to read request body")

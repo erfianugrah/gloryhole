@@ -199,13 +199,12 @@ func TestHandleDNSQuery_POST_TooLarge(t *testing.T) {
 		t.Errorf("Expected status 400 for too large message, got %d", w.Code)
 	}
 
-	// Verify error message mentions size
+	// Verify error response is a valid JSON object with a generic error message
+	// (detailed error is logged server-side, not exposed to clients)
 	var errResp map[string]interface{}
 	if err := json.Unmarshal(w.Body.Bytes(), &errResp); err == nil {
-		if errorMsg, ok := errResp["error"].(string); ok {
-			if !strings.Contains(errorMsg, "size") && !strings.Contains(errorMsg, "maximum") {
-				t.Errorf("Expected error message to mention size, got: %s", errorMsg)
-			}
+		if _, ok := errResp["error"].(string); !ok {
+			t.Errorf("Expected error field in response, got: %v", errResp)
 		}
 	}
 }

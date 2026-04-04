@@ -98,7 +98,8 @@ func (s *Server) handleAddLocalRecord(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Parse request body
+	// Parse request body (limit size to prevent abuse)
+	r.Body = http.MaxBytesReader(w, r.Body, 1*1024*1024)
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		s.writeError(w, http.StatusBadRequest, "Failed to read request body")

@@ -295,11 +295,11 @@ func main() {
 				// Apply defaults if not configured
 				bufferSize := cfg.Server.QueryLogger.BufferSize
 				if bufferSize == 0 {
-					bufferSize = 50000 // Default: 50K queries
+					bufferSize = 5000 // Default: 5K queries — sufficient for typical home/small-office traffic
 				}
 				workers := cfg.Server.QueryLogger.Workers
 				if workers == 0 {
-					workers = 8 // Default: 8 workers
+					workers = 2 // Default: 2 workers — sufficient for single-core instances
 				}
 
 				queryLogger := dns.NewQueryLogger(stor, logger, bufferSize, workers)

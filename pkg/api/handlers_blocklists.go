@@ -130,9 +130,10 @@ func (s *Server) handleUpdateBlocklistSources(w http.ResponseWriter, r *http.Req
 		if trimmed == "" {
 			continue
 		}
-		// Basic URL validation
-		if _, err := url.ParseRequestURI(trimmed); err != nil {
-			s.writeError(w, http.StatusBadRequest, fmt.Sprintf("Invalid URL %q: %v", trimmed, err))
+		// URL validation — require http/https scheme to prevent SSRF via file:// etc.
+		parsed, err := url.Parse(trimmed)
+		if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") {
+			s.writeError(w, http.StatusBadRequest, fmt.Sprintf("Invalid URL %q: must use http or https scheme", trimmed))
 			return
 		}
 		lower := strings.ToLower(trimmed)

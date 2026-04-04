@@ -51,8 +51,9 @@ func (r *DnstapReader) Start(ctx context.Context) error {
 		return fmt.Errorf("dnstap listen on %s: %w", r.socketPath, err)
 	}
 
-	// Make socket world-writable so Unbound (potentially different user) can connect
-	if err := os.Chmod(r.socketPath, 0666); err != nil {
+	// Make socket group-writable so Unbound (potentially different user) can connect.
+	// Avoids world-writable (0666) which would let any local process inject fabricated messages.
+	if err := os.Chmod(r.socketPath, 0660); err != nil {
 		_ = listener.Close()
 		return fmt.Errorf("chmod dnstap socket: %w", err)
 	}

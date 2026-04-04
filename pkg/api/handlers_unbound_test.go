@@ -146,11 +146,11 @@ func TestHandleGetUnboundConfig(t *testing.T) {
 		t.Fatalf("failed to decode: %v", err)
 	}
 
-	if resp.Server.MsgCacheSize != "32m" {
-		t.Errorf("expected msg_cache_size '32m', got %q", resp.Server.MsgCacheSize)
+	if resp.Server.MsgCacheSize != "4m" {
+		t.Errorf("expected msg_cache_size '4m', got %q", resp.Server.MsgCacheSize)
 	}
-	if resp.Server.NumThreads != 2 {
-		t.Errorf("expected 2 threads, got %d", resp.Server.NumThreads)
+	if resp.Server.NumThreads != 1 {
+		t.Errorf("expected 1 thread, got %d", resp.Server.NumThreads)
 	}
 	if !resp.Server.HardenGlue {
 		t.Error("expected harden_glue=true")

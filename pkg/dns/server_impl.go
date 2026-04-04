@@ -74,7 +74,9 @@ func NewServer(cfg *config.Config, handler *Handler, logger *logging.Logger, met
 
 	// Build client ACL for plain DNS (port 53)
 	acl := NewClientACL(cfg.Server.AllowedClients)
-	if !acl.IsOpen() {
+	if acl.IsOpen() {
+		logger.Warn("DNS server is operating as an open resolver — configure allowed_clients to restrict access")
+	} else {
 		logger.Info("DNS client ACL enabled",
 			"entries", len(cfg.Server.AllowedClients),
 			"note", "DoT and DoH bypass ACL")

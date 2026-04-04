@@ -39,14 +39,18 @@ type legacyLogRequest struct {
 }
 
 // legacyLogCh is a buffered channel for legacy query logging.
-// Using a channel with workers avoids spawning a goroutine per query.
-var legacyLogCh = make(chan legacyLogRequest, 10000)
+// Lazy-initialized only when the legacy Storage path is actually used
+// (i.e., QueryLogger is nil). Avoids ~256KB + 4 goroutines when unused.
+var legacyLogCh chan legacyLogRequest
+var legacyLogOnce sync.Once
 
-func init() {
-	// Start legacy log workers (4 workers to handle concurrent writes)
-	for i := 0; i < 4; i++ {
-		go legacyLogWorker()
-	}
+func initLegacyLog() {
+	legacyLogOnce.Do(func() {
+		legacyLogCh = make(chan legacyLogRequest, 10000)
+		for i := 0; i < 4; i++ {
+			go legacyLogWorker()
+		}
+	})
 }
 
 func legacyLogWorker() {
@@ -342,9 +346,9 @@ func (h *Handler) asyncLogQuery(startTime time.Time, r *dns.Msg, clientIP string
 		return
 	}
 
-	// Legacy path: use select with buffered channel to avoid blocking
-	// This is more efficient than spawning a goroutine per query.
-	// Note: For best performance, use QueryLogger instead of legacy Storage.
+	// Legacy path: use select with buffered channel to avoid blocking.
+	// Lazy-initialize on first use to avoid waste when QueryLogger is active.
+	initLegacyLog()
 	select {
 	case legacyLogCh <- legacyLogRequest{storage: h.Storage, log: queryLog, logger: h.Logger}:
 		// Sent to worker

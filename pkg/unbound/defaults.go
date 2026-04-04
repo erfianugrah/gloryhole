@@ -9,10 +9,11 @@ func DefaultServerConfig(listenPort int, controlSocket string) *UnboundServerCon
 			Interface: "127.0.0.1",
 			Port:      listenPort,
 
-			// Cache (sized for sidecar behind Glory-Hole)
-			MsgCacheSize:   "32m",
-			RRSetCacheSize: "64m",
-			KeyCacheSize:   "16m",
+			// Cache — conservative defaults for constrained instances (e.g., Fly.io 512MB).
+			// Override in config.yml for dedicated servers with more RAM.
+			MsgCacheSize:   "4m",
+			RRSetCacheSize: "8m",
+			KeyCacheSize:   "4m",
 			CacheMinTTL:    0,
 			CacheMaxNegTTL: 60,
 
@@ -27,11 +28,12 @@ func DefaultServerConfig(listenPort int, controlSocket string) *UnboundServerCon
 			QnameMin:       true,
 			AggressiveNSEC: true,
 
-			// Performance
-			NumThreads:          2,
+			// Performance — single-thread default for shared-CPU instances.
+			// Increase for dedicated multi-core servers.
+			NumThreads:          1,
 			EDNSBufferSize:      1232,
-			OutgoingRange:       4096,
-			NumQueriesPerThread: 1024,
+			OutgoingRange:       512,
+			NumQueriesPerThread: 256,
 			SoReusePort:         true,
 
 			// Serve stale

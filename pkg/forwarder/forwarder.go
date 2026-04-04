@@ -118,9 +118,9 @@ func (f *Forwarder) Forward(ctx context.Context, r *dns.Msg) (*dns.Msg, error) {
 			return nil, err
 		}
 
-		// Get client from pool
+		// Get client from pool — return explicitly at each exit, not via defer,
+		// to avoid holding N clients when retrying inside the loop.
 		client := f.clientPool.Get().(*dns.Client)
-		defer f.clientPool.Put(client)
 
 		// Log the forward attempt
 		f.logger.Debug("Forwarding DNS query",
@@ -149,6 +149,9 @@ func (f *Forwarder) Forward(ctx context.Context, r *dns.Msg) (*dns.Msg, error) {
 		} else {
 			resp, rtt, queryErr = client.ExchangeContext(ctx, r, upstream)
 		}
+
+		// Return client to pool immediately after use
+		f.clientPool.Put(client)
 
 		if queryErr != nil {
 			f.logger.Warn("Upstream query failed",
@@ -270,9 +273,8 @@ func (f *Forwarder) ForwardWithUpstreams(ctx context.Context, r *dns.Msg, upstre
 		// Select upstream (round-robin for multiple upstreams)
 		upstream := upstreams[i%len(upstreams)]
 
-		// Get client from pool
+		// Get client from pool — return explicitly, not via defer (same fix as Forward)
 		client := f.clientPool.Get().(*dns.Client)
-		defer f.clientPool.Put(client)
 
 		// Log the forward attempt
 		f.logger.Debug("Forwarding DNS query to conditional upstream",
@@ -284,6 +286,10 @@ func (f *Forwarder) ForwardWithUpstreams(ctx context.Context, r *dns.Msg, upstre
 
 		// Forward the query
 		resp, rtt, err := client.ExchangeContext(ctx, r, upstream)
+
+		// Return client to pool immediately after use
+		f.clientPool.Put(client)
+
 		if err != nil {
 			f.logger.Warn("Conditional upstream query failed",
 				"upstream", upstream,

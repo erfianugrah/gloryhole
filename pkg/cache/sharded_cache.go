@@ -73,7 +73,7 @@ func NewSharded(cfg *config.CacheConfig, logger *logging.Logger, metrics *teleme
 		logger = &logging.Logger{} // Create minimal logger
 	}
 	if shardCount <= 0 {
-		shardCount = 64 // Default to 64 shards
+		shardCount = 4 // Conservative default; increase for high-traffic multi-core deployments
 	}
 
 	// Validate config

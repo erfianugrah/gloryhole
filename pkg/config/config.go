@@ -408,7 +408,7 @@ func (c *Config) applyDefaults() {
 		c.Database.SQLite.CacheSize = 4096
 	}
 	if c.Database.SQLite.MMapSize == 0 {
-		c.Database.SQLite.MMapSize = 268435456
+		c.Database.SQLite.MMapSize = 33554432 // 32MB — conservative default for constrained instances
 	}
 	if c.Database.BufferSize == 0 {
 		c.Database.BufferSize = 500

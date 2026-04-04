@@ -128,8 +128,8 @@ func TestServerConfigGetSet(t *testing.T) {
 	if got.Server.Port != 5353 {
 		t.Errorf("expected port 5353, got %d", got.Server.Port)
 	}
-	if got.Server.NumThreads != 2 {
-		t.Errorf("expected 2 threads, got %d", got.Server.NumThreads)
+	if got.Server.NumThreads != 1 {
+		t.Errorf("expected 1 thread, got %d", got.Server.NumThreads)
 	}
 }
 

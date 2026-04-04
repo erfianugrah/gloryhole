@@ -59,7 +59,11 @@ func (d *Downloader) Download(ctx context.Context, url string) (map[string]struc
 		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 	}
 
-	domains, err := d.parseHostsFile(resp.Body)
+	// Limit download size to prevent memory exhaustion from malicious/compromised sources
+	const maxBlocklistSize = 100 * 1024 * 1024 // 100MB
+	limitedBody := io.LimitReader(resp.Body, maxBlocklistSize)
+
+	domains, err := d.parseHostsFile(limitedBody)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse blocklist: %w", err)
 	}

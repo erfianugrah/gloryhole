@@ -116,6 +116,14 @@ func (s *Server) handleUpdateLogging(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Validate file path to prevent traversal attacks
+	if payload.FilePath != "" {
+		if err := validateFilePath(payload.FilePath); err != nil {
+			s.respondConfigValidationError(w, r, settingsTemplateLogging, flashKeyLogging, "Invalid log file path: "+err.Error(), cfg, http.StatusBadRequest)
+			return
+		}
+	}
+
 	updated := *cfg
 	updated.Logging.Level = payload.Level
 	updated.Logging.Format = payload.Format
@@ -586,9 +594,15 @@ func parseTLSPayload(r *http.Request, current config.ServerConfig) (tlsPayload, 
 		result.DotAddress = req.DotAddress
 	}
 	if strings.TrimSpace(req.CertFile) != "" {
+		if err := validateFilePath(req.CertFile); err != nil {
+			return tlsPayload{}, fmt.Errorf("invalid cert_file path: %w", err)
+		}
 		result.TLS.CertFile = req.CertFile
 	}
 	if strings.TrimSpace(req.KeyFile) != "" {
+		if err := validateFilePath(req.KeyFile); err != nil {
+			return tlsPayload{}, fmt.Errorf("invalid key_file path: %w", err)
+		}
 		result.TLS.KeyFile = req.KeyFile
 	}
 	if req.Autocert != nil {
@@ -827,6 +841,16 @@ func acmeHostsChanged(oldHosts, newHosts []string) bool {
 }
 
 // purgeACMECache removes cached cert/key so the next startup obtains a fresh
+// validateFilePath rejects paths that contain traversal sequences.
+// This prevents authenticated API users from writing to arbitrary locations.
+func validateFilePath(path string) error {
+	cleaned := filepath.Clean(path)
+	if strings.Contains(cleaned, "..") {
+		return fmt.Errorf("path traversal not allowed")
+	}
+	return nil
+}
+
 // certificate matching the (potentially changed) hosts.
 func purgeACMECache(cacheDir string, logger *slog.Logger) {
 	if cacheDir == "" {

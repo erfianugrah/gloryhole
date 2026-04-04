@@ -9,8 +9,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"os"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -40,8 +42,8 @@ type SQLiteStorage struct {
 	wg                  sync.WaitGroup
 	mu                  sync.RWMutex
 	closed              bool
-	bufferHighWatermark int  // 80% of buffer capacity
-	warningLogged       bool // Track if high watermark warning has been logged
+	bufferHighWatermark int         // 80% of buffer capacity
+	warningLogged       atomic.Bool // Track if high watermark warning has been logged (lock-free)
 }
 
 // withQueryTimeout returns a context with a timeout if one isn't already set.
@@ -64,6 +66,11 @@ func NewSQLiteStorage(cfg *Config, metrics MetricsRecorder) (Storage, error) {
 	db, err := sql.Open("sqlite", cfg.SQLite.Path)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrConnectionFailed, err)
+	}
+
+	// Restrict database file permissions — query logs contain client IPs and domains (PII)
+	if chmodErr := os.Chmod(cfg.SQLite.Path, 0600); chmodErr != nil {
+		slog.Default().Warn("Failed to set database file permissions", "error", chmodErr)
 	}
 
 	// Configure connection pool.
@@ -125,8 +132,8 @@ func NewSQLiteStorage(cfg *Config, metrics MetricsRecorder) (Storage, error) {
 		cfg:                 cfg,
 		metrics:             metrics,
 		buffer:              make(chan *QueryLog, cfg.BufferSize),
-		domainStatsCh:       make(chan []*QueryLog, 100),        // Buffer for domain stats batches
-		unboundBuffer:       make(chan *UnboundQueryLog, 10000), // Buffered channel for dnstap events
+		domainStatsCh:       make(chan []*QueryLog, 100),       // Buffer for domain stats batches
+		unboundBuffer:       make(chan *UnboundQueryLog, 1000), // Buffered channel for dnstap events
 		stmtInsertQuery:     stmtInsert,
 		bufferHighWatermark: int(float64(cfg.BufferSize) * 0.8), // 80% threshold
 	}
@@ -179,18 +186,18 @@ func (s *SQLiteStorage) LogQuery(ctx context.Context, query *QueryLog) error {
 		query.Timestamp = time.Now()
 	}
 
-	// Check buffer utilization and warn if high
+	// Check buffer utilization and warn if high (lock-free via atomic.Bool)
 	currentSize := len(s.buffer)
-	if currentSize > s.bufferHighWatermark && !s.warningLogged {
+	if currentSize > s.bufferHighWatermark && !s.warningLogged.Load() {
 		utilization := float64(currentSize) / float64(cap(s.buffer)) * 100
 		slog.Default().Warn("Query buffer high watermark exceeded",
 			"current", currentSize,
 			"capacity", cap(s.buffer),
 			"utilization_pct", fmt.Sprintf("%.1f", utilization))
-		s.warningLogged = true
-	} else if currentSize < s.bufferHighWatermark/2 && s.warningLogged {
+		s.warningLogged.Store(true)
+	} else if currentSize < s.bufferHighWatermark/2 && s.warningLogged.Load() {
 		// Reset warning flag when buffer drains below 40%
-		s.warningLogged = false
+		s.warningLogged.Store(false)
 	}
 
 	// Non-blocking write to buffer

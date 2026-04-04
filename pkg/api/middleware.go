@@ -13,9 +13,14 @@ func (s *Server) corsMiddleware(next http.Handler) http.Handler {
 		// Check if origin is allowed
 		if origin != "" && s.isOriginAllowed(origin) {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
-			w.Header().Set("Access-Control-Allow-Credentials", "true")
+			// Only allow credentials for explicitly listed origins, not wildcard.
+			// Wildcard + credentials is a security misconfiguration.
+			if !s.hasWildcardOrigin() {
+				w.Header().Set("Access-Control-Allow-Credentials", "true")
+			}
 			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+			w.Header().Add("Vary", "Origin")
 		}
 
 		// Handle preflight requests
@@ -26,6 +31,16 @@ func (s *Server) corsMiddleware(next http.Handler) http.Handler {
 
 		next.ServeHTTP(w, r)
 	})
+}
+
+// hasWildcardOrigin returns true if the allowed origins list contains "*"
+func (s *Server) hasWildcardOrigin() bool {
+	for _, allowed := range s.allowedOrigins {
+		if allowed == "*" {
+			return true
+		}
+	}
+	return false
 }
 
 // isOriginAllowed checks if an origin is in the allowed list
@@ -52,6 +67,10 @@ func (s *Server) securityHeadersMiddleware(next http.Handler) http.Handler {
 		w.Header().Set("X-XSS-Protection", "1; mode=block")
 		w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
 		w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:")
+		// HSTS — instruct browsers to only use HTTPS for this host
+		if r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https" {
+			w.Header().Set("Strict-Transport-Security", "max-age=63072000; includeSubDomains")
+		}
 		next.ServeHTTP(w, r)
 	})
 }

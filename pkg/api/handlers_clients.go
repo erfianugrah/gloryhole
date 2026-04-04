@@ -3,7 +3,6 @@ package api
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -91,9 +90,10 @@ func (s *Server) handleUpdateClient(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	r.Body = http.MaxBytesReader(w, r.Body, 1*1024*1024)
 	var req clientUpdateRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		s.writeError(w, http.StatusBadRequest, fmt.Sprintf("Invalid payload: %v", err))
+		s.writeError(w, http.StatusBadRequest, "Invalid payload")
 		return
 	}
 
@@ -166,9 +166,10 @@ func (s *Server) upsertClientGroup(w http.ResponseWriter, r *http.Request, pathN
 		return
 	}
 
+	r.Body = http.MaxBytesReader(w, r.Body, 1*1024*1024)
 	var req clientGroupRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		s.writeError(w, http.StatusBadRequest, fmt.Sprintf("Invalid payload: %v", err))
+		s.writeError(w, http.StatusBadRequest, "Invalid payload")
 		return
 	}
 

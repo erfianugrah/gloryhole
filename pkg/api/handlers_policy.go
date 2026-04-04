@@ -119,7 +119,8 @@ func (s *Server) rebuildPolicyEngine(ctx context.Context) error {
 func (s *Server) handleGetPolicies(w http.ResponseWriter, r *http.Request) {
 	policies, err := s.loadPolicyResponses(r.Context())
 	if err != nil {
-		s.writeError(w, http.StatusInternalServerError, "Failed to load policies: "+err.Error())
+		s.logger.Error("Failed to load policies", "error", err)
+		s.writeError(w, http.StatusInternalServerError, "Failed to load policies")
 		return
 	}
 	s.writeJSON(w, http.StatusOK, PolicyListResponse{
@@ -418,9 +419,10 @@ func (s *Server) handleTestPolicy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	r.Body = http.MaxBytesReader(w, r.Body, 1*1024*1024)
 	var req policyTestRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		s.writeError(w, http.StatusBadRequest, fmt.Sprintf("Invalid payload: %v", err))
+		s.writeError(w, http.StatusBadRequest, "Invalid payload")
 		return
 	}
 

@@ -101,6 +101,9 @@ func (s *Server) handleGetUnboundConfig(w http.ResponseWriter, _ *http.Request) 
 }
 
 func (s *Server) handleUpdateUnboundServer(w http.ResponseWriter, r *http.Request) {
+	// Limit request body size
+	r.Body = http.MaxBytesReader(w, r.Body, 1*1024*1024) // 1MB
+
 	// Read body twice: once as raw map (to detect which fields were sent),
 	// once as typed struct (for easy access to values).
 	var raw map[string]json.RawMessage
@@ -143,6 +146,7 @@ func (s *Server) handleGetForwardZones(w http.ResponseWriter, _ *http.Request) {
 }
 
 func (s *Server) handleAddForwardZone(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 1*1024*1024)
 	var req forwardZoneRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		s.writeError(w, http.StatusBadRequest, "Invalid JSON: "+err.Error())
@@ -180,6 +184,7 @@ func (s *Server) handleAddForwardZone(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleUpdateForwardZone(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 1*1024*1024)
 	name := r.PathValue("name")
 
 	var req forwardZoneRequest
