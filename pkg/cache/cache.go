@@ -130,7 +130,7 @@ func (c *Cache) GetWithTrace(ctx context.Context, r *dns.Msg) (*dns.Msg, []stora
 		return nil, nil
 	}
 
-	key := c.makeKey(r.Question[0].Name, r.Question[0].Qtype)
+	key := c.makeMsgKey(r)
 
 	c.mu.RLock()
 	entry, found := c.entries[key]
@@ -168,7 +168,7 @@ func (c *Cache) GetWithTrace(ctx context.Context, r *dns.Msg) (*dns.Msg, []stora
 	return entry.msg.Copy(), cloneBlockTrace(entry.blockTrace)
 }
 
-// Set stores a DNS response in the cache with appropriate TTL
+// Set stores a DNS response in the cache with appropriate TTL.
 func (c *Cache) Set(ctx context.Context, r *dns.Msg, resp *dns.Msg) {
 	if !c.cfg.Enabled {
 		return
@@ -179,7 +179,7 @@ func (c *Cache) Set(ctx context.Context, r *dns.Msg, resp *dns.Msg) {
 	}
 
 	question := r.Question[0]
-	key := c.makeKey(question.Name, question.Qtype)
+	key := c.makeMsgKey(r)
 
 	// Determine TTL from response
 	ttl := c.determineTTL(resp)
@@ -237,7 +237,7 @@ func (c *Cache) SetWithTrace(ctx context.Context, r *dns.Msg, resp *dns.Msg, tra
 	}
 
 	question := r.Question[0]
-	key := c.makeKey(question.Name, question.Qtype)
+	key := c.makeMsgKey(r)
 
 	// Determine TTL from response (normal TTL, not BlockedTTL)
 	ttl := c.determineTTL(resp)
@@ -291,7 +291,7 @@ func (c *Cache) SetBlocked(ctx context.Context, r *dns.Msg, resp *dns.Msg, trace
 	}
 
 	question := r.Question[0]
-	key := c.makeKey(question.Name, question.Qtype)
+	key := c.makeMsgKey(r)
 
 	// Use configured blocked TTL
 	ttl := c.cfg.BlockedTTL
@@ -338,12 +338,24 @@ func (c *Cache) SetBlocked(ctx context.Context, r *dns.Msg, resp *dns.Msg, trace
 		"size", entry.size)
 }
 
-// makeKey creates a cache key from domain and query type.
-// Uses manual integer conversion to avoid fmt.Sprintf allocation overhead.
-func (c *Cache) makeKey(domain string, qtype uint16) string {
-	// Format: domain:qtype (using numeric type for consistency)
-	// Example: "example.com.:1" (A record)
-	// Simple conversion for uint16 range (0-65535)
+// makeMsgKey creates a cache key from a DNS request message.
+// Includes domain, query type, and DNSSEC flags (DO/CD) to prevent serving
+// a non-DNSSEC response to a DNSSEC-expecting client or vice versa.
+func (c *Cache) makeMsgKey(r *dns.Msg) string {
+	if len(r.Question) == 0 {
+		return ""
+	}
+	q := r.Question[0]
+	do := false
+	if opt := r.IsEdns0(); opt != nil {
+		do = opt.Do()
+	}
+	return cacheKey(q.Name, q.Qtype, do, r.CheckingDisabled)
+}
+
+// cacheKey builds the key string. Shared between Cache and ShardedCache.
+// Format: "domain:qtype[:D][:C]" where D=DO set, C=CD set.
+func cacheKey(domain string, qtype uint16, do, cd bool) string {
 	var buf [5]byte
 	i := len(buf)
 	q := qtype
@@ -355,7 +367,14 @@ func (c *Cache) makeKey(domain string, qtype uint16) string {
 			break
 		}
 	}
-	return domain + ":" + string(buf[i:])
+	key := domain + ":" + string(buf[i:])
+	if do {
+		key += ":D"
+	}
+	if cd {
+		key += ":C"
+	}
+	return key
 }
 
 // determineTTL extracts TTL from DNS response and applies min/max limits

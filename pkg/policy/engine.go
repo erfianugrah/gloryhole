@@ -669,17 +669,12 @@ func validateAction(rule *Rule) error {
 		return nil
 
 	case ActionRateLimit:
-		// Validate action_data format: "req_per_sec,burst"
-		if rule.ActionData == "" {
-			return fmt.Errorf("RATE_LIMIT action requires action_data (format: 'req_per_sec,burst')")
-		}
-		if err := validateRateLimitData(rule.ActionData); err != nil {
-			return fmt.Errorf("invalid RATE_LIMIT action_data: %w", err)
-		}
-		return nil
+		// RATE_LIMIT was never implemented and has no effect.
+		// Reject it at validation time so users don't rely on non-functional policy.
+		return fmt.Errorf("RATE_LIMIT action is not supported — use HTTP rate limiting instead")
 
 	default:
-		return fmt.Errorf("unknown action: %s (valid: BLOCK, ALLOW, REDIRECT, FORWARD, RATE_LIMIT)", action)
+		return fmt.Errorf("unknown action: %s (valid: BLOCK, ALLOW, REDIRECT, FORWARD)", action)
 	}
 }
 

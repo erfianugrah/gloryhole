@@ -189,7 +189,7 @@ func TestShardedCache_DifferentShards(t *testing.T) {
 
 	for _, domain := range domains {
 		query := testQuery(domain, dns.TypeA)
-		key := makeKey(dns.Fqdn(domain), dns.TypeA)
+		key := makeMsgKeySharded(query)
 
 		// Determine which shard this would go to
 		shard := sc.getShard(key)

@@ -42,8 +42,6 @@ func (h *Handler) handlePolicies(ctx context.Context, w dns.ResponseWriter, r, m
 		return h.handlePolicyRedirect(ctx, w, r, msg, rule, domain, clientIP, qtype, qtypeLabel, trace, outcome)
 	case policy.ActionForward:
 		return h.handlePolicyForward(ctx, w, r, msg, rule, domain, clientIP, qtypeLabel, trace, outcome)
-	case policy.ActionRateLimit:
-		return h.handlePolicyRateLimit(ctx, w, r, msg, rule, domain, clientIP, qtypeLabel, trace, outcome)
 	default:
 		return false
 	}
@@ -315,17 +313,4 @@ func (h *Handler) handlePolicyForward(ctx context.Context, w dns.ResponseWriter,
 	outcome.responseCode = resp.Rcode
 	h.writeMsg(w, resp)
 	return true
-}
-
-func (h *Handler) handlePolicyRateLimit(ctx context.Context, w dns.ResponseWriter, r, msg *dns.Msg, rule *policy.Rule, domain, clientIP, qtypeLabel string, trace *blockTraceRecorder, outcome *serveDNSOutcome) bool {
-	// Rate limiting has been removed from the system
-	// This function is kept for backwards compatibility with policy action parsing
-	// but does not enforce any rate limits
-	if h.Logger != nil {
-		h.Logger.Warn("RATE_LIMIT policy action is no longer supported and has no effect",
-			"rule", rule.Name,
-			"domain", domain,
-			"client_ip", clientIP)
-	}
-	return false
 }

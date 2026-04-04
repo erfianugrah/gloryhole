@@ -89,7 +89,7 @@ func (s *Server) handleLoginPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := r.ParseForm(); err != nil {
-		http.Redirect(w, r, "/login?error=Invalid+form+submission", http.StatusSeeOther)
+		http.Redirect(w, r, "/login?error=form", http.StatusSeeOther)
 		return
 	}
 	next := sanitizeRedirectTarget(r.FormValue("next"))
@@ -104,7 +104,7 @@ func (s *Server) handleLoginPost(w http.ResponseWriter, r *http.Request) {
 	case username != "" && password != "" && s.validateUserPasswordInput(username, password):
 		subject = username
 	default:
-		http.Redirect(w, r, "/login?error=Invalid+credentials&next="+next, http.StatusSeeOther)
+		http.Redirect(w, r, "/login?error=invalid&next="+next, http.StatusSeeOther)
 		return
 	}
 

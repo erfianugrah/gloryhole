@@ -249,6 +249,8 @@ type TelemetryConfig struct {
 	Enabled           bool   `yaml:"enabled"`
 	PrometheusEnabled bool   `yaml:"prometheus_enabled"`
 	TracingEnabled    bool   `yaml:"tracing_enabled"`
+	MetricsUsername   string `yaml:"metrics_username"` // Optional basic auth for /metrics endpoint
+	MetricsPassword   string `yaml:"metrics_password"` // Optional basic auth for /metrics endpoint
 }
 
 // Load loads the configuration from a YAML file

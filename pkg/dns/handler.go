@@ -173,15 +173,35 @@ func (h *Handler) SetDecisionTrace(enabled bool) {
 	h.DecisionTrace = enabled
 }
 
-// writeMsg writes a DNS message to the response writer with error handling
-// If the write fails (e.g., client disconnected), the error is silently ignored
-// as there's no way to notify the client at that point
+// writeMsg writes a DNS message to the response writer with error handling.
+// For UDP, if the serialized response exceeds the client's buffer size, the TC
+// (truncated) bit is set and the answer section is stripped to force TCP retry.
+// This prevents DNS amplification via oversized UDP responses.
 func (h *Handler) writeMsg(w dns.ResponseWriter, msg *dns.Msg) {
+	// Only enforce size limits on UDP (TCP has no practical size limit)
+	if isUDP(w) {
+		maxSize := 512 // Default without EDNS0
+		if opt := msg.IsEdns0(); opt != nil {
+			maxSize = int(opt.UDPSize())
+		}
+		if msg.Len() > maxSize {
+			msg.Truncated = true
+			msg.Answer = nil // Strip answers to fit in buffer
+		}
+	}
+
 	if err := w.WriteMsg(msg); err != nil {
 		// Client likely disconnected - nothing we can do
-		// Telemetry will track the overall error rate if needed
 		_ = err
 	}
+}
+
+// isUDP returns true if the response writer is for a UDP connection.
+func isUDP(w dns.ResponseWriter) bool {
+	if addr := w.LocalAddr(); addr != nil {
+		return addr.Network() == "udp"
+	}
+	return false
 }
 
 // serveFromCache attempts to serve a cached DNS response.

@@ -124,12 +124,17 @@ import "../styles/globals.css";
       const next = params.get("next") || "/";
       document.querySelectorAll<HTMLInputElement>("[id^=next-]").forEach((el) => { el.value = next; });
 
-      // Parse ?error= parameter
-      const error = params.get("error");
-      if (error) {
+      // Parse ?error= parameter — use fixed messages to prevent phishing via crafted URLs
+      const errorMessages: Record<string, string> = {
+        "invalid": "Invalid credentials",
+        "form": "Invalid form submission",
+        "expired": "Session expired",
+      };
+      const errorCode = params.get("error");
+      if (errorCode && errorMessages[errorCode]) {
         const errEl = document.getElementById("login-error");
         if (errEl) {
-          errEl.textContent = error;
+          errEl.textContent = errorMessages[errorCode];
           errEl.classList.remove("hidden");
         }
       }

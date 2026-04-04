@@ -155,13 +155,29 @@ func (t *Telemetry) setupTracing(ctx context.Context, res *resource.Resource) er
 	return nil
 }
 
-// startPrometheusServer starts the Prometheus metrics HTTP server
+// startPrometheusServer starts the Prometheus metrics HTTP server.
+// Optionally protects /metrics with basic auth when credentials are configured.
 func (t *Telemetry) startPrometheusServer() error {
-	mux := http.NewServeMux()
+	metricsHandler := http.Handler(promhttp.Handler())
 
-	// Use promhttp.Handler() to serve Prometheus metrics
-	// This works with the OpenTelemetry Prometheus exporter
-	mux.Handle("/metrics", promhttp.Handler())
+	// Wrap with basic auth if credentials are configured
+	if t.cfg.MetricsUsername != "" && t.cfg.MetricsPassword != "" {
+		user := t.cfg.MetricsUsername
+		pass := t.cfg.MetricsPassword
+		metricsHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			u, p, ok := r.BasicAuth()
+			if !ok || u != user || p != pass {
+				w.Header().Set("WWW-Authenticate", `Basic realm="metrics"`)
+				http.Error(w, "Unauthorized", http.StatusUnauthorized)
+				return
+			}
+			promhttp.Handler().ServeHTTP(w, r)
+		})
+		t.logger.Info("Prometheus metrics endpoint protected with basic auth")
+	}
+
+	mux := http.NewServeMux()
+	mux.Handle("/metrics", metricsHandler)
 
 	t.prometheusServer = &http.Server{
 		Addr:              fmt.Sprintf(":%d", t.cfg.PrometheusPort),

@@ -140,8 +140,7 @@ func (sc *ShardedCache) GetWithTrace(ctx context.Context, r *dns.Msg) (*dns.Msg,
 		return nil, nil
 	}
 
-	question := r.Question[0]
-	key := makeKey(question.Name, question.Qtype)
+	key := makeMsgKeySharded(r)
 
 	// Get the appropriate shard
 	shard := sc.getShard(key)
@@ -187,8 +186,7 @@ func (sc *ShardedCache) Set(ctx context.Context, r *dns.Msg, resp *dns.Msg) {
 		return
 	}
 
-	question := r.Question[0]
-	key := makeKey(question.Name, question.Qtype)
+	key := makeMsgKeySharded(r)
 
 	// Determine TTL from response
 	ttl := determineTTL(sc.shards[0].cfg, resp)
@@ -237,8 +235,7 @@ func (sc *ShardedCache) SetWithTrace(ctx context.Context, r *dns.Msg, resp *dns.
 		return
 	}
 
-	question := r.Question[0]
-	key := makeKey(question.Name, question.Qtype)
+	key := makeMsgKeySharded(r)
 
 	// Determine TTL from response (normal TTL, not BlockedTTL)
 	ttl := determineTTL(sc.shards[0].cfg, resp)
@@ -280,8 +277,7 @@ func (sc *ShardedCache) SetBlocked(ctx context.Context, r *dns.Msg, resp *dns.Ms
 		return
 	}
 
-	question := r.Question[0]
-	key := makeKey(question.Name, question.Qtype)
+	key := makeMsgKeySharded(r)
 
 	// Use configured blocked TTL
 	ttl := sc.shards[0].cfg.BlockedTTL
@@ -560,24 +556,18 @@ func (sc *ShardedCache) recordMiss(shard *CacheShard) {
 
 // Helper functions (extracted from cache.go for reuse)
 
-// makeKey creates a cache key from domain and query type.
-func makeKey(domain string, qtype uint16) string {
-	// Format: domain:qtype (using numeric type for consistency)
-	// Example: "example.com.:1" (A record)
-	// Note: We convert qtype to string to avoid allocations from fmt.Sprintf
-	// Simple conversion for uint16 range (0-65535)
-	var buf [5]byte
-	i := len(buf)
-	q := qtype
-	for {
-		i--
-		buf[i] = byte('0' + q%10)
-		q /= 10
-		if q == 0 {
-			break
-		}
+// makeMsgKeySharded creates a cache key from a DNS request, including DNSSEC flags.
+// Delegates to the shared cacheKey function in cache.go.
+func makeMsgKeySharded(r *dns.Msg) string {
+	if len(r.Question) == 0 {
+		return ""
 	}
-	return domain + ":" + string(buf[i:])
+	q := r.Question[0]
+	do := false
+	if opt := r.IsEdns0(); opt != nil {
+		do = opt.Do()
+	}
+	return cacheKey(q.Name, q.Qtype, do, r.CheckingDisabled)
 }
 
 // determineTTL extracts TTL from DNS response and applies min/max limits.
