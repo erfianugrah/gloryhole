@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"net"
 	"regexp"
-	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"glory-hole/pkg/logging"
@@ -40,6 +40,9 @@ type Engine struct {
 	rules  []*Rule
 	logger *logging.Logger
 	mu     sync.RWMutex
+	// count is an atomic shadow of len(rules) to avoid acquiring mu.RLock
+	// on every DNS query just to check if rules exist. Updated on Add/Remove/Update/Clear.
+	count atomic.Int32
 }
 
 // Rule represents a single policy rule
@@ -94,20 +97,11 @@ func (e *Engine) HasAction(action string) bool {
 	return false
 }
 
-// AddRule adds and compiles a rule
-func (e *Engine) AddRule(rule *Rule) error {
-	if rule == nil {
-		return fmt.Errorf("rule cannot be nil")
-	}
-
-	// Validate action and action_data
-	if err := validateAction(rule); err != nil {
-		return fmt.Errorf("invalid rule '%s': %w", rule.Name, err)
-	}
-
-	// Compile the expression with environment and safe helper function wrappers.
-	// All type assertions use asString/asInt to return errors instead of panicking.
-	program, err := expr.Compile(rule.Logic,
+// compileRuleLogic compiles a rule expression with the standard environment
+// and safe helper function wrappers. All type assertions use asString/asInt
+// to return errors instead of panicking.
+func compileRuleLogic(logic string) (*vm.Program, error) {
+	return expr.Compile(logic,
 		expr.Env(Context{}),
 		// Domain matching functions
 		expr.Function("DomainMatches",
@@ -265,6 +259,20 @@ func (e *Engine) AddRule(rule *Rule) error {
 			new(func(int, int, int, int, int, int) bool),
 		),
 	)
+}
+
+// AddRule adds and compiles a rule
+func (e *Engine) AddRule(rule *Rule) error {
+	if rule == nil {
+		return fmt.Errorf("rule cannot be nil")
+	}
+
+	// Validate action and action_data
+	if err := validateAction(rule); err != nil {
+		return fmt.Errorf("invalid rule '%s': %w", rule.Name, err)
+	}
+
+	program, err := compileRuleLogic(rule.Logic)
 	if err != nil {
 		return fmt.Errorf("failed to compile rule '%s': %w", rule.Name, err)
 	}
@@ -272,9 +280,10 @@ func (e *Engine) AddRule(rule *Rule) error {
 	rule.program = program
 
 	e.mu.Lock()
-	defer e.mu.Unlock()
-
 	e.rules = append(e.rules, rule)
+	e.count.Store(int32(len(e.rules)))
+	e.mu.Unlock()
+
 	return nil
 }
 
@@ -313,6 +322,7 @@ func (e *Engine) RemoveRule(name string) bool {
 	for i, rule := range e.rules {
 		if rule.Name == name {
 			e.rules = append(e.rules[:i], e.rules[i+1:]...)
+			e.count.Store(int32(len(e.rules)))
 			return true
 		}
 	}
@@ -320,8 +330,8 @@ func (e *Engine) RemoveRule(name string) bool {
 	return false
 }
 
-// UpdateRule updates a rule at the given index, preserving evaluation order
-// Returns an error if the index is out of bounds or the rule fails validation
+// UpdateRule updates a rule at the given index, preserving evaluation order.
+// Returns an error if the index is out of bounds or the rule fails validation.
 func (e *Engine) UpdateRule(index int, rule *Rule) error {
 	if rule == nil {
 		return fmt.Errorf("rule cannot be nil")
@@ -332,86 +342,8 @@ func (e *Engine) UpdateRule(index int, rule *Rule) error {
 		return fmt.Errorf("invalid rule '%s': %w", rule.Name, err)
 	}
 
-	// Compile the expression (same compilation logic as AddRule)
-	program, err := expr.Compile(rule.Logic,
-		expr.Env(Context{}),
-		// Domain matching functions
-		expr.Function("DomainMatches",
-			func(params ...any) (any, error) {
-				return DomainMatches(params[0].(string), params[1].(string)), nil
-			},
-			new(func(string, string) bool),
-		),
-		expr.Function("DomainEndsWith",
-			func(params ...any) (any, error) {
-				return DomainEndsWith(params[0].(string), params[1].(string)), nil
-			},
-			new(func(string, string) bool),
-		),
-		expr.Function("DomainStartsWith",
-			func(params ...any) (any, error) {
-				return DomainStartsWith(params[0].(string), params[1].(string)), nil
-			},
-			new(func(string, string) bool),
-		),
-		expr.Function("DomainRegex",
-			func(params ...any) (any, error) {
-				result, err := DomainRegex(params[0].(string), params[1].(string))
-				if err != nil {
-					return false, err
-				}
-				return result, nil
-			},
-			new(func(string, string) bool),
-		),
-		expr.Function("DomainLevelCount",
-			func(params ...any) (any, error) {
-				return DomainLevelCount(params[0].(string)), nil
-			},
-			new(func(string) int),
-		),
-		// IP matching functions
-		expr.Function("IPInCIDR",
-			func(params ...any) (any, error) {
-				return IPInCIDR(params[0].(string), params[1].(string)), nil
-			},
-			new(func(string, string) bool),
-		),
-		expr.Function("IPEquals",
-			func(params ...any) (any, error) {
-				return IPEquals(params[0].(string), params[1].(string)), nil
-			},
-			new(func(string, string) bool),
-		),
-		// Query type functions
-		expr.Function("QueryTypeIn",
-			func(params ...any) (any, error) {
-				queryType := params[0].(string)
-				types := make([]string, len(params)-1)
-				for i := 1; i < len(params); i++ {
-					types[i-1] = params[i].(string)
-				}
-				return QueryTypeIn(queryType, types...), nil
-			},
-		),
-		// Time functions
-		expr.Function("IsWeekend",
-			func(params ...any) (any, error) {
-				return IsWeekend(params[0].(int)), nil
-			},
-			new(func(int) bool),
-		),
-		expr.Function("InTimeRange",
-			func(params ...any) (any, error) {
-				return InTimeRange(
-					params[0].(int), params[1].(int),
-					params[2].(int), params[3].(int),
-					params[4].(int), params[5].(int),
-				), nil
-			},
-			new(func(int, int, int, int, int, int) bool),
-		),
-	)
+	// Compile using the shared helper (same safe wrappers as AddRule)
+	program, err := compileRuleLogic(rule.Logic)
 	if err != nil {
 		return fmt.Errorf("failed to compile rule '%s': %w", rule.Name, err)
 	}
@@ -439,20 +371,18 @@ func (e *Engine) GetRules() []*Rule {
 	return rules
 }
 
-// Count returns the number of rules
+// Count returns the number of rules without acquiring a lock.
+// Uses an atomic counter kept in sync by Add/Remove/Clear.
 func (e *Engine) Count() int {
-	e.mu.RLock()
-	defer e.mu.RUnlock()
-
-	return len(e.rules)
+	return int(e.count.Load())
 }
 
 // Clear removes all rules
 func (e *Engine) Clear() {
 	e.mu.Lock()
-	defer e.mu.Unlock()
-
 	e.rules = make([]*Rule, 0)
+	e.count.Store(0)
+	e.mu.Unlock()
 }
 
 // Stop terminates all background goroutines
@@ -525,7 +455,14 @@ func DomainStartsWith(domain, prefix string) bool {
 
 // regexCache stores compiled regular expressions to avoid recompilation on every call.
 // Using sync.Map for concurrent read/write safety with minimal contention.
+// Capped at maxRegexCacheSize entries to prevent unbounded memory growth from
+// dynamically generated patterns.
 var regexCache sync.Map
+
+// regexCacheLen tracks the approximate number of entries (atomic for speed).
+var regexCacheLen atomic.Int64
+
+const maxRegexCacheSize = 1024
 
 // DomainRegex checks if domain matches a regular expression pattern.
 // Compiled regexes are cached for performance - regex compilation is expensive
@@ -539,9 +476,17 @@ func DomainRegex(domain, pattern string) (bool, error) {
 		if err != nil {
 			return false, fmt.Errorf("invalid regex pattern: %w", err)
 		}
-		// Store returns the existing value if another goroutine stored first
-		actual, _ := regexCache.LoadOrStore(pattern, re)
-		cached = actual
+		// Only cache if under the cap to prevent unbounded growth
+		if regexCacheLen.Load() < maxRegexCacheSize {
+			actual, loaded := regexCache.LoadOrStore(pattern, re)
+			if !loaded {
+				regexCacheLen.Add(1)
+			}
+			cached = actual
+		} else {
+			// Over cap — use compiled regex without caching
+			cached = re
+		}
 	}
 
 	re := cached.(*regexp.Regexp)
@@ -558,16 +503,37 @@ func DomainLevelCount(domain string) int {
 	return strings.Count(domain, ".") + 1
 }
 
-// IPInCIDR checks if an IP is in a CIDR range
+// cidrCache stores parsed *net.IPNet to avoid re-parsing the same CIDR on every
+// DNS query. CIDR strings in policy rules are static, so this is safe to cache
+// indefinitely. Capped at maxCIDRCacheSize entries.
+var cidrCache sync.Map
+var cidrCacheLen atomic.Int64
+
+const maxCIDRCacheSize = 256
+
+// IPInCIDR checks if an IP is in a CIDR range.
+// Parsed CIDRs are cached for O(1) repeated lookups.
 func IPInCIDR(ipStr, cidrStr string) bool {
 	ip := net.ParseIP(ipStr)
 	if ip == nil {
 		return false
 	}
 
+	// Fast path: cached CIDR
+	if cached, ok := cidrCache.Load(cidrStr); ok {
+		return cached.(*net.IPNet).Contains(ip)
+	}
+
+	// Slow path: parse and cache
 	_, ipNet, err := net.ParseCIDR(cidrStr)
 	if err != nil {
 		return false
+	}
+
+	if cidrCacheLen.Load() < maxCIDRCacheSize {
+		if _, loaded := cidrCache.LoadOrStore(cidrStr, ipNet); !loaded {
+			cidrCacheLen.Add(1)
+		}
 	}
 
 	return ipNet.Contains(ip)
@@ -676,31 +642,6 @@ func validateAction(rule *Rule) error {
 	default:
 		return fmt.Errorf("unknown action: %s (valid: BLOCK, ALLOW, REDIRECT, FORWARD)", action)
 	}
-}
-
-// validateRateLimitData validates the format of rate limit action_data
-func validateRateLimitData(actionData string) error {
-	parts := strings.Split(actionData, ",")
-	if len(parts) != 2 {
-		return fmt.Errorf("format must be 'req_per_sec,burst', got: %s", actionData)
-	}
-	rps, err := strconv.ParseFloat(strings.TrimSpace(parts[0]), 64)
-	if err != nil || rps <= 0 {
-		return fmt.Errorf("invalid requests_per_second: %s", parts[0])
-	}
-	burst, err := strconv.Atoi(strings.TrimSpace(parts[1]))
-	if err != nil || burst <= 0 {
-		return fmt.Errorf("invalid burst: %s", parts[1])
-	}
-	return nil
-}
-
-// parseRateLimitData parses rate limit action_data into requests per second and burst
-func parseRateLimitData(actionData string) (float64, int) {
-	parts := strings.Split(actionData, ",")
-	rps, _ := strconv.ParseFloat(strings.TrimSpace(parts[0]), 64)
-	burst, _ := strconv.Atoi(strings.TrimSpace(parts[1]))
-	return rps, burst
 }
 
 // ParseUpstreams parses a comma-separated list of upstream DNS servers

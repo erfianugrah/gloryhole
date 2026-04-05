@@ -355,7 +355,7 @@ function QueryRow({
 
       {expanded && (
         <TableRow>
-          <TableCell colSpan={9} className="bg-gh-900/50 px-6 py-4">
+          <TableCell colSpan={9} className="bg-gh-950/60 border-l-2 border-l-gh-purple/40 px-6 py-4">
             <QueryDetail query={query} />
           </TableCell>
         </TableRow>
@@ -369,38 +369,45 @@ function QueryRow({
 function QueryDetail({ query }: { query: UnboundQueryLog }) {
   return (
     <div className="grid gap-4 md:grid-cols-2 text-xs">
-      <div className="space-y-2">
-        <DetailRow label="Domain" value={query.domain} mono />
-        <DetailRow label="Query Type" value={query.query_type} />
-        <DetailRow label="Message Type" value={query.message_type} />
-        <DetailRow label="Client IP" value={query.client_ip} mono />
+      <div className="space-y-2.5">
+        <DetailRow label="DOMAIN" value={query.domain} mono />
+        <DetailRow label="QUERY TYPE" value={query.query_type} />
+        <DetailRow label="MESSAGE TYPE">
+          {messageTypeBadge(query.message_type)}
+        </DetailRow>
+        <DetailRow label="CLIENT IP" value={query.client_ip} mono />
         {query.server_ip && (
-          <DetailRow label="Server IP" value={query.server_ip} mono />
+          <DetailRow label="SERVER IP" value={query.server_ip} mono />
         )}
       </div>
-      <div className="space-y-2">
+      <div className="space-y-2.5">
         {query.response_code && (
-          <DetailRow label="Response Code" value={query.response_code} />
+          <DetailRow label="RESPONSE CODE">
+            {rcodeBadge(query.response_code)}
+          </DetailRow>
         )}
         {query.duration_ms != null && query.duration_ms > 0 && (
-          <DetailRow label="Duration" value={`${query.duration_ms.toFixed(3)}ms`} />
+          <DetailRow label="DURATION" value={`${query.duration_ms.toFixed(3)}ms`} mono />
         )}
         {query.answer_count != null && query.answer_count > 0 && (
-          <DetailRow label="Answer Count" value={String(query.answer_count)} />
+          <DetailRow label="ANSWER COUNT" value={String(query.answer_count)} mono />
         )}
         {query.response_size != null && query.response_size > 0 && (
-          <DetailRow label="Response Size" value={`${query.response_size} bytes`} />
+          <DetailRow label="RESPONSE SIZE" value={`${query.response_size} bytes`} mono />
         )}
-        <DetailRow
-          label="Source"
-          value={query.cached_in_unbound ? "Unbound Cache" : "Recursive Resolution"}
-          className={query.cached_in_unbound ? "text-gh-green" : "text-gh-peach"}
-        />
-        <DetailRow
-          label="DNSSEC"
-          value={query.dnssec_validated ? "Validated" : "No"}
-          className={query.dnssec_validated ? "text-gh-green" : ""}
-        />
+        <DetailRow label="SOURCE">
+          <Badge className={query.cached_in_unbound
+            ? "bg-gh-green/20 text-gh-green border-gh-green/30 text-[10px]"
+            : "bg-gh-peach/20 text-gh-peach border-gh-peach/30 text-[10px]"
+          }>
+            {query.cached_in_unbound ? "Unbound Cache" : "Recursive Resolution"}
+          </Badge>
+        </DetailRow>
+        <DetailRow label="DNSSEC">
+          {query.dnssec_validated
+            ? <span className="text-gh-green font-medium">Validated</span>
+            : <span className="text-muted-foreground">No</span>}
+        </DetailRow>
       </div>
     </div>
   );
@@ -410,17 +417,29 @@ function DetailRow({
   label,
   value,
   mono,
+  dimValue,
   className,
+  children,
 }: {
   label: string;
-  value: string;
+  value?: string;
   mono?: boolean;
+  dimValue?: boolean;
   className?: string;
+  children?: React.ReactNode;
 }) {
   return (
-    <div className="flex items-center gap-2">
-      <span className={T.formLabel}>{label}</span>
-      <span className={cn(mono ? "font-data" : "", className)}>{value}</span>
+    <div className="flex items-center justify-between gap-4">
+      <span className="text-[10px] uppercase tracking-widest text-muted-foreground/70 shrink-0 w-[120px]">{label}</span>
+      {children ?? (
+        <span className={cn(
+          "text-xs text-right",
+          mono && "font-data",
+          dimValue && "text-muted-foreground",
+          !dimValue && !className && "text-foreground font-medium",
+          className,
+        )}>{value}</span>
+      )}
     </div>
   );
 }

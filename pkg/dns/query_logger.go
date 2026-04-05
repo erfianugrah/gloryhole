@@ -13,16 +13,16 @@ import (
 // QueryLogger manages a worker pool for asynchronous query logging
 // This prevents spawning a new goroutine for every DNS query
 type QueryLogger struct {
-	logCh      chan *storage.QueryLog
-	workers    int
-	wg         sync.WaitGroup
-	ctx        context.Context
-	cancel     context.CancelFunc
-	storage    storage.Storage
-	logger     *logging.Logger
-	dropped    atomic.Uint64
-	buffered   atomic.Uint64
-	closeOnce  sync.Once
+	logCh     chan *storage.QueryLog
+	workers   int
+	wg        sync.WaitGroup
+	ctx       context.Context
+	cancel    context.CancelFunc
+	storage   storage.Storage
+	logger    *logging.Logger
+	dropped   atomic.Uint64
+	buffered  atomic.Uint64
+	closeOnce sync.Once
 }
 
 // NewQueryLogger creates a new query logger with a fixed worker pool
@@ -53,71 +53,30 @@ func NewQueryLogger(stor storage.Storage, logger *logging.Logger, bufferSize, wo
 	return ql
 }
 
-// worker processes query log entries from the channel
+// worker processes query log entries from the channel.
+// Workers exit when logCh is closed (during Close). The range loop
+// naturally drains all remaining entries before returning.
 func (ql *QueryLogger) worker(id int) {
 	defer ql.wg.Done()
 
-	for {
-		select {
-		case <-ql.ctx.Done():
-			// Drain remaining entries before exiting
-			ql.drainChannel()
-			return
+	for entry := range ql.logCh {
+		ql.buffered.Add(^uint64(0)) // Atomic decrement
 
-		case entry, ok := <-ql.logCh:
-			if !ok {
-				return
+		// Use background context for logging — the main context may already
+		// be canceled during shutdown, but we still want to flush entries.
+		logCtx, cancel := context.WithTimeout(context.Background(), storage.DefaultLogTimeout)
+
+		if err := ql.storage.LogQuery(logCtx, entry); err != nil {
+			if ql.logger != nil {
+				ql.logger.Error("Failed to log query",
+					"worker", id,
+					"domain", entry.Domain,
+					"client_ip", entry.ClientIP,
+					"error", err)
 			}
-
-			// Decrement buffered counter
-			ql.buffered.Add(^uint64(0)) // Atomic decrement
-
-			// Create context with timeout for logging
-			logCtx, cancel := context.WithTimeout(ql.ctx, storage.DefaultLogTimeout)
-
-			if err := ql.storage.LogQuery(logCtx, entry); err != nil {
-				if ql.logger != nil {
-					ql.logger.Error("Failed to log query",
-						"worker", id,
-						"domain", entry.Domain,
-						"client_ip", entry.ClientIP,
-						"error", err)
-				}
-			}
-
-			cancel()
 		}
-	}
-}
 
-// drainChannel attempts to process remaining entries in the channel during shutdown
-func (ql *QueryLogger) drainChannel() {
-	for {
-		select {
-		case entry, ok := <-ql.logCh:
-			if !ok {
-				return
-			}
-
-			ql.buffered.Add(^uint64(0)) // Atomic decrement
-
-			// Use background context since main context is canceled
-			logCtx, cancel := context.WithTimeout(context.Background(), storage.DefaultLogTimeout)
-
-			if err := ql.storage.LogQuery(logCtx, entry); err != nil {
-				if ql.logger != nil {
-					ql.logger.Error("Failed to log query during shutdown",
-						"domain", entry.Domain,
-						"error", err)
-				}
-			}
-
-			cancel()
-
-		default:
-			// Channel empty
-			return
-		}
+		cancel()
 	}
 }
 
@@ -143,9 +102,9 @@ func (ql *QueryLogger) LogAsync(entry *storage.QueryLog) error {
 	}
 }
 
-// Close gracefully shuts down the query logger worker pool
-// Waits for all workers to finish processing remaining entries
-// Safe to call multiple times (uses sync.Once)
+// Close gracefully shuts down the query logger worker pool.
+// Closing the channel causes all workers to drain remaining entries via
+// their range loop and then exit. Safe to call multiple times (sync.Once).
 func (ql *QueryLogger) Close() error {
 	var closeErr error
 
@@ -159,14 +118,16 @@ func (ql *QueryLogger) Close() error {
 				"dropped_total", dropped)
 		}
 
-		// Signal workers to stop
-		ql.cancel()
+		// Close channel first — workers drain remaining entries via range,
+		// then exit. This guarantees no entries are stranded between
+		// cancel() and close() (the previous ordering bug).
+		close(ql.logCh)
 
-		// Wait for all workers to finish
+		// Wait for all workers to finish draining
 		ql.wg.Wait()
 
-		// Close channel
-		close(ql.logCh)
+		// Cancel context (cleanup; workers already exited)
+		ql.cancel()
 
 		if ql.logger != nil {
 			ql.logger.Info("Query logger shutdown complete")

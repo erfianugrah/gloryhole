@@ -773,15 +773,22 @@ func main() {
 			}
 		}
 
-		// Hot-reload blocklists if sources changed
+		// Hot-reload blocklists if sources changed.
+		// Run asynchronously to avoid blocking the config watcher goroutine.
+		// Synchronous downloads on a 512MB Fly.io VM caused GC pressure that
+		// stalled health checks and triggered OOM-kill restarts.
 		if blocklistMgr != nil && !equalBlocklistConfig(cfg.Blocklists, newCfg.Blocklists) {
-			logger.Info("Blocklist configuration changed, triggering reload")
+			logger.Info("Blocklist configuration changed, triggering async reload")
 			blocklistMgr.UpdateConfig(newCfg)
-			if err := blocklistMgr.Update(ctx); err != nil {
-				logger.Error("Failed to reload blocklists", "error", err)
-			} else {
-				logger.Info("Blocklists reloaded", "domains", blocklistMgr.Size())
-			}
+			go func() {
+				reloadCtx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+				defer cancel()
+				if err := blocklistMgr.Update(reloadCtx); err != nil {
+					logger.Error("Failed to reload blocklists", "error", err)
+				} else {
+					logger.Info("Blocklists reloaded", "domains", blocklistMgr.Size())
+				}
+			}()
 		}
 
 		if !equalCacheConfig(&cfg.Cache, &newCfg.Cache) {
@@ -1093,7 +1100,14 @@ func main() {
 			blocklistMgr.Stop()
 		}
 
-		// Shutdown storage
+		// Close DNS cache (stops cleanup goroutine, emits final stats)
+		if dnsCache != nil {
+			if err := dnsCache.Close(); err != nil {
+				logger.Error("Error during cache shutdown", "error", err)
+			}
+		}
+
+		// Shutdown storage (query logger defer runs before this via deferred stack)
 		if stor != nil {
 			if err := stor.Close(); err != nil {
 				logger.Error("Error during storage shutdown", "error", err)

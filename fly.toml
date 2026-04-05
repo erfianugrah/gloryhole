@@ -5,7 +5,7 @@ primary_region = "fra"
   dockerfile = "Dockerfile.fly"
 
 [env]
-  GOMEMLIMIT = "384MiB"
+  GOMEMLIMIT = "180MiB"
 
 [http_service]
   internal_port = 8080
@@ -56,4 +56,4 @@ primary_region = "fra"
 
 [[vm]]
   size = "shared-cpu-1x"
-  memory = "512mb"
+  memory = "256mb"

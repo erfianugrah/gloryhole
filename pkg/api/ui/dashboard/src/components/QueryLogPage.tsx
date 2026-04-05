@@ -362,7 +362,7 @@ export function QueryLogPage() {
                         </TableRow>
                         {isExpanded && (
                           <TableRow key={`${i}-detail`}>
-                            <TableCell colSpan={7} className="bg-gh-950/50 px-6 py-4">
+                            <TableCell colSpan={7} className="bg-gh-950/60 border-l-2 border-l-gh-purple/40 px-6 py-4">
                               <QueryDetail query={q} />
                             </TableCell>
                           </TableRow>
@@ -393,43 +393,59 @@ export function QueryLogPage() {
 
 // ─── Query Detail ───────────────────────────────────────────────────
 
-function QueryDetail({ query }: { query: QueryLog }) {
-  const rcodeName = RCODE_NAMES[query.response_code] ?? `RCODE ${query.response_code}`;
+function rcodeBadge(code: number) {
+  const name = RCODE_NAMES[code] ?? `RCODE ${code}`;
+  if (code === 0) return <Badge className="bg-gh-green/20 text-gh-green border-gh-green/30 text-[10px]">{name}</Badge>;
+  if (code === 2) return <Badge className="bg-gh-red/20 text-gh-red border-gh-red/30 text-[10px]">{name}</Badge>;
+  if (code === 3 || code === 5) return <Badge className="bg-gh-peach/20 text-gh-peach border-gh-peach/30 text-[10px]">{name}</Badge>;
+  return <Badge variant="outline" className="text-[10px]">{name}</Badge>;
+}
 
+function QueryDetail({ query }: { query: QueryLog }) {
   return (
     <div className="grid gap-4 md:grid-cols-2 text-xs">
-      <div className="space-y-2">
-        <DetailRow label="Domain" value={query.domain} mono />
-        <DetailRow label="Query Type" value={query.query_type} />
-        <DetailRow label="Client" value={query.client_ip} mono />
-        <DetailRow
-          label="Response Code"
-          value={`${query.response_code} (${rcodeName})`}
-          className={query.response_code !== 0 ? "text-gh-red" : ""}
-        />
+      <div className="space-y-2.5">
+        <DetailRow label="DOMAIN" value={query.domain} mono />
+        <DetailRow label="QUERY TYPE" value={query.query_type} />
+        <DetailRow label="CLIENT" value={query.client_ip} mono />
+        <DetailRow label="RESPONSE CODE">
+          {rcodeBadge(query.response_code)}
+        </DetailRow>
       </div>
-      <div className="space-y-2">
-        <DetailRow label="Upstream" value={query.upstream || "N/A"} mono />
-        <DetailRow label="Response Time" value={`${(query.response_time_ms ?? 0).toFixed(2)}ms`} />
-        <DetailRow label="Upstream Time" value={`${(query.upstream_response_ms ?? 0).toFixed(2)}ms`} />
-        {query.blocked && <DetailRow label="Status" value="Blocked" className="text-gh-red" />}
-        {query.cached && <DetailRow label="Status" value="Cached" className="text-gh-blue" />}
-        <DetailRow label="DNSSEC" value={query.dnssec_validated ? "Validated" : "No"} className={query.dnssec_validated ? "text-gh-green" : ""} />
+      <div className="space-y-2.5">
+        <DetailRow label="UPSTREAM" value={query.upstream || "N/A"} mono dimValue={!query.upstream} />
+        <DetailRow label="RESPONSE TIME" value={`${(query.response_time_ms ?? 0).toFixed(2)}ms`} mono />
+        <DetailRow label="UPSTREAM TIME" value={`${(query.upstream_response_ms ?? 0).toFixed(2)}ms`} mono />
+        <DetailRow label="STATUS">
+          {query.blocked
+            ? <Badge className="bg-gh-red/20 text-gh-red border-gh-red/30 text-[10px]">Blocked</Badge>
+            : query.cached
+              ? <Badge className="bg-gh-blue/20 text-gh-blue border-gh-blue/30 text-[10px]">Cached</Badge>
+              : <Badge className="bg-gh-green/20 text-gh-green border-gh-green/30 text-[10px]">Forwarded</Badge>}
+        </DetailRow>
+        <DetailRow label="DNSSEC">
+          {query.dnssec_validated
+            ? <span className="text-gh-green font-medium">Yes</span>
+            : <span className="text-muted-foreground">No</span>}
+        </DetailRow>
         {query.unbound_cached != null && (
-          <DetailRow
-            label="Unbound Cache"
-            value={query.unbound_cached ? "Hit" : "Recursive"}
-            className={query.unbound_cached ? "text-gh-green" : "text-gh-peach"}
-          />
+          <DetailRow label="RESOLVER">
+            <Badge className={query.unbound_cached
+              ? "bg-gh-green/20 text-gh-green border-gh-green/30 text-[10px]"
+              : "bg-gh-peach/20 text-gh-peach border-gh-peach/30 text-[10px]"
+            }>
+              {query.unbound_cached ? "Cache Hit" : "Recursive"}
+            </Badge>
+          </DetailRow>
         )}
         {query.unbound_duration_ms != null && (
-          <DetailRow label="Unbound Time" value={`${query.unbound_duration_ms.toFixed(2)}ms`} />
+          <DetailRow label="RESOLVER TIME" value={`${query.unbound_duration_ms.toFixed(2)}ms`} mono />
         )}
         {query.unbound_resp_size != null && (
-          <DetailRow label="Response Size" value={`${query.unbound_resp_size} bytes`} />
+          <DetailRow label="RESPONSE SIZE" value={`${query.unbound_resp_size} bytes`} mono />
         )}
         {query.upstream_error && (
-          <DetailRow label="Upstream Error" value={query.upstream_error} className="text-gh-red" />
+          <DetailRow label="UPSTREAM ERROR" value={query.upstream_error} className="text-gh-red" />
         )}
       </div>
 
@@ -443,19 +459,24 @@ function QueryDetail({ query }: { query: QueryLog }) {
                 key={i}
                 className="flex items-center gap-2 rounded-md bg-gh-800 px-3 py-1.5 font-data text-xs"
               >
-                <Badge variant="outline" className="text-[10px]">
+                <Badge variant="outline" className="text-[10px] shrink-0">
                   {entry.stage}
                 </Badge>
-                <Badge className={
+                <Badge className={cn(
+                  "text-[10px] shrink-0",
                   entry.action === "block" || entry.action === "BLOCK"
-                    ? "bg-gh-red/20 text-gh-red border-gh-red/30 text-[10px]"
-                    : "bg-gh-green/20 text-gh-green border-gh-green/30 text-[10px]"
-                }>
+                    ? "bg-gh-red/20 text-gh-red border-gh-red/30"
+                    : entry.action === "ALLOW" || entry.action === "allow"
+                      ? "bg-gh-green/20 text-gh-green border-gh-green/30"
+                      : entry.action === "FORWARD" || entry.action === "forward"
+                        ? "bg-gh-blue/20 text-gh-blue border-gh-blue/30"
+                        : "bg-gh-peach/20 text-gh-peach border-gh-peach/30",
+                )}>
                   {entry.action}
                 </Badge>
-                {entry.rule && <span className="text-muted-foreground">{entry.rule}</span>}
-                {entry.source && <span className="text-gh-red">[{entry.source}]</span>}
-                {entry.detail && <span className="text-muted-foreground/60">{entry.detail}</span>}
+                {entry.rule && <span className="text-foreground font-medium shrink-0">{entry.rule}</span>}
+                {entry.source && <span className="text-gh-peach shrink-0">[{entry.source}]</span>}
+                {entry.detail && <span className="text-muted-foreground truncate">{entry.detail}</span>}
               </div>
             ))}
           </div>
@@ -469,17 +490,29 @@ function DetailRow({
   label,
   value,
   mono,
+  dimValue,
   className,
+  children,
 }: {
   label: string;
-  value: string;
+  value?: string;
   mono?: boolean;
+  dimValue?: boolean;
   className?: string;
+  children?: React.ReactNode;
 }) {
   return (
-    <div className="flex items-center gap-2">
-      <span className={T.formLabel}>{label}</span>
-      <span className={cn(mono ? "font-data" : "", className)}>{value}</span>
+    <div className="flex items-center justify-between gap-4">
+      <span className="text-[10px] uppercase tracking-widest text-muted-foreground/70 shrink-0 w-[120px]">{label}</span>
+      {children ?? (
+        <span className={cn(
+          "text-xs text-right",
+          mono && "font-data",
+          dimValue && "text-muted-foreground",
+          !dimValue && !className && "text-foreground font-medium",
+          className,
+        )}>{value}</span>
+      )}
     </div>
   );
 }

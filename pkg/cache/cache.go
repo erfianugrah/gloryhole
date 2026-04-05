@@ -499,6 +499,13 @@ func (c *Cache) cleanup() {
 	if removed > 0 {
 		c.stats.evictions.Add(uint64(removed))
 		c.stats.entries = len(c.entries)
+
+		// Decrement Prometheus CacheSize gauge so it stays accurate
+		// (previously only decremented on LRU eviction and Clear).
+		if c.metrics != nil {
+			c.metrics.CacheSize.Add(context.Background(), int64(-removed))
+		}
+
 		c.logger.Debug("Cleaned up expired cache entries", "removed", removed, "remaining", c.stats.entries)
 	}
 }

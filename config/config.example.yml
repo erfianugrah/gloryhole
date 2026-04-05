@@ -25,8 +25,9 @@ server:
     # - "https://admin.example.com"
     # - "http://localhost:3000"
   trusted_proxies: []      # CIDRs whose X-Forwarded-For / X-Real-IP headers are trusted.
-    # - "172.16.0.0/12"   # Docker/Fly.io internal networks
-    # - "10.0.0.0/8"      # Required for correct client IPs behind reverse proxies.
+    # - "172.16.0.0/12"   # Docker/Fly.io internal networks (REQUIRED on Fly.io for DoH client IPs)
+    # - "10.0.0.0/8"      # Common internal network
+    # Without this, DoH queries behind a reverse proxy will show the proxy IP instead of the real client.
   query_logger:
     enabled: true           # Enable async query logging worker pool
     buffer_size: 5000       # Query log buffer (default: 5000; increase for high traffic)

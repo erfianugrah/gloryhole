@@ -528,6 +528,14 @@ func (sc *ShardedCache) cleanup() {
 			totalEntries += len(shard.entries)
 			shard.mu.RUnlock()
 		}
+
+		// Decrement Prometheus CacheSize gauge so it stays accurate
+		// (previously only decremented on LRU eviction and Clear).
+		// Use first shard's metrics reference (all shards share the same Metrics instance).
+		if len(sc.shards) > 0 && sc.shards[0].metrics != nil {
+			sc.shards[0].metrics.CacheSize.Add(context.Background(), -int64(removed))
+		}
+
 		sc.logger.Debug("Cleaned up expired cache entries",
 			"removed", removed,
 			"remaining", totalEntries)

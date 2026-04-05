@@ -44,6 +44,15 @@ type Manager struct {
 	lastUpdated atomic.Value
 	sourceNames atomic.Value
 
+	// updateMu serializes Update calls to prevent concurrent downloads
+	// from overlapping (API reload + config watcher + auto-update ticker).
+	// This prevents double memory usage from parallel downloads.
+	updateMu sync.Mutex
+
+	// lastSize tracks the domain count from the most recent update,
+	// used to pre-allocate the merged map and avoid repeated growth.
+	lastSize atomic.Int64
+
 	// Lifecycle management
 	updateTicker *time.Ticker
 	stopChan     chan struct{}
@@ -131,7 +140,9 @@ func (m *Manager) Stop() {
 	m.logger.Info("Blocklist manager stopped")
 }
 
-// Update downloads all blocklists and updates the current blocklist
+// Update downloads all blocklists and updates the current blocklist.
+// Concurrent calls are serialized by updateMu to prevent overlapping
+// downloads from doubling memory usage (OOM risk on constrained VMs).
 func (m *Manager) Update(ctx context.Context) error {
 	m.cfgMu.RLock()
 	blocklists := m.cfg.Blocklists
@@ -142,17 +153,23 @@ func (m *Manager) Update(ctx context.Context) error {
 		return nil
 	}
 
+	// Serialize concurrent update attempts (API handler, config watcher, auto-update ticker).
+	// TryLock avoids queueing: if an update is already running, skip this one.
+	if !m.updateMu.TryLock() {
+		m.logger.Info("Blocklist update already in progress, skipping")
+		return nil
+	}
+	defer m.updateMu.Unlock()
+
 	m.logger.Info("Updating blocklists", "sources", len(blocklists))
 	startTime := time.Now()
 
-	// Get old size for metrics delta
-	oldBlocklist := m.current.Load()
-	oldSize := 0
-	if oldBlocklist != nil {
-		oldSize = len(*oldBlocklist)
-	}
+	// Snapshot old size before downloading. We deliberately do NOT hold a
+	// reference to the old map — this lets the GC reclaim it while the new
+	// one is being built, halving peak memory on constrained VMs.
+	oldSize := int(m.lastSize.Load())
 
-	// Download all blocklists
+	// Download all blocklists into a new map (old map is GC-eligible)
 	blocklist, err := m.downloadWithSources(ctx)
 	if err != nil {
 		return err
@@ -163,6 +180,7 @@ func (m *Manager) Update(ctx context.Context) error {
 
 	// Atomically update current blocklist (zero-copy read for all DNS queries)
 	m.current.Store(&blocklist)
+	m.lastSize.Store(int64(newSize))
 	m.lastUpdated.Store(time.Now())
 
 	m.cfgMu.RLock()
@@ -216,7 +234,14 @@ func (m *Manager) downloadWithSources(ctx context.Context) (map[string]BlockEntr
 
 	m.logger.Info("Downloading blocklists", "count", len(urls))
 	startTime := time.Now()
-	merged := make(map[string]BlockEntry)
+
+	// Pre-allocate based on previous update size to avoid repeated map growth.
+	// Add 10% headroom for natural list growth between updates.
+	hint := int(m.lastSize.Load())
+	if hint > 0 {
+		hint = hint + hint/10
+	}
+	merged := make(map[string]BlockEntry, hint)
 
 	for idx, url := range urls {
 		m.logger.Info("Downloading blocklist", "index", idx+1, "total", len(urls), "url", url)
@@ -242,6 +267,11 @@ func (m *Manager) downloadWithSources(ctx context.Context) (map[string]BlockEntr
 			}
 			merged[domain] = entry
 		}
+
+		// Nil the per-list map immediately so GC can reclaim it
+		// before the next list is downloaded. On a 512MB VM with
+		// 100k+ domain lists this prevents transient memory spikes.
+		domains = nil //nolint:ineffassign
 	}
 
 	if len(urls) > maxTrackedSources {

@@ -359,6 +359,11 @@ func (s *Server) Shutdown(ctx context.Context) error {
 		s.killSwitch.Stop()
 	}
 
+	// Stop session cleanup goroutine
+	if s.sessionManager != nil {
+		s.sessionManager.Stop()
+	}
+
 	return s.httpServer.Shutdown(ctx)
 }
 
