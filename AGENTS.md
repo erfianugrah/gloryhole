@@ -81,7 +81,7 @@ make docker-push    # Build and push main image to DockerHub
 
 - **Docker**: `Dockerfile` for the main multi-arch image, `Dockerfile.release` for GoReleaser
 - **Fly.io**: `Dockerfile.fly` bakes `config.fly.yml` + `docker-entrypoint.sh` into the image; `fly.toml` defines services
-  - VM: `shared-cpu-1x` / `256mb` with `GOMEMLIMIT=180MiB`
+  - VM: `shared-cpu-1x` / `512mb` with `GOMEMLIMIT=384MiB`
   - Entrypoint copies baked config to persistent volume (`/var/lib/glory-hole/config.yml`) on first boot
   - Subsequent deploys use the volume copy, preserving API-written changes
   - To force a config reset: `fly ssh console` then `rm /var/lib/glory-hole/config.yml` and restart
