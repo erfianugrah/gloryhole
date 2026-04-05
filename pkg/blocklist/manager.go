@@ -4,7 +4,6 @@ package blocklist
 
 import (
 	"context"
-	"math/bits"
 	"net/http"
 	"strings"
 	"sync"
@@ -28,13 +27,6 @@ type BlockEntry struct {
 	Overflow   bool
 }
 
-// blocklist is the internal representation: domain → source bitmask.
-// Using uint64 directly instead of a struct saves ~8 bytes per entry
-// (no bool + padding), which at 600K domains saves ~5MB.
-// A zero value means "blocked, but source tracking overflowed".
-// Bit N set means the domain appeared in blocklist source N (0-indexed).
-type blocklist = map[string]uint64
-
 // Manager manages blocklist downloads and automatic updates
 type Manager struct {
 	cfg        *config.Config
@@ -43,9 +35,10 @@ type Manager struct {
 	logger     *logging.Logger
 	metrics    *telemetry.Metrics
 
-	// Current blocklist (atomic pointer for zero-copy reads).
-	// Value is domain → source bitmask (0 = overflow / unknown source).
-	current atomic.Pointer[blocklist]
+	// Current blocklist — compact sorted structure, ~33 bytes/domain
+	// vs ~140 bytes/domain for map[string]uint64. At 1.3M domains
+	// this is ~43MB instead of ~180MB.
+	current atomic.Pointer[FlatBlocklist]
 
 	// Pattern-based blocklist (wildcard and regex)
 	patterns atomic.Pointer[pattern.Matcher]
@@ -70,8 +63,6 @@ type Manager struct {
 }
 
 // NewManager creates a new blocklist manager with a custom HTTP client.
-// The HTTP client should use the application's configured DNS resolver (pkg/resolver)
-// to ensure consistent DNS resolution across the application.
 func NewManager(cfg *config.Config, logger *logging.Logger, metrics *telemetry.Metrics, httpClient *http.Client) *Manager {
 	m := &Manager{
 		cfg:        cfg,
@@ -82,8 +73,8 @@ func NewManager(cfg *config.Config, logger *logging.Logger, metrics *telemetry.M
 	}
 
 	// Initialize with empty blocklist
-	empty := make(blocklist)
-	m.current.Store(&empty)
+	empty := BuildFlatBlocklist(nil)
+	m.current.Store(empty)
 	m.lastUpdated.Store(time.Time{})
 	m.sourceNames.Store([]string{})
 
@@ -114,7 +105,6 @@ func (m *Manager) Start(ctx context.Context) error {
 	// Initial download
 	if err := m.Update(ctx); err != nil {
 		m.logger.Error("Initial blocklist download failed", "error", err)
-		// Continue anyway - we'll retry on next update
 	}
 
 	// Start auto-update goroutine if enabled
@@ -134,24 +124,17 @@ func (m *Manager) Stop() {
 	}
 
 	m.logger.Info("Stopping blocklist manager")
-
-	// Signal stop
 	close(m.stopChan)
 
-	// Stop ticker
 	if m.updateTicker != nil {
 		m.updateTicker.Stop()
 	}
 
-	// Wait for goroutines
 	m.wg.Wait()
-
 	m.logger.Info("Blocklist manager stopped")
 }
 
 // Update downloads all blocklists and updates the current blocklist.
-// Concurrent calls are serialized by updateMu to prevent overlapping
-// downloads from doubling memory usage (OOM risk on constrained VMs).
 func (m *Manager) Update(ctx context.Context) error {
 	m.cfgMu.RLock()
 	blocklists := m.cfg.Blocklists
@@ -162,8 +145,6 @@ func (m *Manager) Update(ctx context.Context) error {
 		return nil
 	}
 
-	// Serialize concurrent update attempts (API handler, config watcher, auto-update ticker).
-	// TryLock avoids queueing: if an update is already running, skip this one.
 	if !m.updateMu.TryLock() {
 		m.logger.Info("Blocklist update already in progress, skipping")
 		return nil
@@ -172,23 +153,32 @@ func (m *Manager) Update(ctx context.Context) error {
 
 	m.logger.Info("Updating blocklists", "sources", len(blocklists))
 	startTime := time.Now()
-
-	// Snapshot old size before downloading. We deliberately do NOT hold a
-	// reference to the old map — this lets the GC reclaim it while the new
-	// one is being built, halving peak memory on constrained VMs.
 	oldSize := int(m.lastSize.Load())
 
-	// Download all blocklists into a new map (old map is GC-eligible)
-	bl, err := m.downloadWithSources(ctx)
+	// Phase 1: download into a temporary map (needed for merge dedup)
+	merged, err := m.downloadMerged(ctx)
 	if err != nil {
 		return err
 	}
 
-	newSize := len(bl)
+	mergedSize := len(merged)
+
+	// Phase 2: compact into FlatBlocklist (sorts + packs into contiguous memory)
+	m.logger.Info("Compacting blocklist", "domains", mergedSize)
+	flat := BuildFlatBlocklist(merged)
+
+	// Release the temporary map immediately — flat owns all the data now
+	merged = nil //nolint:ineffassign
+
+	m.logger.Info("Blocklist compacted",
+		"domains", flat.Len(),
+		"memory_bytes", flat.MemoryUsage(),
+		"memory_mb", flat.MemoryUsage()/(1024*1024))
+
+	newSize := flat.Len()
 	delta := newSize - oldSize
 
-	// Atomically update current blocklist (zero-copy read for all DNS queries)
-	m.current.Store(&bl)
+	m.current.Store(flat)
 	m.lastSize.Store(int64(newSize))
 	m.lastUpdated.Store(time.Now())
 
@@ -202,24 +192,19 @@ func (m *Manager) Update(ctx context.Context) error {
 	}
 	m.sourceNames.Store(sourceCopy)
 
-	// Record blocklist size change to Prometheus metrics if available
 	if m.metrics != nil {
 		m.metrics.BlocklistSize.Add(ctx, int64(delta))
 	}
 
 	elapsed := time.Since(startTime)
-
-	// Log update results with delta information
 	if delta > 0 {
 		m.logger.Info("Blocklists updated - domains increased",
-			"total_domains", newSize,
-			"added", delta,
+			"total_domains", newSize, "added", delta,
 			"duration", elapsed,
 			"domains_per_second", float64(newSize)/elapsed.Seconds())
 	} else if delta < 0 {
 		m.logger.Info("Blocklists updated - domains decreased",
-			"total_domains", newSize,
-			"removed", -delta,
+			"total_domains", newSize, "removed", -delta,
 			"duration", elapsed,
 			"domains_per_second", float64(newSize)/elapsed.Seconds())
 	} else {
@@ -232,25 +217,27 @@ func (m *Manager) Update(ctx context.Context) error {
 	return nil
 }
 
-func (m *Manager) downloadWithSources(ctx context.Context) (blocklist, error) {
+// downloadMerged downloads all configured blocklists and merges them
+// into a single map. The map is a temporary intermediary; it gets compacted
+// into a FlatBlocklist immediately after.
+func (m *Manager) downloadMerged(ctx context.Context) (map[string]uint64, error) {
 	m.cfgMu.RLock()
 	urls := m.cfg.Blocklists
 	m.cfgMu.RUnlock()
 
 	if len(urls) == 0 {
-		return make(blocklist), nil
+		return nil, nil
 	}
 
 	m.logger.Info("Downloading blocklists", "count", len(urls))
 	startTime := time.Now()
 
-	// Pre-allocate based on previous update size to avoid repeated map growth.
-	// Add 10% headroom for natural list growth between updates.
+	// Pre-allocate based on previous size
 	hint := int(m.lastSize.Load())
 	if hint > 0 {
 		hint = hint + hint/10
 	}
-	merged := make(blocklist, hint)
+	merged := make(map[string]uint64, hint)
 
 	for idx, url := range urls {
 		m.logger.Info("Downloading blocklist", "index", idx+1, "total", len(urls), "url", url)
@@ -264,15 +251,11 @@ func (m *Manager) downloadWithSources(ctx context.Context) (blocklist, error) {
 		if idx < maxTrackedSources {
 			mask = 1 << uint(idx)
 		}
-		// If idx >= maxTrackedSources, mask stays 0 (signals overflow in sourcesFromMask)
 
 		for domain := range domains {
 			merged[domain] |= mask
 		}
 
-		// Nil the per-list map immediately so GC can reclaim it
-		// before the next list is downloaded. On a 512MB VM with
-		// 100k+ domain lists this prevents transient memory spikes.
 		domains = nil //nolint:ineffassign
 	}
 
@@ -305,28 +288,38 @@ func (m *Manager) SetLogger(logger *logging.Logger) {
 	m.downloader.logger = logger
 }
 
-// Get returns a pointer to the current blocklist as the legacy BlockEntry map.
-// Converts from the internal uint64 representation on the fly.
+// Get returns the blocklist as the legacy BlockEntry map.
+// Converts from the compact representation on the fly.
 // Used only by tests — the hot path uses Match()/IsBlocked().
 func (m *Manager) Get() *map[string]BlockEntry {
-	bl := m.current.Load()
-	if bl == nil {
-		return nil
+	flat := m.current.Load()
+	if flat == nil || flat.Len() == 0 {
+		empty := make(map[string]BlockEntry)
+		return &empty
 	}
-	result := make(map[string]BlockEntry, len(*bl))
-	for domain, mask := range *bl {
+	result := make(map[string]BlockEntry, flat.Len())
+	flat.ForEach(func(domain string, mask uint64) {
 		result[domain] = BlockEntry{
 			SourceMask: mask,
-			Overflow:   mask == 0, // mask=0 means all bits from overflow sources
+			Overflow:   mask == 0,
 		}
-	}
+	})
 	return &result
 }
 
+// SetDomainsForTest replaces the blocklist with the given domains.
+// Intended for benchmarks and tests in external packages.
+func (m *Manager) SetDomainsForTest(domains []string) {
+	tmp := make(map[string]uint64, len(domains))
+	for _, d := range domains {
+		tmp[d] = 1
+	}
+	flat := BuildFlatBlocklist(tmp)
+	m.current.Store(flat)
+	m.lastSize.Store(int64(flat.Len()))
+}
+
 // IsBlocked checks if a domain is blocked
-// It uses a multi-tier matching strategy for optimal performance:
-//  1. Try exact match first (fastest - O(1))
-//  2. Try pattern match if no exact match (wildcard/regex)
 func (m *Manager) IsBlocked(domain string) bool {
 	return m.Match(domain).Blocked
 }
@@ -334,7 +327,7 @@ func (m *Manager) IsBlocked(domain string) bool {
 // MatchResult describes how a domain was blocked.
 type MatchResult struct {
 	Blocked bool
-	Kind    string   // exact, wildcard, regex
+	Kind    string   // exact, subdomain, wildcard, regex
 	Pattern string   // for wildcard/regex
 	Sources []string // blocklist sources
 }
@@ -349,35 +342,13 @@ func (m *Manager) Match(domain string) MatchResult {
 	fqdn := mdns.Fqdn(normalized)
 	short := strings.TrimSuffix(fqdn, ".")
 
-	bl := m.current.Load()
-	if bl != nil {
-		// Exact match on the full domain
-		if mask, ok := (*bl)[fqdn]; ok {
+	flat := m.current.Load()
+	if flat != nil && flat.Len() > 0 {
+		if mask, kind, ok := flat.LookupSubdomains(fqdn); ok {
 			return MatchResult{
 				Blocked: true,
-				Kind:    "exact",
+				Kind:    kind,
 				Sources: m.sourcesFromMask(mask),
-			}
-		}
-
-		// Walk parent domains to support wildcard-style lists (e.g., OISD *.domain.com).
-		// If "example.com." is in the blocklist, then "sub.example.com." is also blocked.
-		parent := fqdn
-		for {
-			idx := strings.Index(parent, ".")
-			if idx < 0 || idx+1 >= len(parent) {
-				break
-			}
-			parent = parent[idx+1:]
-			if parent == "." || parent == "" {
-				break
-			}
-			if mask, ok := (*bl)[parent]; ok {
-				return MatchResult{
-					Blocked: true,
-					Kind:    "subdomain",
-					Sources: m.sourcesFromMask(mask),
-				}
 			}
 		}
 	}
@@ -396,30 +367,18 @@ func (m *Manager) Match(domain string) MatchResult {
 	return MatchResult{}
 }
 
-// SetDomainsForTest replaces the blocklist with the given domains.
-// Intended for benchmarks and tests in external packages.
-func (m *Manager) SetDomainsForTest(domains []string) {
-	bl := make(blocklist, len(domains))
-	for _, d := range domains {
-		bl[d] = 1 // source mask = first list
-	}
-	m.current.Store(&bl)
-	m.lastSize.Store(int64(len(bl)))
-}
-
 // Size returns the number of blocked domains (exact matches only)
 func (m *Manager) Size() int {
-	bl := m.current.Load()
-	if bl == nil {
+	flat := m.current.Load()
+	if flat == nil {
 		return 0
 	}
-	return len(*bl)
+	return flat.Len()
 }
 
 // SetPatterns sets the pattern-based blocklist (wildcard and regex)
 func (m *Manager) SetPatterns(patternList []string) error {
 	if len(patternList) == 0 {
-		// Clear patterns
 		m.patterns.Store(nil)
 		m.logger.Debug("Cleared blocklist patterns")
 		return nil
@@ -476,7 +435,6 @@ func (m *Manager) Stats() map[string]int {
 }
 
 // sourcesFromMask decodes a bitmask back to human-readable source URL strings.
-// A zero mask indicates overflow (more than maxTrackedSources lists).
 func (m *Manager) sourcesFromMask(mask uint64) []string {
 	value := m.sourceNames.Load()
 	names, _ := value.([]string)
@@ -486,7 +444,12 @@ func (m *Manager) sourcesFromMask(mask uint64) []string {
 		return nil
 	}
 
-	result := make([]string, 0, bits.OnesCount64(mask))
+	// Count bits to pre-allocate
+	count := 0
+	for b := mask; b != 0; b &= b - 1 {
+		count++
+	}
+	result := make([]string, 0, count)
 	for idx := 0; idx < len(names) && idx < maxTrackedSources; idx++ {
 		if mask&(1<<uint(idx)) != 0 {
 			result = append(result, names[idx])
@@ -521,8 +484,6 @@ func (m *Manager) updateLoop(ctx context.Context) {
 
 		case <-m.updateTicker.C:
 			m.logger.Debug("Running scheduled blocklist update")
-
-			// Create a timeout context for this update
 			updateCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 			if err := m.Update(updateCtx); err != nil {
 				m.logger.Error("Scheduled blocklist update failed", "error", err)
