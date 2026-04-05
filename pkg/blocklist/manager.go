@@ -22,10 +22,18 @@ import (
 const maxTrackedSources = 64
 
 // BlockEntry stores metadata about a blocked domain.
+// Kept for API compatibility (tests, handlers that inspect source provenance).
 type BlockEntry struct {
 	SourceMask uint64
 	Overflow   bool
 }
+
+// blocklist is the internal representation: domain → source bitmask.
+// Using uint64 directly instead of a struct saves ~8 bytes per entry
+// (no bool + padding), which at 600K domains saves ~5MB.
+// A zero value means "blocked, but source tracking overflowed".
+// Bit N set means the domain appeared in blocklist source N (0-indexed).
+type blocklist = map[string]uint64
 
 // Manager manages blocklist downloads and automatic updates
 type Manager struct {
@@ -35,8 +43,9 @@ type Manager struct {
 	logger     *logging.Logger
 	metrics    *telemetry.Metrics
 
-	// Current blocklist (atomic pointer for zero-copy reads)
-	current atomic.Pointer[map[string]BlockEntry]
+	// Current blocklist (atomic pointer for zero-copy reads).
+	// Value is domain → source bitmask (0 = overflow / unknown source).
+	current atomic.Pointer[blocklist]
 
 	// Pattern-based blocklist (wildcard and regex)
 	patterns atomic.Pointer[pattern.Matcher]
@@ -73,7 +82,7 @@ func NewManager(cfg *config.Config, logger *logging.Logger, metrics *telemetry.M
 	}
 
 	// Initialize with empty blocklist
-	empty := make(map[string]BlockEntry)
+	empty := make(blocklist)
 	m.current.Store(&empty)
 	m.lastUpdated.Store(time.Time{})
 	m.sourceNames.Store([]string{})
@@ -170,16 +179,16 @@ func (m *Manager) Update(ctx context.Context) error {
 	oldSize := int(m.lastSize.Load())
 
 	// Download all blocklists into a new map (old map is GC-eligible)
-	blocklist, err := m.downloadWithSources(ctx)
+	bl, err := m.downloadWithSources(ctx)
 	if err != nil {
 		return err
 	}
 
-	newSize := len(blocklist)
+	newSize := len(bl)
 	delta := newSize - oldSize
 
 	// Atomically update current blocklist (zero-copy read for all DNS queries)
-	m.current.Store(&blocklist)
+	m.current.Store(&bl)
 	m.lastSize.Store(int64(newSize))
 	m.lastUpdated.Store(time.Now())
 
@@ -223,13 +232,13 @@ func (m *Manager) Update(ctx context.Context) error {
 	return nil
 }
 
-func (m *Manager) downloadWithSources(ctx context.Context) (map[string]BlockEntry, error) {
+func (m *Manager) downloadWithSources(ctx context.Context) (blocklist, error) {
 	m.cfgMu.RLock()
 	urls := m.cfg.Blocklists
 	m.cfgMu.RUnlock()
 
 	if len(urls) == 0 {
-		return make(map[string]BlockEntry), nil
+		return make(blocklist), nil
 	}
 
 	m.logger.Info("Downloading blocklists", "count", len(urls))
@@ -241,7 +250,7 @@ func (m *Manager) downloadWithSources(ctx context.Context) (map[string]BlockEntr
 	if hint > 0 {
 		hint = hint + hint/10
 	}
-	merged := make(map[string]BlockEntry, hint)
+	merged := make(blocklist, hint)
 
 	for idx, url := range urls {
 		m.logger.Info("Downloading blocklist", "index", idx+1, "total", len(urls), "url", url)
@@ -252,20 +261,13 @@ func (m *Manager) downloadWithSources(ctx context.Context) (map[string]BlockEntr
 		}
 
 		var mask uint64
-		overflow := false
 		if idx < maxTrackedSources {
 			mask = 1 << uint(idx)
-		} else {
-			overflow = true
 		}
+		// If idx >= maxTrackedSources, mask stays 0 (signals overflow in sourcesFromMask)
 
 		for domain := range domains {
-			entry := merged[domain]
-			entry.SourceMask |= mask
-			if overflow {
-				entry.Overflow = true
-			}
-			merged[domain] = entry
+			merged[domain] |= mask
 		}
 
 		// Nil the per-list map immediately so GC can reclaim it
@@ -303,9 +305,22 @@ func (m *Manager) SetLogger(logger *logging.Logger) {
 	m.downloader.logger = logger
 }
 
-// Get returns a pointer to the current blocklist (safe for concurrent reads)
+// Get returns a pointer to the current blocklist as the legacy BlockEntry map.
+// Converts from the internal uint64 representation on the fly.
+// Used only by tests — the hot path uses Match()/IsBlocked().
 func (m *Manager) Get() *map[string]BlockEntry {
-	return m.current.Load()
+	bl := m.current.Load()
+	if bl == nil {
+		return nil
+	}
+	result := make(map[string]BlockEntry, len(*bl))
+	for domain, mask := range *bl {
+		result[domain] = BlockEntry{
+			SourceMask: mask,
+			Overflow:   mask == 0, // mask=0 means all bits from overflow sources
+		}
+	}
+	return &result
 }
 
 // IsBlocked checks if a domain is blocked
@@ -334,14 +349,14 @@ func (m *Manager) Match(domain string) MatchResult {
 	fqdn := mdns.Fqdn(normalized)
 	short := strings.TrimSuffix(fqdn, ".")
 
-	blocklist := m.current.Load()
-	if blocklist != nil {
+	bl := m.current.Load()
+	if bl != nil {
 		// Exact match on the full domain
-		if entry, ok := (*blocklist)[fqdn]; ok {
+		if mask, ok := (*bl)[fqdn]; ok {
 			return MatchResult{
 				Blocked: true,
 				Kind:    "exact",
-				Sources: m.sourcesFromMask(entry.SourceMask, entry.Overflow),
+				Sources: m.sourcesFromMask(mask),
 			}
 		}
 
@@ -357,11 +372,11 @@ func (m *Manager) Match(domain string) MatchResult {
 			if parent == "." || parent == "" {
 				break
 			}
-			if entry, ok := (*blocklist)[parent]; ok {
+			if mask, ok := (*bl)[parent]; ok {
 				return MatchResult{
 					Blocked: true,
 					Kind:    "subdomain",
-					Sources: m.sourcesFromMask(entry.SourceMask, entry.Overflow),
+					Sources: m.sourcesFromMask(mask),
 				}
 			}
 		}
@@ -381,13 +396,24 @@ func (m *Manager) Match(domain string) MatchResult {
 	return MatchResult{}
 }
 
+// SetDomainsForTest replaces the blocklist with the given domains.
+// Intended for benchmarks and tests in external packages.
+func (m *Manager) SetDomainsForTest(domains []string) {
+	bl := make(blocklist, len(domains))
+	for _, d := range domains {
+		bl[d] = 1 // source mask = first list
+	}
+	m.current.Store(&bl)
+	m.lastSize.Store(int64(len(bl)))
+}
+
 // Size returns the number of blocked domains (exact matches only)
 func (m *Manager) Size() int {
-	blocklist := m.current.Load()
-	if blocklist == nil {
+	bl := m.current.Load()
+	if bl == nil {
 		return 0
 	}
-	return len(*blocklist)
+	return len(*bl)
 }
 
 // SetPatterns sets the pattern-based blocklist (wildcard and regex)
@@ -449,9 +475,13 @@ func (m *Manager) Stats() map[string]int {
 	return stats
 }
 
-func (m *Manager) sourcesFromMask(mask uint64, overflow bool) []string {
+// sourcesFromMask decodes a bitmask back to human-readable source URL strings.
+// A zero mask indicates overflow (more than maxTrackedSources lists).
+func (m *Manager) sourcesFromMask(mask uint64) []string {
 	value := m.sourceNames.Load()
 	names, _ := value.([]string)
+
+	overflow := mask == 0 && len(names) > 0
 	if len(names) == 0 && !overflow {
 		return nil
 	}

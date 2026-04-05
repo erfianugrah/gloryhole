@@ -185,18 +185,14 @@ func newBenchmarkBlocklistManager(size int, includeTarget bool, targetDomain str
 	logger, _ := logging.New(&config.LoggingConfig{Level: "error", Format: "text", Output: "stdout"})
 	mgr := bl.NewManager(&config.Config{}, logger, nil, nil)
 
-	entriesPtr := mgr.Get()
-	entries := make(map[string]bl.BlockEntry, size+1)
-	*entriesPtr = entries
-
+	domains := make([]string, 0, size+1)
 	for i := 0; i < size; i++ {
-		domain := fmt.Sprintf("bench-blocked-%d.test.", i)
-		entries[domain] = bl.BlockEntry{SourceMask: 1}
+		domains = append(domains, fmt.Sprintf("bench-blocked-%d.test.", i))
 	}
-
 	if includeTarget && targetDomain != "" {
-		entries[targetDomain] = bl.BlockEntry{SourceMask: 1}
+		domains = append(domains, targetDomain)
 	}
+	mgr.SetDomainsForTest(domains)
 
 	return mgr
 }
