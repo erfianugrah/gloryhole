@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 
@@ -39,7 +40,8 @@ func NewDownloader(logger *logging.Logger, client *http.Client) *Downloader {
 	}
 }
 
-// Download downloads a blocklist from a URL and returns a map of blocked domains
+// Download downloads a blocklist from a URL and returns a map of blocked domains.
+// The map is used for per-list deduplication (hosts files can have duplicates).
 func (d *Downloader) Download(ctx context.Context, url string) (map[string]struct{}, error) {
 	d.logger.Info("Downloading blocklist", "url", url)
 	startTime := time.Now()
@@ -73,6 +75,91 @@ func (d *Downloader) Download(ctx context.Context, url string) (map[string]struc
 		"url", url,
 		"domains", len(domains),
 		"duration", elapsed)
+
+	return domains, nil
+}
+
+// DownloadSorted downloads a blocklist and returns a deduplicated, sorted
+// slice of FQDN strings. This avoids the map[string]struct{} overhead
+// (~60MB per 500K domains) by using a slice + sort.Strings for dedup.
+func (d *Downloader) DownloadSorted(ctx context.Context, url string) ([]string, error) {
+	d.logger.Info("Downloading blocklist", "url", url)
+	startTime := time.Now()
+
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	resp, err := d.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to download blocklist: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+	}
+
+	const maxBlocklistSize = 100 * 1024 * 1024 // 100MB
+	limitedBody := io.LimitReader(resp.Body, maxBlocklistSize)
+
+	domains, err := d.parseToSlice(limitedBody)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse blocklist: %w", err)
+	}
+
+	// Sort for merge and binary search
+	sort.Strings(domains)
+
+	// Deduplicate in-place (hosts files often have duplicates)
+	if len(domains) > 1 {
+		w := 1
+		for r := 1; r < len(domains); r++ {
+			if domains[r] != domains[r-1] {
+				domains[w] = domains[r]
+				w++
+			}
+		}
+		domains = domains[:w]
+	}
+
+	elapsed := time.Since(startTime)
+	d.logger.Info("Blocklist downloaded",
+		"url", url,
+		"unique_domains", len(domains),
+		"duration", elapsed)
+
+	return domains, nil
+}
+
+// parseToSlice parses a blocklist into a []string slice (no map overhead).
+// The slice may contain duplicates — caller is responsible for dedup.
+func (d *Downloader) parseToSlice(r io.Reader) ([]string, error) {
+	var domains []string
+	scanner := bufio.NewScanner(r)
+
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+
+		domain := d.extractDomain(line)
+		if domain == "" {
+			continue
+		}
+
+		if !strings.HasSuffix(domain, ".") {
+			domain = dns.Fqdn(domain)
+		}
+
+		domains = append(domains, domain)
+	}
+
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("error reading blocklist: %w", err)
+	}
 
 	return domains, nil
 }

@@ -573,16 +573,14 @@ func setupTestHandler(t *testing.T, cfg LoadTestConfig) *dns.Handler {
 	blocklistMgr := blocklist.NewManager(testCfg, logger, nil, nil)
 	handler.SetBlocklistManager(blocklistMgr)
 
-	entriesPtr := blocklistMgr.Get()
-	blockEntries := make(map[string]blocklist.BlockEntry, cfg.BlocklistSize+1)
-	*entriesPtr = blockEntries
-
-	// Add domains to the handler's legacy blocklist for testing (and atomic manager)
+	// Add domains to the blocklist manager and legacy handler
+	domains := make([]string, cfg.BlocklistSize)
 	for i := 0; i < cfg.BlocklistSize; i++ {
 		domain := fmt.Sprintf("blocked%d.test.", i)
+		domains[i] = domain
 		handler.Blocklist[domain] = struct{}{}
-		blockEntries[domain] = blocklist.BlockEntry{SourceMask: 1}
 	}
+	blocklistMgr.SetDomainsForTest(domains)
 
 	// Setup cache if enabled
 	if cfg.CacheEnabled {

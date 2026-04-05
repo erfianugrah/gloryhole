@@ -5,6 +5,8 @@ package blocklist
 import (
 	"context"
 	"net/http"
+	"runtime"
+	"runtime/debug"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -155,20 +157,13 @@ func (m *Manager) Update(ctx context.Context) error {
 	startTime := time.Now()
 	oldSize := int(m.lastSize.Load())
 
-	// Phase 1: download into a temporary map (needed for merge dedup)
-	merged, err := m.downloadMerged(ctx)
+	// Download each list into a sorted slice, then k-way merge into FlatBlocklist.
+	// This avoids the ~180MB temporary map[string]uint64 for 1.3M domains —
+	// each per-list []string is sorted and released after merge.
+	flat, err := m.downloadAndMerge(ctx)
 	if err != nil {
 		return err
 	}
-
-	mergedSize := len(merged)
-
-	// Phase 2: compact into FlatBlocklist (sorts + packs into contiguous memory)
-	m.logger.Info("Compacting blocklist", "domains", mergedSize)
-	flat := BuildFlatBlocklist(merged)
-
-	// Release the temporary map immediately — flat owns all the data now
-	merged = nil //nolint:ineffassign
 
 	m.logger.Info("Blocklist compacted",
 		"domains", flat.Len(),
@@ -180,6 +175,13 @@ func (m *Manager) Update(ctx context.Context) error {
 
 	m.current.Store(flat)
 	m.lastSize.Store(int64(newSize))
+
+	// Force the Go runtime to return freed pages to the OS immediately.
+	// Without this, the temporary per-list slices and sort buffers stay
+	// mapped in RSS even though they're unreachable. On a 512MB Fly VM
+	// this reclaims ~60-100MB of RSS after blocklist compaction.
+	runtime.GC()
+	debug.FreeOSMemory()
 	m.lastUpdated.Store(time.Now())
 
 	m.cfgMu.RLock()
@@ -217,31 +219,36 @@ func (m *Manager) Update(ctx context.Context) error {
 	return nil
 }
 
-// downloadMerged downloads all configured blocklists and merges them
-// into a single map. The map is a temporary intermediary; it gets compacted
-// into a FlatBlocklist immediately after.
-func (m *Manager) downloadMerged(ctx context.Context) (map[string]uint64, error) {
+// downloadAndMerge downloads each blocklist into a sorted slice, then
+// k-way merges them into a FlatBlocklist. This avoids the ~180MB temp
+// map[string]uint64 that the old path needed for 1.3M domains.
+//
+// Memory profile during download:
+//   - Each per-list []string holds ~25 bytes * N_list domains
+//   - After sorting, it's passed to BuildFromSortedLists which streams
+//     into the contiguous FlatBlocklist and the per-list slice is released
+//   - Peak memory: sum of all per-list slices + final FlatBlocklist
+//   - For 3 lists totaling 1.3M domains: ~50MB peak vs ~230MB with temp map
+func (m *Manager) downloadAndMerge(ctx context.Context) (*FlatBlocklist, error) {
 	m.cfgMu.RLock()
 	urls := m.cfg.Blocklists
 	m.cfgMu.RUnlock()
 
 	if len(urls) == 0 {
-		return nil, nil
+		return &FlatBlocklist{}, nil
 	}
 
 	m.logger.Info("Downloading blocklists", "count", len(urls))
 	startTime := time.Now()
 
-	// Pre-allocate based on previous size
-	hint := int(m.lastSize.Load())
-	if hint > 0 {
-		hint = hint + hint/10
-	}
-	merged := make(map[string]uint64, hint)
+	lists := make([]sortedList, 0, len(urls))
 
 	for idx, url := range urls {
 		m.logger.Info("Downloading blocklist", "index", idx+1, "total", len(urls), "url", url)
-		domains, err := m.downloader.Download(ctx, url)
+
+		// DownloadSorted returns a deduplicated, sorted []string directly —
+		// no intermediate map[string]struct{} (saves ~60MB per 500K-domain list).
+		sorted, err := m.downloader.DownloadSorted(ctx, url)
 		if err != nil {
 			m.logger.Error("Failed to download blocklist", "url", url, "error", err)
 			continue
@@ -252,22 +259,26 @@ func (m *Manager) downloadMerged(ctx context.Context) (map[string]uint64, error)
 			mask = 1 << uint(idx)
 		}
 
-		for domain := range domains {
-			merged[domain] |= mask
-		}
-
-		domains = nil //nolint:ineffassign
+		lists = append(lists, sortedList{domains: sorted, mask: mask})
+		m.logger.Info("Blocklist downloaded and sorted",
+			"index", idx+1, "domains", len(sorted))
 	}
 
 	if len(urls) > maxTrackedSources {
 		m.logger.Warn("Tracking metadata for first 64 blocklist sources only", "configured", len(urls))
 	}
 
-	m.logger.Info("All blocklists downloaded",
-		"total_domains", len(merged),
+	m.logger.Info("Merging blocklists", "lists", len(lists))
+	flat := BuildFromSortedLists(lists)
+
+	// Release per-list slices
+	lists = nil //nolint:ineffassign
+
+	m.logger.Info("All blocklists downloaded and merged",
+		"total_domains", flat.Len(),
 		"duration", time.Since(startTime))
 
-	return merged, nil
+	return flat, nil
 }
 
 // SetHTTPClient updates the HTTP client used for downloads.

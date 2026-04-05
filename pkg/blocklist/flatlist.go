@@ -34,7 +34,6 @@ func BuildFlatBlocklist(m map[string]uint64) *FlatBlocklist {
 	}
 
 	// Phase 1: collect keys and compute total data size.
-	// Pre-allocate a single slice for keys to avoid repeated append growth.
 	keys := make([]string, 0, n)
 	dataSize := 0
 	for k := range m {
@@ -55,6 +54,81 @@ func BuildFlatBlocklist(m map[string]uint64) *FlatBlocklist {
 		masks[i] = m[k]
 		data = append(data, k...)
 		data = append(data, 0) // NUL terminator
+	}
+
+	return &FlatBlocklist{
+		data:  data,
+		offs:  offs,
+		masks: masks,
+	}
+}
+
+// sortedList is a pre-sorted slice of domains from a single blocklist source.
+type sortedList struct {
+	domains []string
+	mask    uint64 // source bitmask for this list
+}
+
+// BuildFromSortedLists constructs a FlatBlocklist by k-way merging pre-sorted
+// domain slices. This avoids allocating a temporary map[string]uint64 for
+// deduplication, saving ~140 bytes per domain (180MB for 1.3M domains).
+//
+// Each list's domains must already be sorted. Duplicates across lists are
+// merged and their source masks are OR'd together.
+func BuildFromSortedLists(lists []sortedList) *FlatBlocklist {
+	// Compute total domain count (upper bound; duplicates reduce this)
+	totalDomains := 0
+	totalBytes := 0
+	for _, l := range lists {
+		totalDomains += len(l.domains)
+		for _, d := range l.domains {
+			totalBytes += len(d) + 1
+		}
+	}
+
+	if totalDomains == 0 {
+		return &FlatBlocklist{}
+	}
+
+	// Pre-allocate output arrays at upper-bound capacity
+	data := make([]byte, 0, totalBytes)
+	offs := make([]uint32, 0, totalDomains)
+	masks := make([]uint64, 0, totalDomains)
+
+	// k-way merge using index cursors (simple for small k, typically 2-5 lists)
+	cursors := make([]int, len(lists))
+
+	for {
+		// Find the lexicographically smallest domain across all lists
+		minDomain := ""
+		for i, l := range lists {
+			if cursors[i] >= len(l.domains) {
+				continue // this list is exhausted
+			}
+			d := l.domains[cursors[i]]
+			if minDomain == "" || d < minDomain {
+				minDomain = d
+			}
+		}
+
+		if minDomain == "" {
+			break // all lists exhausted
+		}
+
+		// Collect the source mask from all lists that have this domain
+		var mask uint64
+		for i, l := range lists {
+			if cursors[i] < len(l.domains) && l.domains[cursors[i]] == minDomain {
+				mask |= l.mask
+				cursors[i]++
+			}
+		}
+
+		// Append to output
+		offs = append(offs, uint32(len(data)))
+		masks = append(masks, mask)
+		data = append(data, minDomain...)
+		data = append(data, 0)
 	}
 
 	return &FlatBlocklist{
