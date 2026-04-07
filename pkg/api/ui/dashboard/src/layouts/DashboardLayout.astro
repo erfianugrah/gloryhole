@@ -228,6 +228,13 @@ for (const link of navLinks) {
               </div>
             </div>
             <div class="text-[10px] text-muted-foreground/50 font-data" id="version-label">glory-hole</div>
+            <div class="flex items-center gap-1.5">
+              <span class="relative flex h-1.5 w-1.5">
+                <span id="uptime-ping" class="absolute inline-flex h-full w-full animate-ping rounded-full bg-muted-foreground opacity-75"></span>
+                <span id="uptime-dot" class="relative inline-flex h-1.5 w-1.5 rounded-full bg-muted-foreground"></span>
+              </span>
+              <span id="sidebar-uptime" class="text-[10px] font-data tabular-nums text-muted-foreground/50">--</span>
+            </div>
           </div>
         </div>
       </aside>
@@ -307,16 +314,51 @@ for (const link of navLinks) {
       }
     </script>
 
-    <!-- Health check -->
+    <!-- Health check + uptime ticker -->
     <script>
       (function () {
         const dot = document.getElementById("health-dot");
         const ping = document.getElementById("health-ping");
         const text = document.getElementById("health-text");
         const versionLabel = document.getElementById("version-label");
+        const uptimeDot = document.getElementById("uptime-dot");
+        const uptimePing = document.getElementById("uptime-ping");
+        const uptimeLabel = document.getElementById("sidebar-uptime");
         if (!dot || !ping || !text) return;
 
-        function setStatus(ok: boolean, version?: string) {
+        let uptimeSeconds = 0;
+        let uptimeFetchedAt = 0;
+
+        /** Parse Go-style duration "72h3m10s" into total seconds */
+        function parseGoUptime(dur: string): number {
+          const re = /(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?/;
+          const m = dur.match(re);
+          if (!m) return 0;
+          return (parseInt(m[1] || "0", 10) * 3600)
+            + (parseInt(m[2] || "0", 10) * 60)
+            + parseInt(m[3] || "0", 10);
+        }
+
+        /** Format seconds into human-readable uptime */
+        function formatUptime(totalSec: number): string {
+          const d = Math.floor(totalSec / 86400);
+          const h = Math.floor((totalSec % 86400) / 3600);
+          const m = Math.floor((totalSec % 3600) / 60);
+          const s = totalSec % 60;
+          if (d > 0) return `up ${d}d ${h}h ${m}m`;
+          if (h > 0) return `up ${h}h ${m}m ${s}s`;
+          if (m > 0) return `up ${m}m ${s}s`;
+          return `up ${s}s`;
+        }
+
+        /** Tick the uptime display every second using local clock offset */
+        function tickUptime() {
+          if (!uptimeFetchedAt || !uptimeLabel) return;
+          const elapsed = Math.floor((Date.now() - uptimeFetchedAt) / 1000);
+          uptimeLabel.textContent = formatUptime(uptimeSeconds + elapsed);
+        }
+
+        function setHealthStatus(ok: boolean) {
           const color = ok ? "bg-gh-green" : "bg-gh-red";
           const remove = ok ? "bg-gh-red" : "bg-gh-green";
           dot!.classList.remove("bg-muted-foreground", remove);
@@ -324,24 +366,47 @@ for (const link of navLinks) {
           ping!.classList.remove("bg-muted-foreground", remove);
           ping!.classList.add(color);
           text!.textContent = ok ? "HEALTHY" : "UNHEALTHY";
-          if (version && versionLabel) {
-            versionLabel.textContent = `glory-hole ${version}`;
-          }
+        }
+
+        function setUptimeStatus(ok: boolean) {
+          if (!uptimeDot || !uptimePing) return;
+          const color = ok ? "bg-gh-green" : "bg-gh-red";
+          const remove = ok ? "bg-gh-red" : "bg-gh-green";
+          uptimeDot.classList.remove("bg-muted-foreground", remove);
+          uptimeDot.classList.add(color);
+          uptimePing.classList.remove("bg-muted-foreground", remove);
+          uptimePing.classList.add(color);
         }
 
         async function checkHealth() {
           try {
             const res = await fetch("/api/health", { cache: "no-store" });
-            if (!res.ok) { setStatus(false); return; }
+            if (!res.ok) { setHealthStatus(false); setUptimeStatus(false); return; }
             const data = await res.json();
-            setStatus(true, data.version);
+            setHealthStatus(true);
+            setUptimeStatus(true);
+            if (data.version && versionLabel) {
+              versionLabel.textContent = `glory-hole ${data.version}`;
+            }
+            if (data.uptime) {
+              uptimeSeconds = parseGoUptime(data.uptime);
+              uptimeFetchedAt = Date.now();
+              tickUptime();
+            }
           } catch {
-            setStatus(false);
+            setHealthStatus(false);
+            setUptimeStatus(false);
           }
         }
 
         checkHealth();
         setInterval(checkHealth, 30_000);
+        setInterval(tickUptime, 1_000);
+
+        // Re-check immediately when tab becomes visible
+        document.addEventListener("visibilitychange", () => {
+          if (document.visibilityState === "visible") checkHealth();
+        });
       })();
     </script>
 
