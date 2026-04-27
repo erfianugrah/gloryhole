@@ -88,7 +88,7 @@ func TestServeDNS_ConditionalForwardingErrorPath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create RuleEvaluator: %v", err)
 	}
-	handler.RuleEvaluator = evaluator
+	handler.SetRuleEvaluator(evaluator)
 
 	w := &mockResponseWriter{
 		remoteAddr: &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 12345},
@@ -198,7 +198,7 @@ func TestNewServer_CacheEnabledSuccess(t *testing.T) {
 	}
 
 	// Cache should be set successfully
-	if handler.Cache == nil {
+	if handler.getCache() == nil {
 		t.Error("Expected cache to be initialized")
 	}
 }
@@ -245,7 +245,7 @@ func TestNewServer_CacheDisabled(t *testing.T) {
 	}
 
 	// Cache should not be set
-	if handler.Cache != nil {
+	if handler.getCache() != nil {
 		t.Error("Expected cache to be nil when disabled")
 	}
 }

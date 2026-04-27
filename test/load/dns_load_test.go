@@ -370,8 +370,8 @@ func runLoadTest(t *testing.T, cfg LoadTestConfig) LoadTestResult {
 	// Get cache statistics if enabled
 	var cacheHits, cacheMisses uint64
 	var cacheHitRate float64
-	if cfg.CacheEnabled && handler.Cache != nil {
-		stats := handler.Cache.Stats()
+	if cfg.CacheEnabled && handler.GetCache() != nil {
+		stats := handler.GetCache().Stats()
 		cacheHits = stats.Hits
 		cacheMisses = stats.Misses
 		cacheHitRate = stats.HitRate
@@ -508,8 +508,8 @@ func runLoadTestDuration(t *testing.T, cfg LoadTestConfig) LoadTestResult {
 	// Get cache statistics
 	var cacheHits, cacheMisses uint64
 	var cacheHitRate float64
-	if cfg.CacheEnabled && handler.Cache != nil {
-		stats := handler.Cache.Stats()
+	if cfg.CacheEnabled && handler.GetCache() != nil {
+		stats := handler.GetCache().Stats()
 		cacheHits = stats.Hits
 		cacheMisses = stats.Misses
 		cacheHitRate = stats.HitRate

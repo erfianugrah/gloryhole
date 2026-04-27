@@ -3,7 +3,7 @@ package dns
 import "github.com/miekg/dns"
 
 func (h *Handler) serveFromLocalRecords(w dns.ResponseWriter, msg *dns.Msg, domain string, qtype uint16, outcome *serveDNSOutcome) bool {
-	if h.LocalRecords == nil {
+	if h.getLocalRecords() == nil {
 		return false
 	}
 
@@ -31,7 +31,7 @@ func (h *Handler) serveFromLocalRecords(w dns.ResponseWriter, msg *dns.Msg, doma
 			return true
 		}
 	case dns.TypeCNAME:
-		if target, ttl, found := h.LocalRecords.LookupCNAME(domain); found {
+		if target, ttl, found := h.getLocalRecords().LookupCNAME(domain); found {
 			rr := &dns.CNAME{
 				Hdr: dns.RR_Header{
 					Name:   domain,
@@ -47,7 +47,7 @@ func (h *Handler) serveFromLocalRecords(w dns.ResponseWriter, msg *dns.Msg, doma
 			return true
 		}
 	case dns.TypeTXT:
-		if records := h.LocalRecords.LookupTXT(domain); len(records) > 0 {
+		if records := h.getLocalRecords().LookupTXT(domain); len(records) > 0 {
 			for _, rec := range records {
 				rr := &dns.TXT{
 					Hdr: dns.RR_Header{
@@ -65,7 +65,7 @@ func (h *Handler) serveFromLocalRecords(w dns.ResponseWriter, msg *dns.Msg, doma
 			return true
 		}
 	case dns.TypeMX:
-		if records := h.LocalRecords.LookupMX(domain); len(records) > 0 {
+		if records := h.getLocalRecords().LookupMX(domain); len(records) > 0 {
 			for _, rec := range records {
 				rr := &dns.MX{
 					Hdr: dns.RR_Header{
@@ -84,7 +84,7 @@ func (h *Handler) serveFromLocalRecords(w dns.ResponseWriter, msg *dns.Msg, doma
 			return true
 		}
 	case dns.TypePTR:
-		if records := h.LocalRecords.LookupPTR(domain); len(records) > 0 {
+		if records := h.getLocalRecords().LookupPTR(domain); len(records) > 0 {
 			for _, rec := range records {
 				rr := &dns.PTR{
 					Hdr: dns.RR_Header{
@@ -102,7 +102,7 @@ func (h *Handler) serveFromLocalRecords(w dns.ResponseWriter, msg *dns.Msg, doma
 			return true
 		}
 	case dns.TypeSRV:
-		if records := h.LocalRecords.LookupSRV(domain); len(records) > 0 {
+		if records := h.getLocalRecords().LookupSRV(domain); len(records) > 0 {
 			for _, rec := range records {
 				rr := &dns.SRV{
 					Hdr: dns.RR_Header{
@@ -123,7 +123,7 @@ func (h *Handler) serveFromLocalRecords(w dns.ResponseWriter, msg *dns.Msg, doma
 			return true
 		}
 	case dns.TypeNS:
-		if records := h.LocalRecords.LookupNS(domain); len(records) > 0 {
+		if records := h.getLocalRecords().LookupNS(domain); len(records) > 0 {
 			for _, rec := range records {
 				rr := &dns.NS{
 					Hdr: dns.RR_Header{
@@ -141,7 +141,7 @@ func (h *Handler) serveFromLocalRecords(w dns.ResponseWriter, msg *dns.Msg, doma
 			return true
 		}
 	case dns.TypeSOA:
-		if records := h.LocalRecords.LookupSOA(domain); len(records) > 0 {
+		if records := h.getLocalRecords().LookupSOA(domain); len(records) > 0 {
 			rec := records[0]
 			rr := &dns.SOA{
 				Hdr: dns.RR_Header{
@@ -164,7 +164,7 @@ func (h *Handler) serveFromLocalRecords(w dns.ResponseWriter, msg *dns.Msg, doma
 			return true
 		}
 	case dns.TypeCAA:
-		if records := h.LocalRecords.LookupCAA(domain); len(records) > 0 {
+		if records := h.getLocalRecords().LookupCAA(domain); len(records) > 0 {
 			for _, rec := range records {
 				rr := &dns.CAA{
 					Hdr: dns.RR_Header{
@@ -189,7 +189,7 @@ func (h *Handler) serveFromLocalRecords(w dns.ResponseWriter, msg *dns.Msg, doma
 }
 
 func (h *Handler) appendLocalARecords(msg *dns.Msg, domain string) bool {
-	ips, ttl, found := h.LocalRecords.LookupA(domain)
+	ips, ttl, found := h.getLocalRecords().LookupA(domain)
 	if !found {
 		return false
 	}
@@ -212,7 +212,7 @@ func (h *Handler) appendLocalARecords(msg *dns.Msg, domain string) bool {
 }
 
 func (h *Handler) resolveLocalCNAMEAsA(msg *dns.Msg, domain string) bool {
-	ips, ttl, found := h.LocalRecords.ResolveCNAME(domain, 10)
+	ips, ttl, found := h.getLocalRecords().ResolveCNAME(domain, 10)
 	if !found {
 		return false
 	}
@@ -235,7 +235,7 @@ func (h *Handler) resolveLocalCNAMEAsA(msg *dns.Msg, domain string) bool {
 }
 
 func (h *Handler) appendLocalAAAARecords(msg *dns.Msg, domain string) bool {
-	ips, ttl, found := h.LocalRecords.LookupAAAA(domain)
+	ips, ttl, found := h.getLocalRecords().LookupAAAA(domain)
 	if !found {
 		return false
 	}
@@ -258,7 +258,7 @@ func (h *Handler) appendLocalAAAARecords(msg *dns.Msg, domain string) bool {
 }
 
 func (h *Handler) resolveLocalCNAMEAsAAAA(msg *dns.Msg, domain string) bool {
-	ips, ttl, found := h.LocalRecords.ResolveCNAME(domain, 10)
+	ips, ttl, found := h.getLocalRecords().ResolveCNAME(domain, 10)
 	if !found {
 		return false
 	}

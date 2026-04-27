@@ -30,11 +30,12 @@ func (s *Server) authMiddleware(next http.Handler) http.Handler {
 		}
 
 		if s.authorizeRequest(r) {
-			// CSRF protection: mutating API calls must include a custom header.
-			// Browsers cannot send custom headers cross-origin without CORS preflight,
-			// so this blocks cross-site form submissions even with a valid session cookie.
-			if requiresCSRFCheck(r) && !hasCSRFHeader(r) {
-				s.writeError(w, http.StatusForbidden, "Missing required header")
+			// CSRF protection: mutating API calls authenticated by session cookie
+			// must include a valid X-CSRF-Token header bound to that session.
+			// API key / Basic auth callers are exempt — browsers don't auto-send
+			// Authorization headers, so they're not vulnerable to CSRF.
+			if requiresCSRFCheck(r) && !s.validateCSRFToken(r) {
+				s.writeError(w, http.StatusForbidden, "Invalid or missing CSRF token")
 				return
 			}
 			next.ServeHTTP(w, r)
@@ -293,10 +294,4 @@ func requiresCSRFCheck(r *http.Request) bool {
 	// If the caller used an API key or Basic auth, they're not vulnerable to CSRF
 	// because browsers don't automatically send Authorization headers.
 	return r.Header.Get("Authorization") == ""
-}
-
-// hasCSRFHeader checks for the X-Requested-With header.
-// This header cannot be sent cross-origin without CORS preflight approval.
-func hasCSRFHeader(r *http.Request) bool {
-	return r.Header.Get("X-Requested-With") != ""
 }

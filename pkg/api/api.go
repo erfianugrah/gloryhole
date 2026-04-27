@@ -144,6 +144,10 @@ func New(cfg *Config) *Server {
 	mux.HandleFunc("/health", s.handleLiveness)   // Simple liveness check
 	mux.HandleFunc("/ready", s.handleReadiness)   // Readiness check with components
 
+	// CSRF token (auth-required, GET only). Frontend fetches once after login,
+	// then sends X-CSRF-Token on all mutating /api/* calls.
+	mux.HandleFunc("GET /api/csrf-token", s.handleCSRFToken)
+
 	// Statistics
 	mux.HandleFunc("/api/stats", s.handleStats)
 	mux.HandleFunc("/api/stats/timeseries", s.handleStatsTimeSeries)
@@ -273,7 +277,7 @@ func New(cfg *Config) *Server {
 		Addr:         cfg.ListenAddress,
 		Handler:      handler,
 		ReadTimeout:  10 * time.Second,
-		WriteTimeout: 10 * time.Second,
+		WriteTimeout: 60 * time.Second,
 		IdleTimeout:  60 * time.Second,
 	}
 

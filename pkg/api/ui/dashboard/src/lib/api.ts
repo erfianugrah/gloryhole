@@ -1,19 +1,89 @@
 // ─── Glory-Hole API Client ───────────────────────────────────────────
 // Typed fetch wrappers for all /api/* endpoints.
 
+// Module-level CSRF token cache. Fetched lazily from /api/csrf-token on the
+// first mutating request, then reused for subsequent calls. Invalidated and
+// re-fetched on 403 responses (e.g. after session rotation/expiry).
+let csrfToken: string | null = null;
+let csrfTokenPromise: Promise<string> | null = null;
+
+const MUTATING_METHODS = new Set(["POST", "PUT", "DELETE", "PATCH"]);
+
+async function fetchCSRFToken(): Promise<string> {
+  // De-duplicate concurrent fetches.
+  if (csrfTokenPromise) return csrfTokenPromise;
+  csrfTokenPromise = (async () => {
+    const res = await fetch("/api/csrf-token", {
+      credentials: "same-origin",
+      headers: { Accept: "application/json" },
+    });
+    if (!res.ok) {
+      csrfTokenPromise = null;
+      throw new Error(`Failed to fetch CSRF token: ${res.status}`);
+    }
+    const data = (await res.json()) as { token: string };
+    csrfToken = data.token;
+    csrfTokenPromise = null;
+    return data.token;
+  })();
+  return csrfTokenPromise;
+}
+
+/** Force-refresh the cached CSRF token. Called after login or on 403 retry. */
+export async function refreshCSRFToken(): Promise<string> {
+  csrfToken = null;
+  csrfTokenPromise = null;
+  return fetchCSRFToken();
+}
+
+/** Clear the cached CSRF token (e.g. on logout). */
+export function clearCSRFToken(): void {
+  csrfToken = null;
+  csrfTokenPromise = null;
+}
+
 async function apiFetch<T>(
   path: string,
   init?: RequestInit
 ): Promise<T> {
-  const res = await fetch(path, {
-    credentials: "same-origin",
-    ...init,
-    headers: {
-      "Content-Type": "application/json",
-      "X-Requested-With": "glory-hole-dashboard",
-      ...init?.headers,
-    },
-  });
+  // Only set Content-Type when we're actually sending a body. Setting it on
+  // GET/DELETE-style requests is misleading and can trigger unnecessary CORS
+  // preflights for non-simple requests.
+  const method = (init?.method ?? "GET").toUpperCase();
+  const isMutating = MUTATING_METHODS.has(method);
+
+  const baseHeaders: Record<string, string> = {};
+  if (init?.body != null) {
+    baseHeaders["Content-Type"] = "application/json";
+  }
+  if (isMutating) {
+    const token = csrfToken ?? (await fetchCSRFToken().catch(() => ""));
+    if (token) baseHeaders["X-CSRF-Token"] = token;
+  }
+
+  const doFetch = (): Promise<Response> =>
+    fetch(path, {
+      credentials: "same-origin",
+      ...init,
+      headers: {
+        ...baseHeaders,
+        ...init?.headers,
+      },
+    });
+
+  let res = await doFetch();
+
+  // Retry once on 403 if mutating — token may have been rotated server-side.
+  if (res.status === 403 && isMutating) {
+    try {
+      const fresh = await refreshCSRFToken();
+      baseHeaders["X-CSRF-Token"] = fresh;
+      res = await doFetch();
+    } catch {
+      // fall through with original 403
+    }
+  }
+
   if (!res.ok) {
     const text = await res.text().catch(() => "");
     throw new Error(`API ${res.status}: ${text || res.statusText}`);

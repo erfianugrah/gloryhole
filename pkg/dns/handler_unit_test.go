@@ -33,7 +33,7 @@ func TestHandler_SetCache(t *testing.T) {
 
 	handler.SetCache(dnsCache)
 
-	if handler.Cache == nil {
+	if handler.getCache() == nil {
 		t.Error("SetCache() failed to set cache")
 	}
 }
@@ -52,7 +52,7 @@ func TestHandler_SetBlocklistManager(t *testing.T) {
 
 	handler.SetBlocklistManager(mgr)
 
-	if handler.BlocklistManager == nil {
+	if handler.getBlocklistManager() == nil {
 		t.Error("SetBlocklistManager() failed to set manager")
 	}
 }
@@ -76,7 +76,7 @@ func TestHandler_SetStorage(t *testing.T) {
 
 	handler.SetStorage(stor)
 
-	if handler.Storage == nil {
+	if handler.getStorage() == nil {
 		t.Error("SetStorage() failed to set storage")
 	}
 }
@@ -95,7 +95,7 @@ func TestHandler_SetForwarder(t *testing.T) {
 
 	handler.SetForwarder(fwd)
 
-	if handler.Forwarder == nil {
+	if handler.getForwarder() == nil {
 		t.Error("SetForwarder() failed to set forwarder")
 	}
 }
@@ -106,7 +106,7 @@ func TestHandler_SetLocalRecords(t *testing.T) {
 
 	handler.SetLocalRecords(mgr)
 
-	if handler.LocalRecords == nil {
+	if handler.getLocalRecords() == nil {
 		t.Error("SetLocalRecords() failed to set manager")
 	}
 }
@@ -117,7 +117,7 @@ func TestHandler_SetPolicyEngine(t *testing.T) {
 
 	handler.SetPolicyEngine(engine)
 
-	if handler.PolicyEngine == nil {
+	if handler.getPolicyEngine() == nil {
 		t.Error("SetPolicyEngine() failed to set engine")
 	}
 }

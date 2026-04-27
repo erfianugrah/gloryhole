@@ -11,6 +11,7 @@ import (
 	"net"
 	"os/exec"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"glory-hole/pkg/config"
@@ -46,6 +47,7 @@ type Supervisor struct {
 	// Restart tracking
 	restartCount    int
 	restartWindowAt time.Time
+	restarting      atomic.Bool // gate to prevent concurrent handleCrash invocations
 
 	// Paths (auto-detected or configured)
 	binaryPath   string
@@ -507,6 +509,15 @@ func (s *Supervisor) handleCrash(ctx context.Context) {
 		s.setState(StateDegraded, fmt.Errorf("external unbound unreachable at %s", s.listenAddr))
 		return
 	}
+
+	// Gate: only one restart attempt at a time. Both the process exit goroutine
+	// and the health check loop can call handleCrash concurrently — without this
+	// they'd race startProcess and stopProcess.
+	if !s.restarting.CompareAndSwap(false, true) {
+		s.logger.Debug("Restart already in progress, skipping duplicate handleCrash")
+		return
+	}
+	defer s.restarting.Store(false)
 
 	s.mu.Lock()
 	now := time.Now()

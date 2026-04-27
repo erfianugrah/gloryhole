@@ -16,11 +16,23 @@ import (
 type KillSwitchManager struct {
 	logger                 *slog.Logger
 	stopChan               chan struct{}
+	onReEnable             func()
 	blocklistDisabledUntil time.Time
 	policiesDisabledUntil  time.Time
 	mu                     sync.RWMutex
 	wg                     sync.WaitGroup
 	stopOnce               sync.Once
+}
+
+// SetOnReEnable registers a callback invoked when the blocklist or policies
+// auto-re-enable after a temporary disable. Used to invalidate stale cache
+// entries (upstream answers that should now be blocked).
+//
+// The callback is called from the monitor goroutine; keep it fast and non-blocking.
+func (k *KillSwitchManager) SetOnReEnable(fn func()) {
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	k.onReEnable = fn
 }
 
 // NewKillSwitchManager creates a new kill-switch manager
@@ -72,11 +84,15 @@ func (k *KillSwitchManager) monitorExpiration(ctx context.Context) {
 			if !blocklistDisabled && !blocklistLogged {
 				k.mu.RLock()
 				wasDisabled := !k.blocklistDisabledUntil.IsZero()
+				cb := k.onReEnable
 				k.mu.RUnlock()
 
 				if wasDisabled {
 					k.logger.Info("Blocklist auto-re-enabled after temporary disable")
 					blocklistLogged = true
+					if cb != nil {
+						cb()
+					}
 				}
 			}
 
@@ -84,11 +100,15 @@ func (k *KillSwitchManager) monitorExpiration(ctx context.Context) {
 			if !policiesDisabled && !policiesLogged {
 				k.mu.RLock()
 				wasDisabled := !k.policiesDisabledUntil.IsZero()
+				cb := k.onReEnable
 				k.mu.RUnlock()
 
 				if wasDisabled {
 					k.logger.Info("Policies auto-re-enabled after temporary disable")
 					policiesLogged = true
+					if cb != nil {
+						cb()
+					}
 				}
 			}
 

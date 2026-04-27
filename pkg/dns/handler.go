@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"glory-hole/pkg/blocklist"
@@ -72,105 +73,182 @@ type KillSwitchChecker interface {
 	IsPoliciesDisabled() (disabled bool, until time.Time)
 }
 
+// handlerDeps bundles all hot-reloadable dependencies for lock-free reads
+// on the DNS hot path. Writers (config reload) clone-and-swap via Set* methods.
+// Readers call get* accessors which perform a single atomic pointer load.
+type handlerDeps struct {
+	storage          storage.Storage
+	queryLogger      *QueryLogger
+	blocklistManager *blocklist.Manager
+	localRecords     *localrecords.Manager
+	policyEngine     *policy.Engine
+	ruleEvaluator    *forwarder.RuleEvaluator
+	fwd              *forwarder.Forwarder
+	cache            cache.Interface
+	configWatcher    *config.Watcher
+	killSwitch       KillSwitchChecker
+	decisionTrace    bool
+	blockPageIP      string
+	unboundBuffer    *unbound.ReplyBuffer
+	metrics          *telemetry.Metrics
+	logger           *logging.Logger
+}
+
 type Handler struct {
-	Storage            storage.Storage // Legacy: kept for backwards compatibility
-	QueryLogger        *QueryLogger    // New: worker pool for async query logging
-	BlocklistManager   *blocklist.Manager
-	Blocklist          map[string]struct{}
-	Overrides          map[string]net.IP
-	CNAMEOverrides     map[string]string
-	LocalRecords       *localrecords.Manager
-	PolicyEngine       *policy.Engine
-	RuleEvaluator      *forwarder.RuleEvaluator
-	Forwarder          *forwarder.Forwarder
-	Cache              cache.Interface
-	ConfigWatcher      *config.Watcher   // For kill-switch feature (hot-reload config access)
-	KillSwitch         KillSwitchChecker // For duration-based temporary disabling
-	DecisionTrace      bool
-	BlockPageIP        string               // If set, blocked domains resolve to this IP instead of NXDOMAIN
-	UnboundReplyBuffer *unbound.ReplyBuffer // dnstap reply buffer for inline enrichment
-	Metrics            *telemetry.Metrics
-	Logger             *logging.Logger
-	lookupMu           sync.RWMutex
+	deps atomic.Pointer[handlerDeps]
+
+	// Legacy blocklist maps — guarded by lookupMu.
+	Blocklist      map[string]struct{}
+	Overrides      map[string]net.IP
+	CNAMEOverrides map[string]string
+	lookupMu       sync.RWMutex
 }
 
 // NewHandler creates a new DNS handler
 func NewHandler() *Handler {
-	return &Handler{
+	h := &Handler{
 		Blocklist:      make(map[string]struct{}),
 		Overrides:      make(map[string]net.IP),
 		CNAMEOverrides: make(map[string]string),
 	}
+	h.deps.Store(&handlerDeps{})
+	return h
 }
 
-// SetForwarder sets the upstream DNS forwarder
+// clone returns a shallow copy of the current deps for clone-and-swap.
+func (h *Handler) clone() handlerDeps {
+	if d := h.deps.Load(); d != nil {
+		return *d
+	}
+	return handlerDeps{}
+}
+
+// --- Getters: single atomic load per call ---
+
+func (h *Handler) getStorage() storage.Storage          { return h.deps.Load().storage }
+func (h *Handler) getQueryLogger() *QueryLogger          { return h.deps.Load().queryLogger }
+func (h *Handler) getBlocklistManager() *blocklist.Manager { return h.deps.Load().blocklistManager }
+func (h *Handler) getLocalRecords() *localrecords.Manager { return h.deps.Load().localRecords }
+func (h *Handler) getPolicyEngine() *policy.Engine        { return h.deps.Load().policyEngine }
+func (h *Handler) getRuleEvaluator() *forwarder.RuleEvaluator { return h.deps.Load().ruleEvaluator }
+func (h *Handler) getForwarder() *forwarder.Forwarder     { return h.deps.Load().fwd }
+func (h *Handler) getCache() cache.Interface              { return h.deps.Load().cache }
+func (h *Handler) getConfigWatcher() *config.Watcher      { return h.deps.Load().configWatcher }
+func (h *Handler) getKillSwitch() KillSwitchChecker       { return h.deps.Load().killSwitch }
+func (h *Handler) getDecisionTrace() bool                 { return h.deps.Load().decisionTrace }
+func (h *Handler) getBlockPageIP() string                 { return h.deps.Load().blockPageIP }
+func (h *Handler) getUnboundBuffer() *unbound.ReplyBuffer { return h.deps.Load().unboundBuffer }
+func (h *Handler) getMetrics() *telemetry.Metrics         { return h.deps.Load().metrics }
+func (h *Handler) GetMetrics() *telemetry.Metrics         { return h.deps.Load().metrics }
+func (h *Handler) GetCache() cache.Interface              { return h.deps.Load().cache }
+func (h *Handler) getLogger() *logging.Logger             { return h.deps.Load().logger }
+
+// --- Setters: clone-and-swap (single writer assumed) ---
+
 func (h *Handler) SetForwarder(f *forwarder.Forwarder) {
-	h.Forwarder = f
+	d := h.clone()
+	d.fwd = f
+	h.deps.Store(&d)
 }
 
-// SetCache sets the DNS response cache
 func (h *Handler) SetCache(c cache.Interface) {
-	h.Cache = c
+	d := h.clone()
+	d.cache = c
+	h.deps.Store(&d)
 }
 
-// SetBlocklistManager sets the blocklist manager (lock-free, high performance)
 func (h *Handler) SetBlocklistManager(m *blocklist.Manager) {
-	h.BlocklistManager = m
+	d := h.clone()
+	d.blocklistManager = m
+	h.deps.Store(&d)
 }
 
-// SetStorage sets the query logging storage
 func (h *Handler) SetStorage(s storage.Storage) {
-	h.Storage = s
+	d := h.clone()
+	d.storage = s
+	h.deps.Store(&d)
 }
 
-// SetQueryLogger sets the query logger worker pool
 func (h *Handler) SetQueryLogger(ql *QueryLogger) {
-	h.QueryLogger = ql
+	d := h.clone()
+	d.queryLogger = ql
+	h.deps.Store(&d)
+}
+
+func (h *Handler) SetLocalRecords(l *localrecords.Manager) {
+	d := h.clone()
+	d.localRecords = l
+	h.deps.Store(&d)
+}
+
+func (h *Handler) SetPolicyEngine(e *policy.Engine) {
+	d := h.clone()
+	d.policyEngine = e
+	h.deps.Store(&d)
+}
+
+func (h *Handler) SetMetrics(m *telemetry.Metrics) {
+	d := h.clone()
+	d.metrics = m
+	h.deps.Store(&d)
+}
+
+func (h *Handler) SetLogger(l *logging.Logger) {
+	d := h.clone()
+	d.logger = l
+	h.deps.Store(&d)
+}
+
+func (h *Handler) SetKillSwitch(ks KillSwitchChecker) {
+	d := h.clone()
+	d.killSwitch = ks
+	h.deps.Store(&d)
+}
+
+func (h *Handler) SetDecisionTrace(enabled bool) {
+	d := h.clone()
+	d.decisionTrace = enabled
+	h.deps.Store(&d)
+}
+
+func (h *Handler) SetRuleEvaluator(re *forwarder.RuleEvaluator) {
+	d := h.clone()
+	d.ruleEvaluator = re
+	h.deps.Store(&d)
+}
+
+func (h *Handler) SetConfigWatcher(cw *config.Watcher) {
+	d := h.clone()
+	d.configWatcher = cw
+	h.deps.Store(&d)
+}
+
+func (h *Handler) SetBlockPageIP(ip string) {
+	d := h.clone()
+	d.blockPageIP = ip
+	h.deps.Store(&d)
+}
+
+func (h *Handler) SetUnboundReplyBuffer(rb *unbound.ReplyBuffer) {
+	d := h.clone()
+	d.unboundBuffer = rb
+	h.deps.Store(&d)
 }
 
 // enrichFromUnbound attempts to match dnstap reply data from the Unbound
 // reply buffer and populate the outcome with Unbound-specific fields.
 func (h *Handler) enrichFromUnbound(r *dns.Msg, outcome *serveDNSOutcome) {
-	if h.UnboundReplyBuffer == nil || len(r.Question) == 0 {
+	buf := h.getUnboundBuffer()
+	if buf == nil || len(r.Question) == 0 {
 		return
 	}
 	domain := r.Question[0].Name
 	qtype := dns.TypeToString[r.Question[0].Qtype]
-	if match := h.UnboundReplyBuffer.FindReply(domain, qtype, 500*time.Millisecond); match != nil {
+	if match := buf.FindReply(domain, qtype, 500*time.Millisecond); match != nil {
 		outcome.unboundCached = &match.CachedInUnbound
 		outcome.unboundDuration = &match.DurationMs
 		outcome.unboundRespSize = &match.ResponseSize
 	}
-}
-
-// SetLocalRecords sets the local DNS records manager
-func (h *Handler) SetLocalRecords(l *localrecords.Manager) {
-	h.LocalRecords = l
-}
-
-// SetPolicyEngine sets the policy engine
-func (h *Handler) SetPolicyEngine(e *policy.Engine) {
-	h.PolicyEngine = e
-}
-
-// SetMetrics sets the metrics collector
-func (h *Handler) SetMetrics(m *telemetry.Metrics) {
-	h.Metrics = m
-}
-
-// SetLogger sets the logger
-func (h *Handler) SetLogger(l *logging.Logger) {
-	h.Logger = l
-}
-
-// SetKillSwitch sets the kill-switch manager for duration-based temporary disabling
-func (h *Handler) SetKillSwitch(ks KillSwitchChecker) {
-	h.KillSwitch = ks
-}
-
-// SetDecisionTrace enables or disables decision trace capture.
-func (h *Handler) SetDecisionTrace(enabled bool) {
-	h.DecisionTrace = enabled
 }
 
 // writeMsg writes a DNS message to the response writer with error handling.
@@ -208,11 +286,12 @@ func isUDP(w dns.ResponseWriter) bool {
 // With policy-first evaluation, cache only contains upstream responses.
 // Policy and blocklist decisions are NOT cached - they are evaluated fresh every time.
 func (h *Handler) serveFromCache(ctx context.Context, w dns.ResponseWriter, r, msg *dns.Msg, trace *blockTraceRecorder, outcome *serveDNSOutcome) bool {
-	if h.Cache == nil {
+	c := h.getCache()
+	if c == nil {
 		return false
 	}
 
-	cachedResp, cachedTrace := h.Cache.GetWithTrace(ctx, r)
+	cachedResp, cachedTrace := c.GetWithTrace(ctx, r)
 	if cachedResp == nil {
 		return false
 	}
@@ -241,7 +320,7 @@ func (h *Handler) serveFromCache(ctx context.Context, w dns.ResponseWriter, r, m
 func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) {
 	startTime := time.Now()
 	outcome := getOutcome()
-	trace := newBlockTraceRecorder(h.DecisionTrace)
+	trace := newBlockTraceRecorder(h.getDecisionTrace())
 	clientIP := getClientIP(w)
 
 	defer func() {
@@ -278,11 +357,11 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 
 	// Resolve feature toggles (permanent config + temporary kill-switches)
 	enablePolicies, enableBlocklist := h.resolveFeatureToggles()
-	if h.KillSwitch != nil {
-		if disabled, _ := h.KillSwitch.IsBlocklistDisabled(); disabled {
+	if ks := h.getKillSwitch(); ks != nil {
+		if disabled, _ := ks.IsBlocklistDisabled(); disabled {
 			enableBlocklist = false
 		}
-		if disabled, _ := h.KillSwitch.IsPoliciesDisabled(); disabled {
+		if disabled, _ := ks.IsPoliciesDisabled(); disabled {
 			enablePolicies = false
 		}
 	}
@@ -291,7 +370,7 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 	// This ensures correct behavior with policy ordering, multiple matches, and toggles.
 	// ALLOW/FORWARD actions forward to upstream and cache the upstream response.
 	// BLOCK/REDIRECT return immediately without caching.
-	if enablePolicies && h.PolicyEngine != nil && h.PolicyEngine.Count() > 0 {
+	if pe := h.getPolicyEngine(); enablePolicies && pe != nil && pe.Count() > 0 {
 		if h.handlePolicies(ctx, w, r, msg, domain, clientIP, qtype, qtypeLabel, trace, outcome) {
 			return
 		}
@@ -325,9 +404,13 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 }
 
 func (h *Handler) asyncLogQuery(startTime time.Time, r *dns.Msg, clientIP string, trace *blockTraceRecorder, outcome *serveDNSOutcome) {
+	ql := h.getQueryLogger()
+	st := h.getStorage()
+	lg := h.getLogger()
+
 	// Use QueryLogger if available (new worker pool pattern)
 	// Fall back to direct Storage for backwards compatibility
-	if h.QueryLogger == nil && h.Storage == nil {
+	if ql == nil && st == nil {
 		return
 	}
 
@@ -358,8 +441,8 @@ func (h *Handler) asyncLogQuery(startTime time.Time, r *dns.Msg, clientIP string
 	}
 
 	// New path: use worker pool (no goroutine spawn)
-	if h.QueryLogger != nil {
-		if err := h.QueryLogger.LogAsync(queryLog); err != nil && h.Logger != nil {
+	if ql != nil {
+		if err := ql.LogAsync(queryLog); err != nil && lg != nil {
 			// Buffer full - already logged by QueryLogger
 			_ = err
 		}
@@ -370,12 +453,12 @@ func (h *Handler) asyncLogQuery(startTime time.Time, r *dns.Msg, clientIP string
 	// Lazy-initialize on first use to avoid waste when QueryLogger is active.
 	initLegacyLog()
 	select {
-	case legacyLogCh <- legacyLogRequest{storage: h.Storage, log: queryLog, logger: h.Logger}:
+	case legacyLogCh <- legacyLogRequest{storage: st, log: queryLog, logger: lg}:
 		// Sent to worker
 	default:
 		// Buffer full, log warning (rare under normal load)
-		if h.Logger != nil {
-			h.Logger.Warn("Legacy log buffer full, query log dropped",
+		if lg != nil {
+			lg.Warn("Legacy log buffer full, query log dropped",
 				"domain", domain)
 		}
 	}
@@ -384,10 +467,11 @@ func (h *Handler) asyncLogQuery(startTime time.Time, r *dns.Msg, clientIP string
 func (h *Handler) resolveFeatureToggles() (enablePolicies, enableBlocklist bool) {
 	enablePolicies = true
 	enableBlocklist = true
-	if h.ConfigWatcher == nil {
+	cw := h.getConfigWatcher()
+	if cw == nil {
 		return
 	}
-	cfg := h.ConfigWatcher.Config()
+	cfg := cw.Config()
 	return cfg.Server.EnablePolicies, cfg.Server.EnableBlocklist
 }
 

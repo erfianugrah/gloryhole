@@ -228,9 +228,9 @@ func (s *Server) handleUpdateBlockPage(w http.ResponseWriter, r *http.Request) {
 	// Hot-reload: update the DNS handler's BlockPageIP
 	if s.dnsHandler != nil {
 		if updated.BlockPage.Enabled && updated.BlockPage.BlockIP != "" {
-			s.dnsHandler.BlockPageIP = updated.BlockPage.BlockIP
+			s.dnsHandler.SetBlockPageIP(updated.BlockPage.BlockIP)
 		} else {
-			s.dnsHandler.BlockPageIP = ""
+			s.dnsHandler.SetBlockPageIP("")
 		}
 	}
 

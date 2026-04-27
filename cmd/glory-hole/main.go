@@ -224,12 +224,12 @@ func main() {
 	handler := dns.NewHandler()
 	handler.SetDecisionTrace(cfg.Server.DecisionTrace)
 	if cfg.BlockPage.Enabled && cfg.BlockPage.BlockIP != "" {
-		handler.BlockPageIP = cfg.BlockPage.BlockIP
+		handler.SetBlockPageIP(cfg.BlockPage.BlockIP)
 		logger.Info("Block page enabled", "block_ip", cfg.BlockPage.BlockIP)
 	}
 
 	// Set config watcher for kill-switch feature (hot-reload access)
-	handler.ConfigWatcher = cfgWatcher
+	handler.SetConfigWatcher(cfgWatcher)
 
 	// Initialize blocklist manager (create early so handler can reference it,
 	// but defer download until after Unbound is ready to avoid DNS resolution failures)
@@ -624,7 +624,7 @@ func main() {
 				"error", evalErr,
 			)
 		} else {
-			handler.RuleEvaluator = ruleEvaluator
+			handler.SetRuleEvaluator(ruleEvaluator)
 			logger.Info("Conditional forwarding initialized",
 				"total_rules", ruleEvaluator.Count(),
 			)
@@ -641,6 +641,16 @@ func main() {
 	killSwitch := api.NewKillSwitchManager(logger.Logger) // Get underlying slog.Logger
 	handler.SetKillSwitch(killSwitch)
 
+	// When blocklist/policies auto-re-enable, invalidate cache entries that
+	// hold upstream answers for domains that should now be blocked.
+	// The closure captures dnsCache by reference — reassignments in OnChange
+	// (cache reload) are observed via the variable, so we re-check on each call.
+	killSwitch.SetOnReEnable(func() {
+		if dnsCache != nil {
+			dnsCache.ClearBlocklistDecisions()
+		}
+	})
+
 	// Initialize Unbound recursive resolver (optional)
 	var unboundSupervisor *unbound.Supervisor
 
@@ -654,7 +664,7 @@ func main() {
 
 		// Wire dnstap callback: writes to storage and populates the reply buffer
 		replyBuffer := unbound.NewReplyBuffer(2000)
-		handler.UnboundReplyBuffer = replyBuffer
+		handler.SetUnboundReplyBuffer(replyBuffer)
 
 		unboundSupervisor.SetDnstapCallback(func(entry *unbound.UnboundQueryLog) {
 			// Feed the reply buffer for inline enrichment of Glory-Hole's query log
@@ -724,7 +734,7 @@ func main() {
 
 	// Create DNS server
 	server := dns.NewServer(cfg, handler, logger, metrics)
-	dnsCache = handler.Cache
+	// dnsCache starts nil; initialized in OnChange when cache config enables it
 
 	// Create API server
 	apiServer := api.New(&api.Config{
@@ -732,7 +742,7 @@ func main() {
 		Storage:           stor,
 		BlocklistManager:  blocklistMgr,
 		PolicyEngine:      policyEngine,
-		Cache:             handler.Cache,     // DNS cache for purge operations
+		Cache:             dnsCache,          // DNS cache for purge operations
 		DNSHandler:        handler,           // DNS handler for DNS-over-HTTPS (DoH) queries
 		UnboundSupervisor: unboundSupervisor, // Unbound process supervisor (nil if disabled)
 		Logger:            logger.Logger,     // Get underlying slog.Logger
@@ -844,11 +854,11 @@ func main() {
 				if err != nil {
 					logger.Error("Failed to reload conditional forwarding", "error", err)
 				} else {
-					handler.RuleEvaluator = ruleEvaluator
+					handler.SetRuleEvaluator(ruleEvaluator)
 					logger.Info("Conditional forwarding reloaded", "total_rules", ruleEvaluator.Count())
 				}
 			} else {
-				handler.RuleEvaluator = nil
+				handler.SetRuleEvaluator(nil)
 				logger.Info("Conditional forwarding disabled")
 			}
 		}

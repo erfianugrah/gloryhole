@@ -1243,30 +1243,38 @@ func (s *SQLiteStorage) Cleanup(ctx context.Context, olderThan time.Time) error 
 	)
 
 	// Clean up orphaned summary table entries
-	_, _ = s.db.ExecContext(ctx, `
+	if _, err := s.db.ExecContext(ctx, `
 		DELETE FROM domain_stats
 		WHERE NOT EXISTS (
 			SELECT 1 FROM queries WHERE queries.domain = domain_stats.domain LIMIT 1
 		)
-	`)
+	`); err != nil {
+		slog.Default().Error("Cleanup orphaned domain_stats failed", "error", err)
+	}
 
-	_, _ = s.db.ExecContext(ctx, `
+	if _, err := s.db.ExecContext(ctx, `
 		DELETE FROM client_stats
 		WHERE NOT EXISTS (
 			SELECT 1 FROM queries WHERE queries.client_ip = client_stats.client_ip LIMIT 1
 		)
-	`)
+	`); err != nil {
+		slog.Default().Error("Cleanup orphaned client_stats failed", "error", err)
+	}
 
-	_, _ = s.db.ExecContext(ctx, `
+	if _, err := s.db.ExecContext(ctx, `
 		DELETE FROM hourly_stats WHERE hour < ?
-	`, FormatTimestamp(olderThan))
+	`, FormatTimestamp(olderThan)); err != nil {
+		slog.Default().Error("Cleanup hourly_stats failed", "error", err)
+	}
 
 	// Clean up old Unbound dnstap entries
-	_, _ = s.db.ExecContext(ctx, `
+	if _, err := s.db.ExecContext(ctx, `
 		DELETE FROM unbound_queries WHERE rowid IN (
 			SELECT rowid FROM unbound_queries WHERE timestamp < ? LIMIT 50000
 		)
-	`, olderThan)
+	`, FormatTimestamp(olderThan)); err != nil {
+		slog.Default().Error("Cleanup unbound_queries failed", "error", err)
+	}
 
 	// Incremental vacuum to reclaim space
 	if totalDeleted > 10000 {

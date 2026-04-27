@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { T } from "@/lib/typography";
+import { formatBytes, formatUptime } from "@/lib/format";
 import type { UnboundStatus, UnboundStats } from "@/lib/api";
 import {
   fetchUnboundStatus,
@@ -13,22 +14,6 @@ import {
   reloadUnbound,
   flushUnboundCache,
 } from "@/lib/api";
-
-function formatUptime(seconds: number): string {
-  const d = Math.floor(seconds / 86400);
-  const h = Math.floor((seconds % 86400) / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  if (d > 0) return `${d}d ${h}h ${m}m`;
-  if (h > 0) return `${h}h ${m}m`;
-  return `${m}m`;
-}
-
-function formatBytes(bytes: number): string {
-  if (bytes >= 1_073_741_824) return `${(bytes / 1_073_741_824).toFixed(1)} GB`;
-  if (bytes >= 1_048_576) return `${(bytes / 1_048_576).toFixed(1)} MB`;
-  if (bytes >= 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${bytes} B`;
-}
 
 function stateColor(state: string): string {
   switch (state) {
@@ -66,9 +51,13 @@ export function ResolverOverviewPage() {
 
   useEffect(() => {
     loadData();
+  }, [loadData]);
+
+  useEffect(() => {
+    if (!status?.enabled) return;
     const interval = setInterval(loadData, 10_000);
     return () => clearInterval(interval);
-  }, [loadData]);
+  }, [loadData, status?.enabled]);
 
   function showSuccess(msg: string) {
     setSuccess(msg);

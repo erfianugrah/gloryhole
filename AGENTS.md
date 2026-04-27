@@ -70,7 +70,7 @@ make docker-push    # Build and push main image to DockerHub
 ## Security
 
 - API has per-IP rate limiting (5/min login, 60/s API) in `pkg/api/middleware_ratelimit.go`
-- CSRF protection via `X-Requested-With` header on mutating `/api/*` calls
+- CSRF protection via per-session double-submit token: frontend fetches `/api/csrf-token` after login, sends `X-CSRF-Token` on mutating `/api/*` calls. API key / Basic auth callers are exempt (browsers don't auto-send Authorization). Session cookies are `SameSite=Strict`.
 - Trusted proxy config (`trusted_proxies` in ServerConfig) gates X-Forwarded-For trust
 - Unbound config template inputs are sanitized before rendering (reject newlines/quotes)
 - All request bodies have `MaxBytesReader` limits

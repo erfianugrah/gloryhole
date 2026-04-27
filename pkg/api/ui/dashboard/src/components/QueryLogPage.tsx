@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { Search, X, ChevronRight, ChevronsDownUp, RefreshCw } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -108,6 +108,7 @@ export function QueryLogPage() {
   const [error, setError] = useState<string | null>(null);
 
   // Filters
+  const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [range, setRange] = useState("24h");
@@ -165,9 +166,16 @@ export function QueryLogPage() {
     };
   }, [loadData, refreshInterval]);
 
-  // Reset page when filters change
+  // Debounce search input
+  useEffect(() => {
+    const timer = setTimeout(() => setSearch(searchInput), 300);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
+
+  // Reset page and expanded rows when filters change
   useEffect(() => {
     setPage(1);
+    setExpandedIds(new Set());
   }, [search, statusFilter, range]);
 
   return (
@@ -193,13 +201,13 @@ export function QueryLogPage() {
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 placeholder="Search domain..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
                 className="pl-9 font-data"
               />
-              {search && (
+              {searchInput && (
                 <button
-                  onClick={() => setSearch("")}
+                  onClick={() => setSearchInput("")}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                 >
                   <X className="h-3 w-3" />
@@ -319,14 +327,13 @@ export function QueryLogPage() {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  queries.map((q, i) => {
-                    const isExpanded = expandedIds.has(i);
+                  queries.map((q) => {
+                    const isExpanded = expandedIds.has(q.id);
                     return (
-                      <>
+                      <React.Fragment key={q.id}>
                         <TableRow
-                          key={i}
                           className="cursor-pointer"
-                          onClick={() => toggleExpanded(i)}
+                          onClick={() => toggleExpanded(q.id)}
                         >
                           <TableCell className="w-6 px-2">
                             <ChevronRight
@@ -361,13 +368,13 @@ export function QueryLogPage() {
                           </TableCell>
                         </TableRow>
                         {isExpanded && (
-                          <TableRow key={`${i}-detail`}>
+                          <TableRow>
                             <TableCell colSpan={7} className="bg-gh-950/60 border-l-2 border-l-gh-purple/40 px-6 py-4">
                               <QueryDetail query={q} />
                             </TableCell>
                           </TableRow>
                         )}
-                      </>
+                      </React.Fragment>
                     );
                   })
                 )}
@@ -376,7 +383,7 @@ export function QueryLogPage() {
 
             <TablePagination
               page={page}
-              totalPages={Math.max(1, Math.ceil(queries.length > 0 ? 1000 : 0 / pageSize))}
+              totalPages={Math.max(1, queries.length === pageSize ? page + 1 : page)}
               pageSize={pageSize}
               pageSizeOptions={[25, 50, 100]}
               hasPrev={page > 1}

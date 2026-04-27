@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Search, X, Pencil, Plus, Trash2, Users } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -37,7 +37,9 @@ export function ClientsPage() {
   const [clients, setClients] = useState<ClientSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
+  const searchTimer = useRef<ReturnType<typeof setTimeout>>();
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(50);
   const [editDialog, setEditDialog] = useState(false);
@@ -91,6 +93,13 @@ export function ClientsPage() {
   useEffect(() => { loadData(); }, [loadData]);
   useEffect(() => { setPage(1); }, [search]);
 
+  function handleSearchChange(value: string) {
+    setSearchInput(value);
+    clearTimeout(searchTimer.current);
+    searchTimer.current = setTimeout(() => setSearch(value), 300);
+  }
+  useEffect(() => () => clearTimeout(searchTimer.current), []);
+
   function openEdit(client: ClientSummary) {
     setEditingClient(client);
     setEditName(client.display_name);
@@ -134,12 +143,12 @@ export function ClientsPage() {
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               placeholder="Search clients..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              value={searchInput}
+              onChange={(e) => handleSearchChange(e.target.value)}
               className="pl-9 font-data"
             />
-            {search && (
-              <button onClick={() => setSearch("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+            {searchInput && (
+              <button onClick={() => { setSearchInput(""); setSearch(""); clearTimeout(searchTimer.current); }} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
                 <X className="h-3 w-3" />
               </button>
             )}

@@ -276,6 +276,7 @@ export function UnboundQueryLogPage() {
               </Table>
               <TablePagination
                 page={page}
+                totalPages={Math.max(1, queries.length === pageSize ? page + 1 : page)}
                 pageSize={pageSize}
                 pageSizeOptions={[25, 50, 100]}
                 hasPrev={page > 1}

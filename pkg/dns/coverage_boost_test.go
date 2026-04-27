@@ -368,7 +368,7 @@ func TestServeDNS_ConditionalForwardingEvaluation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create RuleEvaluator: %v", err)
 	}
-	handler.RuleEvaluator = evaluator
+	handler.SetRuleEvaluator(evaluator)
 
 	w := &mockResponseWriter{
 		remoteAddr: &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 12345},

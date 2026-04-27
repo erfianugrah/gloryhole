@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { Plus, Trash2, Pencil, Download, Upload, Play, Wand2, Info } from "lucide-react";
 import {
   ConditionEditor,
@@ -120,6 +120,11 @@ export function PoliciesPage() {
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  const policySummaries = useMemo(
+    () => new Map(policies.map((p) => [p.id, expressionSummary(p.logic)])),
+    [policies],
+  );
 
   async function handleTogglePolicies() {
     const active = isPoliciesActive(features);
@@ -432,7 +437,7 @@ export function PoliciesPage() {
               </TableHeader>
               <TableBody>
                 {policies.map((policy) => {
-                  const summary = expressionSummary(policy.logic);
+                  const summary = policySummaries.get(policy.id) ?? null;
                   return (
                     <TableRow key={policy.id} data-testid="policy-row">
                       <TableCell className={T.tableCellMono}>
@@ -538,7 +543,10 @@ export function PoliciesPage() {
               </div>
               <div className="space-y-2">
                 <Label className={T.formLabel}>Action</Label>
-                <Select value={formAction} onValueChange={setFormAction}>
+                <Select value={formAction} onValueChange={(v) => {
+                  setFormAction(v);
+                  if (v !== "REDIRECT" && v !== "FORWARD") setFormActionData("");
+                }}>
                   <SelectTrigger data-testid="policy-action">
                     <SelectValue />
                   </SelectTrigger>

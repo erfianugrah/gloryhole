@@ -84,7 +84,7 @@ func BenchmarkDNSQuery_CacheHit(b *testing.B) {
 		},
 		A: net.ParseIP("192.168.1.1"),
 	})
-	handler.Cache.Set(context.Background(), msg, resp)
+	handler.GetCache().Set(context.Background(), msg, resp)
 
 	writer := &mockResponseWriter{
 		remoteAddr: &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 12345},

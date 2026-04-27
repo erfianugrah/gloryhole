@@ -36,6 +36,13 @@ import {
 } from "@/components/ui/select";
 import { cn, STATUS_COLORS, CHART_PALETTE, CHART_TOOLTIP_STYLE } from "@/lib/utils";
 import { T } from "@/lib/typography";
+import {
+  formatNumber,
+  formatBytes,
+  formatTimeShort,
+  formatPercent,
+  formatMs,
+} from "@/lib/format";
 import type {
   Stats,
   TimeseriesBucket,
@@ -54,40 +61,6 @@ import {
 } from "@/lib/api";
 
 // ─── Helpers ────────────────────────────────────────────────────────
-
-function formatNumber(n: number): string {
-  if (n == null) return "0";
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
-  return n.toLocaleString();
-}
-
-function formatPercent(n: number): string {
-  if (n == null) return "0%";
-  return `${n.toFixed(1)}%`;
-}
-
-function formatMs(n: number): string {
-  if (n == null) return "0ms";
-  if (n < 1) return "<1ms";
-  return `${n.toFixed(1)}ms`;
-}
-
-function formatBytes(bytes: number): string {
-  if (bytes == null) return "0 KB";
-  if (bytes >= 1_073_741_824) return `${(bytes / 1_073_741_824).toFixed(1)} GB`;
-  if (bytes >= 1_048_576) return `${(bytes / 1_048_576).toFixed(0)} MB`;
-  return `${(bytes / 1_024).toFixed(0)} KB`;
-}
-
-function formatTimeShort(ts: string): string {
-  const d = new Date(ts);
-  return d.toLocaleTimeString("en-US", {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  });
-}
 
 const TIME_RANGES = [
   { value: "1h", label: "Last 1h", buckets: 12 },

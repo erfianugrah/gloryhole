@@ -19,13 +19,13 @@ func (h *Handler) handlePolicies(ctx context.Context, w dns.ResponseWriter, r, m
 		qtypeLabel,
 	)
 
-	matched, rule := h.PolicyEngine.Evaluate(policyCtx)
+	matched, rule := h.getPolicyEngine().Evaluate(policyCtx)
 	if !matched || rule == nil {
 		return false
 	}
 
-	if h.Logger != nil {
-		h.Logger.Info("Policy rule matched",
+	if lg := h.getLogger(); lg != nil {
+		lg.Info("Policy rule matched",
 			"rule", rule.Name,
 			"action", rule.Action,
 			"domain", domain,
@@ -51,9 +51,10 @@ func (h *Handler) handlePolicyBlock(ctx context.Context, w dns.ResponseWriter, r
 	outcome.blocked = true
 
 	// If block page is configured, return the block page IP instead of NXDOMAIN
-	if h.BlockPageIP != "" && len(r.Question) > 0 {
+	blockPageIP := h.getBlockPageIP()
+	if blockPageIP != "" && len(r.Question) > 0 {
 		qtype := r.Question[0].Qtype
-		blockIP := net.ParseIP(h.BlockPageIP)
+		blockIP := net.ParseIP(blockPageIP)
 		if blockIP != nil && (qtype == dns.TypeA || qtype == dns.TypeAAAA) {
 			outcome.responseCode = dns.RcodeSuccess
 			if qtype == dns.TypeA && blockIP.To4() != nil {
@@ -85,8 +86,8 @@ func (h *Handler) handlePolicyBlock(ctx context.Context, w dns.ResponseWriter, r
 		source:     "policy_engine",
 	})
 
-	if h.Logger != nil {
-		h.Logger.Debug("Policy blocked query",
+	if lg := h.getLogger(); lg != nil {
+		lg.Debug("Policy blocked query",
 			"rule", rule.Name,
 			"domain", domain,
 			"client_ip", clientIP)
@@ -111,9 +112,12 @@ func (h *Handler) handlePolicyAllow(ctx context.Context, w dns.ResponseWriter, r
 		}
 	})
 
-	if h.Forwarder == nil {
-		if h.Logger != nil {
-			h.Logger.Warn("Policy allow action but no forwarder configured",
+	fwd := h.getForwarder()
+	lg := h.getLogger()
+
+	if fwd == nil {
+		if lg != nil {
+			lg.Warn("Policy allow action but no forwarder configured",
 				"rule", rule.Name,
 				"domain", domain,
 				"client_ip", clientIP)
@@ -124,8 +128,8 @@ func (h *Handler) handlePolicyAllow(ctx context.Context, w dns.ResponseWriter, r
 		return true
 	}
 
-	if h.Logger != nil {
-		h.Logger.Warn("Policy ALLOW action bypasses blocklist checks - forwarding directly to upstream",
+	if lg != nil {
+		lg.Warn("Policy ALLOW action bypasses blocklist checks - forwarding directly to upstream",
 			"rule", rule.Name,
 			"domain", domain,
 			"client_ip", clientIP,
@@ -133,11 +137,11 @@ func (h *Handler) handlePolicyAllow(ctx context.Context, w dns.ResponseWriter, r
 	}
 
 	forwardStart := time.Now()
-	resp, err := h.Forwarder.Forward(ctx, r)
+	resp, err := fwd.Forward(ctx, r)
 	outcome.upstreamDuration = time.Since(forwardStart)
 	if err != nil {
-		if h.Logger != nil {
-			h.Logger.Error("Failed to forward allowed query",
+		if lg != nil {
+			lg.Error("Failed to forward allowed query",
 				"rule", rule.Name,
 				"domain", domain,
 				"client_ip", clientIP,
@@ -149,7 +153,7 @@ func (h *Handler) handlePolicyAllow(ctx context.Context, w dns.ResponseWriter, r
 		return true
 	}
 
-	upstreams := h.Forwarder.Upstreams()
+	upstreams := fwd.Upstreams()
 	if len(upstreams) > 0 {
 		outcome.upstream = upstreams[0]
 	}
@@ -170,8 +174,8 @@ func (h *Handler) handlePolicyAllow(ctx context.Context, w dns.ResponseWriter, r
 	// Enrich with Unbound dnstap data (best-effort inline correlation)
 	h.enrichFromUnbound(r, outcome)
 
-	if h.Cache != nil {
-		h.Cache.Set(ctx, r, resp)
+	if c := h.getCache(); c != nil {
+		c.Set(ctx, r, resp)
 	}
 
 	outcome.responseCode = resp.Rcode
@@ -182,8 +186,8 @@ func (h *Handler) handlePolicyAllow(ctx context.Context, w dns.ResponseWriter, r
 func (h *Handler) handlePolicyRedirect(ctx context.Context, w dns.ResponseWriter, r, msg *dns.Msg, rule *policy.Rule, domain, clientIP string, qtype uint16, qtypeLabel string, trace *blockTraceRecorder, outcome *serveDNSOutcome) bool {
 	targetIP := net.ParseIP(rule.ActionData)
 	if targetIP == nil {
-		if h.Logger != nil {
-			h.Logger.Error("Policy redirect has invalid IP address",
+		if lg := h.getLogger(); lg != nil {
+			lg.Error("Policy redirect has invalid IP address",
 				"rule", rule.Name,
 				"domain", domain,
 				"client_ip", clientIP,
@@ -207,8 +211,8 @@ func (h *Handler) handlePolicyRedirect(ctx context.Context, w dns.ResponseWriter
 		}
 	})
 
-	if h.Logger != nil {
-		h.Logger.Debug("Policy redirecting query",
+	if lg := h.getLogger(); lg != nil {
+		lg.Debug("Policy redirecting query",
 			"rule", rule.Name,
 			"domain", domain,
 			"client_ip", clientIP,
@@ -236,9 +240,12 @@ func (h *Handler) handlePolicyRedirect(ctx context.Context, w dns.ResponseWriter
 
 func (h *Handler) handlePolicyForward(ctx context.Context, w dns.ResponseWriter, r, msg *dns.Msg, rule *policy.Rule, domain, clientIP, qtypeLabel string, trace *blockTraceRecorder, outcome *serveDNSOutcome) bool {
 	upstreams := rule.GetUpstreams()
-	if len(upstreams) == 0 || h.Forwarder == nil {
-		if h.Logger != nil {
-			h.Logger.Error("Policy forward action has no upstreams configured",
+	fwd := h.getForwarder()
+	lg := h.getLogger()
+
+	if len(upstreams) == 0 || fwd == nil {
+		if lg != nil {
+			lg.Error("Policy forward action has no upstreams configured",
 				"rule", rule.Name,
 				"domain", domain,
 				"client_ip", clientIP)
@@ -260,8 +267,8 @@ func (h *Handler) handlePolicyForward(ctx context.Context, w dns.ResponseWriter,
 		}
 	})
 
-	if h.Logger != nil {
-		h.Logger.Debug("Policy forwarding query to specific upstreams",
+	if lg != nil {
+		lg.Debug("Policy forwarding query to specific upstreams",
 			"rule", rule.Name,
 			"domain", domain,
 			"client_ip", clientIP,
@@ -269,11 +276,11 @@ func (h *Handler) handlePolicyForward(ctx context.Context, w dns.ResponseWriter,
 	}
 
 	forwardStart := time.Now()
-	resp, err := h.Forwarder.ForwardWithUpstreams(ctx, r, upstreams)
+	resp, err := fwd.ForwardWithUpstreams(ctx, r, upstreams)
 	outcome.upstreamDuration = time.Since(forwardStart)
 	if err != nil {
-		if h.Logger != nil {
-			h.Logger.Error("Failed to forward query to policy upstreams",
+		if lg != nil {
+			lg.Error("Failed to forward query to policy upstreams",
 				"rule", rule.Name,
 				"domain", domain,
 				"client_ip", clientIP,
@@ -306,8 +313,8 @@ func (h *Handler) handlePolicyForward(ctx context.Context, w dns.ResponseWriter,
 	// Enrich with Unbound dnstap data (best-effort inline correlation)
 	h.enrichFromUnbound(r, outcome)
 
-	if h.Cache != nil {
-		h.Cache.Set(ctx, r, resp)
+	if c := h.getCache(); c != nil {
+		c.Set(ctx, r, resp)
 	}
 
 	outcome.responseCode = resp.Rcode

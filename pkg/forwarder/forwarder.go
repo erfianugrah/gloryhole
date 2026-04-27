@@ -29,14 +29,15 @@ type Forwarder struct {
 
 // NewForwarder creates a new DNS forwarder
 func NewForwarder(cfg *config.Config, logger *logging.Logger) *Forwarder {
-	if len(cfg.UpstreamDNSServers) == 0 {
-		// Default to Cloudflare and Google DNS
-		cfg.UpstreamDNSServers = []string{"1.1.1.1:53", "8.8.8.8:53"}
+	rawUpstreams := cfg.UpstreamDNSServers
+	if len(rawUpstreams) == 0 {
+		// Default to Cloudflare and Google DNS — don't mutate input config
+		rawUpstreams = []string{"1.1.1.1:53", "8.8.8.8:53"}
 	}
 
 	// Normalize upstream addresses (add :53 if port is missing)
-	upstreams := make([]string, len(cfg.UpstreamDNSServers))
-	for i, upstream := range cfg.UpstreamDNSServers {
+	upstreams := make([]string, len(rawUpstreams))
+	for i, upstream := range rawUpstreams {
 		if _, _, err := net.SplitHostPort(upstream); err != nil {
 			// No port specified, add default DNS port
 			upstreams[i] = net.JoinHostPort(upstream, "53")
@@ -56,8 +57,8 @@ func NewForwarder(cfg *config.Config, logger *logging.Logger) *Forwarder {
 	if cbCfg.TimeoutSeconds == 0 {
 		cbCfg.TimeoutSeconds = 30
 	}
-	// Circuit breaker enabled by default
-	if !cbCfg.Enabled && cbCfg.FailureThreshold == 0 {
+	// Circuit breaker enabled by default (unless explicitly disabled in config)
+	if !cbCfg.Enabled {
 		cbCfg.Enabled = true
 	}
 
@@ -111,6 +112,10 @@ func (f *Forwarder) Forward(ctx context.Context, r *dns.Msg) (*dns.Msg, error) {
 	var lastErr error
 
 	for i := 0; i < attempts; i++ {
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+
 		// Select upstream using round-robin (filters by health)
 		upstream, err := f.selectUpstream()
 		if err != nil {
@@ -205,6 +210,10 @@ func (f *Forwarder) ForwardTCP(ctx context.Context, r *dns.Msg) (*dns.Msg, error
 	var lastErr error
 
 	for i := 0; i < attempts; i++ {
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+
 		// Select upstream using round-robin (filters by health)
 		upstream, err := f.selectUpstream()
 		if err != nil {
@@ -270,6 +279,10 @@ func (f *Forwarder) ForwardWithUpstreams(ctx context.Context, r *dns.Msg, upstre
 	var lastErr error
 
 	for i := 0; i < attempts; i++ {
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+
 		// Select upstream (round-robin for multiple upstreams)
 		upstream := upstreams[i%len(upstreams)]
 
@@ -284,8 +297,25 @@ func (f *Forwarder) ForwardWithUpstreams(ctx context.Context, r *dns.Msg, upstre
 			"attempt", i+1,
 		)
 
-		// Forward the query
-		resp, rtt, err := client.ExchangeContext(ctx, r, upstream)
+		// Forward the query (with circuit breaker if available)
+		var resp *dns.Msg
+		var rtt time.Duration
+		var err error
+
+		if f.health != nil {
+			breaker := f.health.GetBreaker(upstream)
+			if breaker != nil {
+				err = breaker.Call(func() error {
+					var exchangeErr error
+					resp, rtt, exchangeErr = client.ExchangeContext(ctx, r, upstream)
+					return exchangeErr
+				})
+			} else {
+				resp, rtt, err = client.ExchangeContext(ctx, r, upstream)
+			}
+		} else {
+			resp, rtt, err = client.ExchangeContext(ctx, r, upstream)
+		}
 
 		// Return client to pool immediately after use
 		f.clientPool.Put(client)
@@ -357,9 +387,11 @@ func (f *Forwarder) SetRetries(retries int) {
 	f.retries = retries
 }
 
-// Upstreams returns the list of configured upstream servers
+// Upstreams returns a copy of the configured upstream servers
 func (f *Forwarder) Upstreams() []string {
-	return f.upstreams
+	out := make([]string, len(f.upstreams))
+	copy(out, f.upstreams)
+	return out
 }
 
 // min returns the minimum of two integers

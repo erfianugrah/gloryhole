@@ -191,7 +191,7 @@ func TestNewServer_NoUpstreamServers(t *testing.T) {
 	}
 
 	// Forwarder should not be set
-	if handler.Forwarder != nil {
+	if handler.getForwarder() != nil {
 		t.Error("Expected forwarder to be nil when no upstream servers configured")
 	}
 }

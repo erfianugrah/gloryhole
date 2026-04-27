@@ -23,7 +23,8 @@ type blockMetadata struct {
 
 // recordRateLimit captures rate limit violations and drops with consistent attributes.
 func (h *Handler) recordRateLimit(ctx context.Context, clientIP, qtypeLabel, action string, dropped bool) {
-    if h.Metrics == nil {
+    m := h.getMetrics()
+    if m == nil {
         return
     }
     attrs := make([]attribute.KeyValue, 0, 3)
@@ -36,15 +37,16 @@ func (h *Handler) recordRateLimit(ctx context.Context, clientIP, qtypeLabel, act
     if action != "" {
         attrs = append(attrs, attribute.String("action", action))
     }
-    h.Metrics.RateLimitViolations.Add(ctx, 1, metric.WithAttributes(attrs...))
+    m.RateLimitViolations.Add(ctx, 1, metric.WithAttributes(attrs...))
     if dropped {
-        h.Metrics.RateLimitDropped.Add(ctx, 1, metric.WithAttributes(attrs...))
+        m.RateLimitDropped.Add(ctx, 1, metric.WithAttributes(attrs...))
     }
 }
 
 // recordBlockedQuery increments the blocked-query counter with contextual attributes for better observability.
 func (h *Handler) recordBlockedQuery(ctx context.Context, meta blockMetadata) {
-    if h.Metrics == nil {
+    m := h.getMetrics()
+    if m == nil {
         return
     }
     attrs := make([]attribute.KeyValue, 0, 5)
@@ -66,10 +68,10 @@ func (h *Handler) recordBlockedQuery(ctx context.Context, meta blockMetadata) {
     }
 
     if len(attrs) == 0 {
-        h.Metrics.DNSBlockedQueries.Add(ctx, 1)
+        m.DNSBlockedQueries.Add(ctx, 1)
         return
     }
-    h.Metrics.DNSBlockedQueries.Add(ctx, 1, metric.WithAttributes(attrs...))
+    m.DNSBlockedQueries.Add(ctx, 1, metric.WithAttributes(attrs...))
 }
 
 func blocklistTraceSource(match blocklist.MatchResult) string {
@@ -134,7 +136,8 @@ func titleCase(value string) string {
 
 // recordForwardedQuery increments the forwarded-query counter tagged with path/upstream metadata.
 func (h *Handler) recordForwardedQuery(ctx context.Context, path, qtypeLabel, upstream string) {
-    if h.Metrics == nil {
+    m := h.getMetrics()
+    if m == nil {
         return
     }
     attrs := make([]attribute.KeyValue, 0, 3)
@@ -148,8 +151,8 @@ func (h *Handler) recordForwardedQuery(ctx context.Context, path, qtypeLabel, up
         attrs = append(attrs, attribute.String("upstream", upstream))
     }
     if len(attrs) == 0 {
-        h.Metrics.DNSForwardedQueries.Add(ctx, 1)
+        m.DNSForwardedQueries.Add(ctx, 1)
         return
     }
-    h.Metrics.DNSForwardedQueries.Add(ctx, 1, metric.WithAttributes(attrs...))
+    m.DNSForwardedQueries.Add(ctx, 1, metric.WithAttributes(attrs...))
 }

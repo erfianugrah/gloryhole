@@ -1,7 +1,6 @@
 package api
 
 import (
-	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -159,11 +158,11 @@ func (s *Server) handleDNSQuery(w http.ResponseWriter, r *http.Request) {
 		msg.SetRcode(dnsMsg, dns.RcodeServerFailure)
 		dohWriter.msg = msg
 	} else {
-		ctx := context.Background()
+		ctx := r.Context()
 
 		// Observability parity with UDP/TCP path
 		start := time.Now()
-		metrics := s.dnsHandler.Metrics
+		metrics := s.dnsHandler.GetMetrics()
 		if metrics != nil {
 			metrics.ActiveClients.Add(ctx, 1)
 			defer metrics.ActiveClients.Add(ctx, -1)
@@ -243,6 +242,10 @@ func (s *Server) parseDNSQueryGET(r *http.Request) (*dns.Msg, error) {
 
 	// Check for dns parameter (base64-encoded wire format)
 	if dnsParam := query.Get("dns"); dnsParam != "" {
+		// Reject oversized base64 payloads before allocating decode buffer (DoS mitigation)
+		if len(dnsParam) > 4096 {
+			return nil, fmt.Errorf("dns parameter too large (%d bytes)", len(dnsParam))
+		}
 		// Decode base64 URL-safe encoding
 		decoded, err := base64.RawURLEncoding.DecodeString(dnsParam)
 		if err != nil {

@@ -201,7 +201,7 @@ func WriteConfig(cfg *UnboundServerConfig, path string) error {
 
 	// Atomic write: tmp → rename
 	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, buf.Bytes(), 0644); err != nil {
+	if err := os.WriteFile(tmp, buf.Bytes(), 0640); err != nil {
 		return fmt.Errorf("write temp config: %w", err)
 	}
 	if err := os.Rename(tmp, path); err != nil {

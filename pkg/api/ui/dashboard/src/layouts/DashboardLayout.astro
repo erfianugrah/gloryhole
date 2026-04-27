@@ -331,12 +331,14 @@ for (const link of navLinks) {
 
         /** Parse Go-style duration "72h3m10s" into total seconds */
         function parseGoUptime(dur: string): number {
-          const re = /(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?/;
+          // Anchored so a stray prefix/suffix doesn't yield a partial match.
+          // Seconds support fractional values (Go emits e.g. "1.234s").
+          const re = /^(?:(\d+)h)?(?:(\d+)m)?(?:(\d+(?:\.\d+)?)s)?$/;
           const m = dur.match(re);
-          if (!m) return 0;
+          if (!m || m[0] === '') return 0;
           return (parseInt(m[1] || "0", 10) * 3600)
             + (parseInt(m[2] || "0", 10) * 60)
-            + parseInt(m[3] || "0", 10);
+            + Math.floor(parseFloat(m[3] || "0"));
         }
 
         /** Format seconds into human-readable uptime */

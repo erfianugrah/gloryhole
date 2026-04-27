@@ -212,8 +212,12 @@ func (d *Downloader) parseHostsFile(r io.Reader) (map[string]struct{}, error) {
 
 // extractDomain extracts a domain from various blocklist formats
 func (d *Downloader) extractDomain(line string) string {
-	// Strip inline comments (e.g., "domain.com # comment")
-	if idx := strings.Index(line, " #"); idx >= 0 {
+	// Strip inline comments. Handles " #", "\t#", and bare "#" forms.
+	// A leading "#" means the whole line is a comment.
+	if idx := strings.Index(line, "#"); idx >= 0 {
+		if idx == 0 {
+			return ""
+		}
 		line = line[:idx]
 	}
 
@@ -221,7 +225,11 @@ func (d *Downloader) extractDomain(line string) string {
 	if strings.HasPrefix(line, "||") && strings.Contains(line, "^") {
 		domain := strings.TrimPrefix(line, "||")
 		domain = strings.Split(domain, "^")[0]
-		return strings.TrimSpace(domain)
+		domain = strings.TrimSpace(domain)
+		if strings.Contains(domain, "#") {
+			return ""
+		}
+		return domain
 	}
 
 	// Wildcard domain format: *.domain.com (used by OISD and others)
@@ -239,6 +247,9 @@ func (d *Downloader) extractDomain(line string) string {
 			if domain == "localhost" || domain == "localhost.localdomain" {
 				return ""
 			}
+			if strings.Contains(domain, "#") {
+				return ""
+			}
 			return domain
 		}
 	}
@@ -248,6 +259,9 @@ func (d *Downloader) extractDomain(line string) string {
 		domain := fields[0]
 		// Skip localhost
 		if domain == "localhost" || domain == "localhost.localdomain" {
+			return ""
+		}
+		if strings.Contains(domain, "#") {
 			return ""
 		}
 		return domain

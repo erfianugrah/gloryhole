@@ -9,11 +9,13 @@ import (
 )
 
 func (h *Handler) handleConditionalForwarding(ctx context.Context, w dns.ResponseWriter, r, msg *dns.Msg, domain, clientIP, qtypeLabel string, outcome *serveDNSOutcome) bool {
-	if h.RuleEvaluator == nil || h.RuleEvaluator.IsEmpty() || h.Forwarder == nil {
+	re := h.getRuleEvaluator()
+	fwd := h.getForwarder()
+	if re == nil || re.IsEmpty() || fwd == nil {
 		return false
 	}
 
-	upstreams := h.RuleEvaluator.Evaluate(
+	upstreams := re.Evaluate(
 		strings.TrimSuffix(domain, "."),
 		clientIP,
 		qtypeLabel,
@@ -23,8 +25,8 @@ func (h *Handler) handleConditionalForwarding(ctx context.Context, w dns.Respons
 		return false
 	}
 
-	if h.Logger != nil {
-		h.Logger.Debug("Conditional forwarding rule matched",
+	if lg := h.getLogger(); lg != nil {
+		lg.Debug("Conditional forwarding rule matched",
 			"domain", domain,
 			"client_ip", clientIP,
 			"upstreams", upstreams,
@@ -32,11 +34,11 @@ func (h *Handler) handleConditionalForwarding(ctx context.Context, w dns.Respons
 	}
 
 	forwardStart := time.Now()
-	resp, err := h.Forwarder.ForwardWithUpstreams(ctx, r, upstreams)
+	resp, err := fwd.ForwardWithUpstreams(ctx, r, upstreams)
 	outcome.upstreamDuration = time.Since(forwardStart)
 	if err != nil {
-		if h.Logger != nil {
-			h.Logger.Error("Conditional forwarding failed",
+		if lg := h.getLogger(); lg != nil {
+			lg.Error("Conditional forwarding failed",
 				"domain", domain,
 				"upstreams", upstreams,
 				"error", err)
@@ -69,8 +71,8 @@ func (h *Handler) handleConditionalForwarding(ctx context.Context, w dns.Respons
 	// Enrich with Unbound dnstap data (best-effort inline correlation)
 	h.enrichFromUnbound(r, outcome)
 
-	if h.Cache != nil {
-		h.Cache.Set(ctx, r, resp)
+	if c := h.getCache(); c != nil {
+		c.Set(ctx, r, resp)
 	}
 
 	outcome.responseCode = resp.Rcode
@@ -79,12 +81,13 @@ func (h *Handler) handleConditionalForwarding(ctx context.Context, w dns.Respons
 }
 
 func (h *Handler) forwardToUpstream(ctx context.Context, w dns.ResponseWriter, r, msg *dns.Msg, qtypeLabel string, outcome *serveDNSOutcome) bool {
-	if h.Forwarder == nil {
+	fwd := h.getForwarder()
+	if fwd == nil {
 		return false
 	}
 
 	forwardStart := time.Now()
-	resp, err := h.Forwarder.Forward(ctx, r)
+	resp, err := fwd.Forward(ctx, r)
 	outcome.upstreamDuration = time.Since(forwardStart)
 	if err != nil {
 		outcome.responseCode = dns.RcodeServerFailure
@@ -93,7 +96,7 @@ func (h *Handler) forwardToUpstream(ctx context.Context, w dns.ResponseWriter, r
 		return true
 	}
 
-	upstreams := h.Forwarder.Upstreams()
+	upstreams := fwd.Upstreams()
 	if len(upstreams) > 0 {
 		outcome.upstream = upstreams[0]
 	}
@@ -116,8 +119,8 @@ func (h *Handler) forwardToUpstream(ctx context.Context, w dns.ResponseWriter, r
 	// Enrich with Unbound dnstap data (best-effort inline correlation)
 	h.enrichFromUnbound(r, outcome)
 
-	if h.Cache != nil {
-		h.Cache.Set(ctx, r, resp)
+	if c := h.getCache(); c != nil {
+		c.Set(ctx, r, resp)
 	}
 
 	outcome.responseCode = resp.Rcode

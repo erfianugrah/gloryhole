@@ -151,8 +151,14 @@ function getPlaceholder(field: string, operator: Operator): string {
 
 // ─── Expression generation ──────────────────────────────────────────
 
+/** Escape a value for safe interpolation inside double-quoted expression string literals. */
+function escapeExprValue(v: string): string {
+  return v.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+}
+
 function conditionToExpr(c: Condition): string {
   const { field, operator, value } = c;
+  const v = escapeExprValue(value);
 
   // ── Numeric fields (Hour, Weekday) ──
   if (field === "Hour" || field === "Weekday") {
@@ -161,6 +167,7 @@ function conditionToExpr(c: Condition): string {
       operator === "<" || operator === ">=" || operator === "<="
         ? operator
         : "==";
+    // Numeric values are not quoted; raw value is used as-is.
     return `${field} ${op} ${value}`;
   }
 
@@ -168,15 +175,15 @@ function conditionToExpr(c: Condition): string {
   if (field === "ClientIP") {
     switch (operator) {
       case "==":
-        return `IPEquals(ClientIP, "${value}")`;
+        return `IPEquals(ClientIP, "${v}")`;
       case "!=":
-        return `!IPEquals(ClientIP, "${value}")`;
+        return `!IPEquals(ClientIP, "${v}")`;
       case "in_cidr":
-        return `IPInCIDR(ClientIP, "${value}")`;
+        return `IPInCIDR(ClientIP, "${v}")`;
       case "not_in_cidr":
-        return `!IPInCIDR(ClientIP, "${value}")`;
+        return `!IPInCIDR(ClientIP, "${v}")`;
       default:
-        return `ClientIP == "${value}"`;
+        return `ClientIP == "${v}"`;
     }
   }
 
@@ -184,66 +191,66 @@ function conditionToExpr(c: Condition): string {
   if (field === "QueryType") {
     switch (operator) {
       case "==":
-        return `QueryType == "${value}"`;
+        return `QueryType == "${v}"`;
       case "!=":
-        return `QueryType != "${value}"`;
+        return `QueryType != "${v}"`;
       case "in": {
         const items = value
           .split(",")
-          .map((v) => `"${v.trim()}"`)
+          .map((s) => `"${escapeExprValue(s.trim())}"`)
           .join(", ");
         return `QueryTypeIn(QueryType, ${items})`;
       }
       case "not_in": {
         const items = value
           .split(",")
-          .map((v) => `"${v.trim()}"`)
+          .map((s) => `"${escapeExprValue(s.trim())}"`)
           .join(", ");
         return `!QueryTypeIn(QueryType, ${items})`;
       }
       default:
-        return `QueryType == "${value}"`;
+        return `QueryType == "${v}"`;
     }
   }
 
   // ── Domain (default) ──
   switch (operator) {
     case "==":
-      return `Domain == "${value}"`;
+      return `Domain == "${v}"`;
     case "!=":
-      return `Domain != "${value}"`;
+      return `Domain != "${v}"`;
     case "contains":
-      return `DomainMatches(Domain, "${value}")`;
+      return `DomainMatches(Domain, "${v}")`;
     case "not_contains":
-      return `!DomainMatches(Domain, "${value}")`;
+      return `!DomainMatches(Domain, "${v}")`;
     case "starts_with":
-      return `DomainStartsWith(Domain, "${value}")`;
+      return `DomainStartsWith(Domain, "${v}")`;
     case "not_starts_with":
-      return `!DomainStartsWith(Domain, "${value}")`;
+      return `!DomainStartsWith(Domain, "${v}")`;
     case "ends_with":
-      return `DomainEndsWith(Domain, ".${value}")`;
+      return `DomainEndsWith(Domain, ".${v}")`;
     case "not_ends_with":
-      return `!DomainEndsWith(Domain, ".${value}")`;
+      return `!DomainEndsWith(Domain, ".${v}")`;
     case "matches":
-      return `DomainRegex(Domain, "${value}")`;
+      return `DomainRegex(Domain, "${v}")`;
     case "not_matches":
-      return `!DomainRegex(Domain, "${value}")`;
+      return `!DomainRegex(Domain, "${v}")`;
     case "in": {
       const items = value
         .split(",")
-        .map((v) => `"${v.trim()}"`)
+        .map((s) => `"${escapeExprValue(s.trim())}"`)
         .join(", ");
       return `Domain in [${items}]`;
     }
     case "not_in": {
       const items = value
         .split(",")
-        .map((v) => `"${v.trim()}"`)
+        .map((s) => `"${escapeExprValue(s.trim())}"`)
         .join(", ");
       return `!(Domain in [${items}])`;
     }
     default:
-      return `Domain == "${value}"`;
+      return `Domain == "${v}"`;
   }
 }
 

@@ -95,7 +95,9 @@ func (s *Server) rebuildPolicyEngine(ctx context.Context) error {
 		return fmt.Errorf("load rules from DB: %w", err)
 	}
 
-	s.policyEngine.Clear()
+	// Build compiled rules outside the engine lock to avoid blocking
+	// DNS queries during compilation. Swap atomically via ReplaceRules.
+	compiled := make([]*policy.Rule, 0, len(rules))
 	for _, r := range rules {
 		rule := &policy.Rule{
 			Name:       r.Name,
@@ -104,12 +106,14 @@ func (s *Server) rebuildPolicyEngine(ctx context.Context) error {
 			ActionData: r.ActionData,
 			Enabled:    r.Enabled,
 		}
-		if err := s.policyEngine.AddRule(rule); err != nil {
+		if err := rule.Compile(); err != nil {
 			s.logger.Error("Failed to compile policy rule from DB",
 				"id", r.ID, "name", r.Name, "error", err)
-			// Continue loading other rules
+			continue
 		}
+		compiled = append(compiled, rule)
 	}
+	s.policyEngine.ReplaceRules(compiled)
 	return nil
 }
 

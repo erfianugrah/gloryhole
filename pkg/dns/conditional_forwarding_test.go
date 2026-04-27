@@ -62,7 +62,7 @@ func TestConditionalForwarding_DomainMatching(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create rule evaluator: %v", err)
 	}
-	handler.RuleEvaluator = ruleEvaluator
+	handler.SetRuleEvaluator(ruleEvaluator)
 
 	server := NewServer(cfg, handler, logger, metrics)
 
@@ -173,7 +173,7 @@ func TestConditionalForwarding_PriorityOrdering(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create rule evaluator: %v", err)
 	}
-	handler.RuleEvaluator = ruleEvaluator
+	handler.SetRuleEvaluator(ruleEvaluator)
 
 	server := NewServer(cfg, handler, logger, metrics)
 

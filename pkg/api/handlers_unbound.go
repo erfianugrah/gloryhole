@@ -156,6 +156,7 @@ func (s *Server) handleAddForwardZone(w http.ResponseWriter, r *http.Request) {
 		s.writeError(w, http.StatusBadRequest, "name and forward_addrs are required")
 		return
 	}
+	req.Name = sanitizeZoneName(req.Name)
 
 	cfg := s.getUnboundServerConfig()
 
@@ -185,12 +186,15 @@ func (s *Server) handleAddForwardZone(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleUpdateForwardZone(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, 1*1024*1024)
-	name := r.PathValue("name")
+	name := sanitizeZoneName(r.PathValue("name"))
 
 	var req forwardZoneRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		s.writeError(w, http.StatusBadRequest, "Invalid JSON: "+err.Error())
 		return
+	}
+	if req.Name != "" {
+		req.Name = sanitizeZoneName(req.Name)
 	}
 
 	cfg := s.getUnboundServerConfig()
@@ -286,6 +290,17 @@ func (s *Server) getUnboundServerConfig() *unbound.UnboundServerConfig {
 // and updates the in-memory config on the supervisor.
 func (s *Server) applyUnboundConfig(cfg *unbound.UnboundServerConfig) error {
 	appCfg := s.currentConfig()
+
+	// Validate config via unbound-checkconf before writing the live file.
+	// This catches semantic errors (bad addrs, conflicting zones) that pure
+	// field sanitization can't detect.
+	if s.unboundSupervisor != nil {
+		if checkconfBin := s.unboundSupervisor.CheckconfBin(); checkconfBin != "" {
+			if err := unbound.Validate(cfg, checkconfBin); err != nil {
+				return err
+			}
+		}
+	}
 
 	// Write the config file
 	if err := unbound.WriteConfig(cfg, appCfg.Unbound.ConfigPath); err != nil {

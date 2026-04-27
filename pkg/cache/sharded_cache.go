@@ -490,6 +490,7 @@ func (sc *ShardedCache) cleanupLoop() {
 func (sc *ShardedCache) cleanup() {
 	now := time.Now()
 	var totalRemoved atomic.Uint64
+	var totalRemaining atomic.Uint64
 
 	// Process all shards in parallel for maximum throughput
 	var wg sync.WaitGroup
@@ -507,8 +508,10 @@ func (sc *ShardedCache) cleanup() {
 					removed++
 				}
 			}
+			remaining := len(shard.entries)
 			shard.mu.Unlock()
 
+			totalRemaining.Add(uint64(remaining))
 			if removed > 0 {
 				// Use atomic increment for evictions counter (lock-free)
 				shard.statsEvicts.Add(uint64(removed))
@@ -522,13 +525,6 @@ func (sc *ShardedCache) cleanup() {
 
 	removed := totalRemoved.Load()
 	if removed > 0 {
-		totalEntries := 0
-		for _, shard := range sc.shards {
-			shard.mu.RLock()
-			totalEntries += len(shard.entries)
-			shard.mu.RUnlock()
-		}
-
 		// Decrement Prometheus CacheSize gauge so it stays accurate
 		// (previously only decremented on LRU eviction and Clear).
 		// Use first shard's metrics reference (all shards share the same Metrics instance).
@@ -538,7 +534,7 @@ func (sc *ShardedCache) cleanup() {
 
 		sc.logger.Debug("Cleaned up expired cache entries",
 			"removed", removed,
-			"remaining", totalEntries)
+			"remaining", totalRemaining.Load())
 	}
 }
 

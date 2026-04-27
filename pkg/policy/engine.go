@@ -261,6 +261,20 @@ func compileRuleLogic(logic string) (*vm.Program, error) {
 	)
 }
 
+// Compile validates and compiles a rule's logic expression outside the engine.
+// Use this before ReplaceRules to avoid holding the engine lock during compilation.
+func (r *Rule) Compile() error {
+	if err := validateAction(r); err != nil {
+		return fmt.Errorf("invalid rule '%s': %w", r.Name, err)
+	}
+	program, err := compileRuleLogic(r.Logic)
+	if err != nil {
+		return fmt.Errorf("failed to compile rule '%s': %w", r.Name, err)
+	}
+	r.program = program
+	return nil
+}
+
 // AddRule adds and compiles a rule
 func (e *Engine) AddRule(rule *Rule) error {
 	if rule == nil {
@@ -301,7 +315,13 @@ func (e *Engine) Evaluate(ctx Context) (bool, *Rule) {
 		// Run the compiled program
 		result, err := vm.Run(rule.program, ctx)
 		if err != nil {
-			// Log error but continue evaluating other rules
+			if e.logger != nil {
+				e.logger.Warn("Policy rule evaluation error (skipping rule)",
+					"rule", rule.Name,
+					"domain", ctx.Domain,
+					"client_ip", ctx.ClientIP,
+					"error", err)
+			}
 			continue
 		}
 
@@ -375,6 +395,16 @@ func (e *Engine) GetRules() []*Rule {
 // Uses an atomic counter kept in sync by Add/Remove/Clear.
 func (e *Engine) Count() int {
 	return int(e.count.Load())
+}
+
+// ReplaceRules atomically swaps the entire rule set under a single lock.
+// Rules must already be compiled (via compileRuleLogic). This avoids the
+// window where Clear+AddRule leaves readers seeing an empty/partial set.
+func (e *Engine) ReplaceRules(rules []*Rule) {
+	e.mu.Lock()
+	e.rules = rules
+	e.count.Store(int32(len(rules)))
+	e.mu.Unlock()
 }
 
 // Clear removes all rules

@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 import { T } from "@/lib/typography";
+import { formatNumber } from "@/lib/format";
 import type { BlocklistInfo, FeatureState } from "@/lib/api";
 import {
   fetchBlocklists,
@@ -35,13 +36,6 @@ import {
   updateBlocklistSources,
   isBlocklistActive,
 } from "@/lib/api";
-
-function formatNumber(n: number): string {
-  if (n == null) return "0";
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
-  return n.toLocaleString();
-}
 
 export function BlocklistsPage() {
   const [info, setInfo] = useState<BlocklistInfo | null>(null);
@@ -74,17 +68,22 @@ export function BlocklistsPage() {
   async function handleReload() {
     setReloading(true);
     try {
+      // Snapshot domain count from a fresh fetch to avoid stale closure
+      const fresh = await fetchBlocklists();
+      setInfo(fresh);
+      const startDomains = fresh.total_domains ?? 0;
+
       await reloadBlocklists(); // Returns 202 immediately; reload runs in background
+
       // Poll until the domain count changes or timeout after 120s
-      const startDomains = info?.total_domains ?? 0;
       const startTime = Date.now();
       const poll = async () => {
         while (Date.now() - startTime < 120_000) {
           await new Promise((r) => setTimeout(r, 2000));
           try {
-            await loadData();
-            // Reload is done when domain count changes or enough time has passed
-            if ((info?.total_domains ?? 0) !== startDomains || Date.now() - startTime > 10_000) {
+            const latest = await fetchBlocklists();
+            setInfo(latest);
+            if ((latest.total_domains ?? 0) !== startDomains || Date.now() - startTime > 10_000) {
               return;
             }
           } catch { /* keep polling */ }
