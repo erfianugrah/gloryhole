@@ -79,7 +79,7 @@ func NewServer(cfg *config.Config, handler *Handler, logger *logging.Logger, met
 	} else {
 		logger.Info("DNS client ACL enabled",
 			"entries", len(cfg.Server.AllowedClients),
-			"note", "DoH bypasses ACL (has its own auth layer)")
+			"note", "DoT/DoH bypass ACL (TLS/HTTPS provide auth)")
 	}
 
 	return &Server{
@@ -115,7 +115,7 @@ func (s *Server) Start(ctx context.Context) error {
 	}
 	dotHandler := &wrappedHandler{
 		handler: s.handler, logger: s.logger, metrics: s.metrics,
-		clientACL: s.clientACL, transport: "dot",
+		transport: "dot", // no clientACL — TLS cert verification is the auth layer
 	}
 
 	errChan := make(chan error, 4)

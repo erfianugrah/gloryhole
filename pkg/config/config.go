@@ -74,7 +74,7 @@ type ServerConfig struct {
 	CORSAllowedOrigins []string          `yaml:"cors_allowed_origins"` // Allowed CORS origins (empty = none, "*" = all)
 	DotEnabled         bool              `yaml:"dot_enabled"`
 	DotAddress         string            `yaml:"dot_address"`
-	AllowedClients     []string          `yaml:"allowed_clients"` // IP/CIDR allowlist for DNS (UDP/TCP/DoT). Empty = open. DoH bypasses (has auth).
+	AllowedClients     []string          `yaml:"allowed_clients"` // IP/CIDR allowlist for plain DNS (port 53). Empty = open. DoT/DoH bypass (TLS is the auth).
 	ProxyProtocol      bool              `yaml:"proxy_protocol"`  // Enable PROXY protocol on TCP listeners (for Fly.io / load balancers)
 	TLS                TLSConfig         `yaml:"tls"`
 	QueryLogger        QueryLoggerConfig `yaml:"query_logger"`    // Worker pool config for async query logging
