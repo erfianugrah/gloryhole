@@ -176,6 +176,15 @@ func main() {
 	}
 	cfg = cfgWatcher.Config()
 
+	// Warn if config file is world-readable (may contain secrets)
+	if info, statErr := os.Stat(*configPath); statErr == nil {
+		mode := info.Mode().Perm()
+		if mode&0o044 != 0 {
+			logger.Warn("Config file is readable by group/others — consider chmod 600",
+				"path", *configPath, "mode", fmt.Sprintf("%04o", mode))
+		}
+	}
+
 	// Note: OnChange callback will be set after components are created
 	// This allows the callback to update components when config changes
 

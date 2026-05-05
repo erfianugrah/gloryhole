@@ -173,6 +173,11 @@ func (h *Handler) handleBlockedDomain(ctx context.Context, w dns.ResponseWriter,
 }
 
 func (h *Handler) lookupOverrides(domain string, qtype uint16, blocked bool) (net.IP, bool, string, bool) {
+	// Fast path: skip lock when no overrides are configured (common case)
+	if !h.hasOverrides.Load() {
+		return nil, false, "", false
+	}
+
 	h.lookupMu.RLock()
 	defer h.lookupMu.RUnlock()
 

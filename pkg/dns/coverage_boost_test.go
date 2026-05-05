@@ -70,6 +70,7 @@ func TestServeDNS_BlocklistManagerWithOverride(t *testing.T) {
 
 	// Add override for A record
 	handler.Overrides["override.local."] = net.ParseIP("192.168.1.1")
+	handler.RefreshOverrideFlag()
 
 	w := &mockResponseWriter{
 		remoteAddr: &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 12345},
@@ -118,6 +119,7 @@ func TestServeDNS_BlocklistManagerWithCNAMEOverride(t *testing.T) {
 
 	// Add CNAME override
 	handler.CNAMEOverrides["alias.local."] = "target.local."
+	handler.RefreshOverrideFlag()
 
 	w := &mockResponseWriter{
 		remoteAddr: &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 12345},
@@ -270,6 +272,7 @@ func TestServeDNS_LegacyPathWithAAAAOverride(t *testing.T) {
 
 	// Add IPv6 override (legacy path, no BlocklistManager)
 	handler.Overrides["ipv6.local."] = net.ParseIP("fe80::1")
+	handler.RefreshOverrideFlag()
 
 	w := &mockResponseWriter{
 		remoteAddr: &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 12345},
@@ -305,6 +308,7 @@ func TestServeDNS_LegacyPathWithCNAME(t *testing.T) {
 
 	// Add CNAME override (legacy path)
 	handler.CNAMEOverrides["www.local."] = "server.local."
+	handler.RefreshOverrideFlag()
 
 	w := &mockResponseWriter{
 		remoteAddr: &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 12345},

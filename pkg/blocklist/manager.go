@@ -16,8 +16,6 @@ import (
 	"glory-hole/pkg/logging"
 	"glory-hole/pkg/pattern"
 	"glory-hole/pkg/telemetry"
-
-	mdns "github.com/miekg/dns"
 )
 
 const maxTrackedSources = 64
@@ -344,14 +342,19 @@ type MatchResult struct {
 }
 
 // Match returns detailed information about a blocked domain.
+// domain should be an FQDN with trailing dot (as received from the DNS wire).
 func (m *Manager) Match(domain string) MatchResult {
 	if domain == "" {
 		return MatchResult{}
 	}
 
-	normalized := strings.ToLower(domain)
-	fqdn := mdns.Fqdn(normalized)
-	short := strings.TrimSuffix(fqdn, ".")
+	// Wire-format DNS names already have a trailing dot; dns.Fqdn is redundant.
+	// Only ToLower is needed since RFC 1035 preserves case on the wire.
+	fqdn := strings.ToLower(domain)
+	if fqdn[len(fqdn)-1] != '.' {
+		fqdn += "." // defensive: shouldn't happen for wire-parsed names
+	}
+	short := fqdn[:len(fqdn)-1]
 
 	flat := m.current.Load()
 	if flat != nil && flat.Len() > 0 {

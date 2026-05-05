@@ -32,6 +32,7 @@ func TestServeDNS_OverrideIPv4TypeMismatch(t *testing.T) {
 
 	// Add IPv4 override
 	handler.Overrides["override.local."] = net.ParseIP("192.168.1.1")
+	handler.RefreshOverrideFlag()
 
 	w := &mockResponseWriter{
 		remoteAddr: &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 12345},
@@ -71,6 +72,7 @@ func TestServeDNS_OverrideIPv6TypeMismatch(t *testing.T) {
 
 	// Add IPv6 override
 	handler.Overrides["override.local."] = net.ParseIP("fe80::1")
+	handler.RefreshOverrideFlag()
 
 	w := &mockResponseWriter{
 		remoteAddr: &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 12345},
@@ -134,6 +136,7 @@ func TestServeDNS_LegacyPathIPv4OverrideTypeMismatch(t *testing.T) {
 
 	// Use legacy path (no BlocklistManager)
 	handler.Overrides["override.local."] = net.ParseIP("192.168.1.1")
+	handler.RefreshOverrideFlag()
 
 	w := &mockResponseWriter{
 		remoteAddr: &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 12345},
@@ -160,6 +163,7 @@ func TestServeDNS_LegacyPathCNAMEForAAAAQuery(t *testing.T) {
 
 	// Use legacy path (no BlocklistManager)
 	handler.CNAMEOverrides["alias.local."] = "target.local."
+	handler.RefreshOverrideFlag()
 
 	w := &mockResponseWriter{
 		remoteAddr: &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 12345},
@@ -209,6 +213,7 @@ func TestServeDNS_BlocklistManagerCNAMEForAAAAQuery(t *testing.T) {
 
 	// Add CNAME override
 	handler.CNAMEOverrides["alias.local."] = "target.local."
+	handler.RefreshOverrideFlag()
 
 	w := &mockResponseWriter{
 		remoteAddr: &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 12345},

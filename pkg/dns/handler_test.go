@@ -71,6 +71,7 @@ func TestServeDNS_BlockedDomain(t *testing.T) {
 func TestServeDNS_LocalOverride_A(t *testing.T) {
 	handler := NewHandler()
 	handler.Overrides["nas.local."] = net.ParseIP("192.168.1.100")
+	handler.RefreshOverrideFlag()
 
 	w := &mockResponseWriter{
 		remoteAddr: &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 12345},
@@ -103,6 +104,7 @@ func TestServeDNS_LocalOverride_A(t *testing.T) {
 func TestServeDNS_LocalOverride_AAAA(t *testing.T) {
 	handler := NewHandler()
 	handler.Overrides["nas.local."] = net.ParseIP("fe80::1")
+	handler.RefreshOverrideFlag()
 
 	w := &mockResponseWriter{
 		remoteAddr: &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 12345},
@@ -135,6 +137,7 @@ func TestServeDNS_LocalOverride_AAAA(t *testing.T) {
 func TestServeDNS_CNAMEOverride(t *testing.T) {
 	handler := NewHandler()
 	handler.CNAMEOverrides["storage.local."] = "nas.local."
+	handler.RefreshOverrideFlag()
 
 	w := &mockResponseWriter{
 		remoteAddr: &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 12345},
@@ -188,6 +191,7 @@ func TestServeDNS_NoMatch(t *testing.T) {
 func TestServeDNS_ConcurrentAccess(t *testing.T) {
 	handler := NewHandler()
 	handler.Overrides["nas.local."] = net.ParseIP("192.168.1.100")
+	handler.RefreshOverrideFlag()
 
 	// Test concurrent access to handler
 	done := make(chan bool)

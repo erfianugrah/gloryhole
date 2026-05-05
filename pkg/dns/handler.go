@@ -102,6 +102,7 @@ type Handler struct {
 	Overrides      map[string]net.IP
 	CNAMEOverrides map[string]string
 	lookupMu       sync.RWMutex
+	hasOverrides   atomic.Bool // true when Overrides or CNAMEOverrides are non-empty
 }
 
 // NewHandler creates a new DNS handler
@@ -113,6 +114,15 @@ func NewHandler() *Handler {
 	}
 	h.deps.Store(&handlerDeps{})
 	return h
+}
+
+// RefreshOverrideFlag updates the hasOverrides atomic flag after modifying
+// Overrides or CNAMEOverrides maps. Call after any mutation.
+func (h *Handler) RefreshOverrideFlag() {
+	h.lookupMu.RLock()
+	has := len(h.Overrides) > 0 || len(h.CNAMEOverrides) > 0
+	h.lookupMu.RUnlock()
+	h.hasOverrides.Store(has)
 }
 
 // clone returns a shallow copy of the current deps for clone-and-swap.
@@ -319,8 +329,11 @@ func (h *Handler) serveFromCache(ctx context.Context, w dns.ResponseWriter, r, m
 // ServeDNS implements the dns.Handler interface
 func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) {
 	startTime := time.Now()
+	// Single atomic load — all sub-methods use this snapshot for consistency
+	// and to avoid 16+ redundant atomic pointer loads per query.
+	d := h.deps.Load()
 	outcome := getOutcome()
-	trace := newBlockTraceRecorder(h.getDecisionTrace())
+	trace := newBlockTraceRecorder(d.decisionTrace)
 	clientIP := getClientIP(w)
 
 	defer func() {
@@ -351,13 +364,15 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 	qtypeLabel := dnsTypeLabel(qtype)
 
 	// Local records always take precedence
-	if h.serveFromLocalRecords(w, msg, domain, qtype, outcome) {
-		return
+	if lr := d.localRecords; lr != nil {
+		if h.serveFromLocalRecords(w, msg, domain, qtype, outcome) {
+			return
+		}
 	}
 
 	// Resolve feature toggles (permanent config + temporary kill-switches)
 	enablePolicies, enableBlocklist := h.resolveFeatureToggles()
-	if ks := h.getKillSwitch(); ks != nil {
+	if ks := d.killSwitch; ks != nil {
 		if disabled, _ := ks.IsBlocklistDisabled(); disabled {
 			enableBlocklist = false
 		}
@@ -370,7 +385,7 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 	// This ensures correct behavior with policy ordering, multiple matches, and toggles.
 	// ALLOW/FORWARD actions forward to upstream and cache the upstream response.
 	// BLOCK/REDIRECT return immediately without caching.
-	if pe := h.getPolicyEngine(); enablePolicies && pe != nil && pe.Count() > 0 {
+	if pe := d.policyEngine; enablePolicies && pe != nil && pe.Count() > 0 {
 		if h.handlePolicies(ctx, w, r, msg, domain, clientIP, qtype, qtypeLabel, trace, outcome) {
 			return
 		}
