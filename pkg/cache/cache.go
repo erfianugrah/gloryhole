@@ -557,28 +557,24 @@ func (c *Cache) Clear() {
 	c.logger.Info("Cache cleared")
 }
 
-// ClearBlocklistDecisions removes cache entries that have blocklist traces.
-// Call this when the blocklist is reloaded to ensure fresh evaluation.
+// ClearBlocklistDecisions flushes ALL cache entries on blocklist reload.
+// Previously-allowed domains may now be blocked by the new list, so any
+// cached response could be stale. A full flush is safe because blocklist
+// reloads are infrequent and the cache repopulates quickly.
 func (c *Cache) ClearBlocklistDecisions() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	removed := 0
-	for key, entry := range c.entries {
-		if hasBlocklistTrace(entry.blockTrace) {
-			delete(c.entries, key)
-			removed++
-		}
-	}
-
-	c.stats.entries = len(c.entries)
+	removed := len(c.entries)
+	clear(c.entries)
+	c.stats.entries = 0
 
 	if c.metrics != nil && removed > 0 {
 		c.metrics.CacheSize.Add(context.Background(), int64(-removed))
 	}
 
 	if removed > 0 {
-		c.logger.Info("Cleared blocklist cache entries", "removed", removed, "kept", c.stats.entries)
+		c.logger.Info("Cache flushed after blocklist reload", "removed", removed)
 	}
 }
 

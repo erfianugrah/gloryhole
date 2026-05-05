@@ -62,12 +62,19 @@ func (d *Downloader) Download(ctx context.Context, url string) (map[string]struc
 	}
 
 	// Limit download size to prevent memory exhaustion from malicious/compromised sources
-	const maxBlocklistSize = 100 * 1024 * 1024 // 100MB
-	limitedBody := io.LimitReader(resp.Body, maxBlocklistSize)
+	const maxBlocklistSize int64 = 100 * 1024 * 1024 // 100MB
+	lr := &io.LimitedReader{R: resp.Body, N: maxBlocklistSize}
 
-	domains, err := d.parseHostsFile(limitedBody)
+	domains, err := d.parseHostsFile(lr)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse blocklist: %w", err)
+	}
+
+	if lr.N <= 0 {
+		d.logger.Warn("Blocklist truncated at size limit — list may be incomplete",
+			"url", url,
+			"limit_mb", maxBlocklistSize/(1024*1024),
+			"domains_parsed", len(domains))
 	}
 
 	elapsed := time.Since(startTime)
@@ -101,12 +108,19 @@ func (d *Downloader) DownloadSorted(ctx context.Context, url string) ([]string, 
 		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 	}
 
-	const maxBlocklistSize = 100 * 1024 * 1024 // 100MB
-	limitedBody := io.LimitReader(resp.Body, maxBlocklistSize)
+	const maxBlocklistSize int64 = 100 * 1024 * 1024 // 100MB
+	lr := &io.LimitedReader{R: resp.Body, N: maxBlocklistSize}
 
-	domains, err := d.parseToSlice(limitedBody)
+	domains, err := d.parseToSlice(lr)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse blocklist: %w", err)
+	}
+
+	if lr.N <= 0 {
+		d.logger.Warn("Blocklist truncated at size limit — list may be incomplete",
+			"url", url,
+			"limit_mb", maxBlocklistSize/(1024*1024),
+			"domains_parsed", len(domains))
 	}
 
 	// Sort for merge and binary search

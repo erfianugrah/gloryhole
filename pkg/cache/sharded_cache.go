@@ -413,20 +413,17 @@ func (sc *ShardedCache) Clear() {
 	sc.logger.Info("Sharded cache cleared")
 }
 
-// ClearBlocklistDecisions removes cache entries that have blocklist traces.
-// Call this when the blocklist is reloaded to ensure fresh evaluation.
+// ClearBlocklistDecisions flushes ALL cache entries on blocklist reload.
+// Previously-allowed domains may now be blocked by the new list, so any
+// cached response could be stale. A full flush is safe because blocklist
+// reloads are infrequent and the cache repopulates quickly.
 func (sc *ShardedCache) ClearBlocklistDecisions() {
 	var totalRemoved int
 
 	for _, shard := range sc.shards {
 		shard.mu.Lock()
-		removed := 0
-		for key, entry := range shard.entries {
-			if shardHasBlocklistTrace(entry.blockTrace) {
-				delete(shard.entries, key)
-				removed++
-			}
-		}
+		removed := len(shard.entries)
+		clear(shard.entries)
 
 		if shard.metrics != nil && removed > 0 {
 			shard.metrics.CacheSize.Add(context.Background(), int64(-removed))
@@ -437,7 +434,7 @@ func (sc *ShardedCache) ClearBlocklistDecisions() {
 	}
 
 	if totalRemoved > 0 {
-		sc.logger.Info("Cleared blocklist cache entries", "removed", totalRemoved)
+		sc.logger.Info("Cache flushed after blocklist reload", "removed", totalRemoved)
 	}
 }
 

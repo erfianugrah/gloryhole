@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"glory-hole/pkg/blocklist"
@@ -44,8 +45,9 @@ type Server struct {
 	version           string
 	configPath        string       // Path to config file for persistence
 	allowedOrigins    []string     // Allowed CORS origins
-	blockPageEnabled  bool         // Serve block page for unrecognized hosts
+	blockPageEnabled  atomic.Bool  // Serve block page for unrecognized hosts
 	trustedProxies    []*net.IPNet // CIDRs whose proxy headers (X-Forwarded-For) are trusted
+	bgWg              sync.WaitGroup // Tracks background goroutines for clean shutdown
 	authMu            sync.RWMutex
 	authEnabled       bool
 	authHeader        string
@@ -97,7 +99,7 @@ func New(cfg *Config) *Server {
 
 	if cfg.InitialConfig != nil {
 		s.applyAuthConfig(cfg.InitialConfig.Auth)
-		s.blockPageEnabled = cfg.InitialConfig.BlockPage.Enabled && cfg.InitialConfig.BlockPage.BlockIP != ""
+		s.blockPageEnabled.Store(cfg.InitialConfig.BlockPage.Enabled && cfg.InitialConfig.BlockPage.BlockIP != "")
 
 		// Set allowed CORS origins (defaults to empty = no cross-origin requests)
 		s.allowedOrigins = cfg.InitialConfig.Server.CORSAllowedOrigins
@@ -366,6 +368,18 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	// Stop session cleanup goroutine
 	if s.sessionManager != nil {
 		s.sessionManager.Stop()
+	}
+
+	// Wait for background goroutines (blocklist reload) to finish
+	done := make(chan struct{})
+	go func() {
+		s.bgWg.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-ctx.Done():
+		s.logger.Warn("Shutdown deadline hit while waiting for background tasks")
 	}
 
 	return s.httpServer.Shutdown(ctx)

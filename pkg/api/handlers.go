@@ -418,8 +418,12 @@ func (s *Server) handleBlocklistReload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Run reload asynchronously so we don't hit WriteTimeout on large lists
+	// Run reload asynchronously so we don't hit WriteTimeout on large lists.
+	// Tracked by bgWg so Shutdown waits for completion.
+	s.bgWg.Add(1)
 	go func() {
+		defer s.bgWg.Done()
+
 		ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 		defer cancel()
 

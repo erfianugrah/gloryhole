@@ -237,23 +237,44 @@ func (f *Forwarder) ForwardTCP(ctx context.Context, r *dns.Msg) (*dns.Msg, error
 			"attempt", i+1,
 		)
 
-		resp, rtt, err := client.ExchangeContext(ctx, r, upstream)
-		if err != nil {
+		// Forward via circuit breaker if enabled
+		var resp *dns.Msg
+		var rtt time.Duration
+		queryErr := error(nil)
+
+		if f.health != nil {
+			breaker := f.health.GetBreaker(upstream)
+			if breaker != nil {
+				queryErr = breaker.Call(func() error {
+					var exchangeErr error
+					resp, rtt, exchangeErr = client.ExchangeContext(ctx, r, upstream)
+					return exchangeErr
+				})
+			} else {
+				resp, rtt, queryErr = client.ExchangeContext(ctx, r, upstream)
+			}
+		} else {
+			resp, rtt, queryErr = client.ExchangeContext(ctx, r, upstream)
+		}
+
+		if queryErr != nil {
 			f.logger.Warn("TCP upstream query failed",
 				"upstream", upstream,
-				"error", err,
+				"error", queryErr,
 			)
-			lastErr = err
+			lastErr = queryErr
 			continue
 		}
 
 		if resp == nil {
 			lastErr = fmt.Errorf("received nil response from %s", upstream)
+			if f.health != nil {
+				f.health.RecordResult(upstream, lastErr)
+			}
 			continue
 		}
 
 		// ANY valid DNS response should be returned immediately
-		// Don't treat SERVFAIL/NXDOMAIN as errors - they're valid DNS responses!
 		f.logger.Debug("TCP upstream query succeeded",
 			"upstream", upstream,
 			"domain", r.Question[0].Name,

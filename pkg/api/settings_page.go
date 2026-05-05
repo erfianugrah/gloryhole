@@ -69,6 +69,15 @@ func (s *Server) persistConfigSection(w http.ResponseWriter, r *http.Request, up
 		return false
 	}
 
-	*current = *updated
+	// Trigger immediate reload so the watcher picks up the new config
+	// without waiting for fsnotify. Don't mutate *current in-place — it
+	// points to the shared config.Watcher struct and concurrent readers
+	// could observe torn slice headers.
+	if s.configWatcher != nil {
+		if err := s.configWatcher.Reload(); err != nil {
+			s.logger.Error("Failed to reload config after save", "error", err)
+		}
+	}
+
 	return true
 }

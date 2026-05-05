@@ -55,7 +55,7 @@ func (s *Server) handleUpdateUpstreams(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	data := s.newSettingsPageData(cfg)
+	data := s.newSettingsPageData(&updated)
 	s.respondConfigUpdate(w, r, settingsTemplateUpstreams, flashKeyUpstreams, "Upstream DNS servers updated", data)
 }
 
@@ -92,7 +92,7 @@ func (s *Server) handleUpdateCache(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	data := s.newSettingsPageData(cfg)
+	data := s.newSettingsPageData(&updated)
 	s.respondConfigUpdate(w, r, settingsTemplateCache, flashKeyCache, "Cache settings updated", data)
 }
 
@@ -138,7 +138,7 @@ func (s *Server) handleUpdateLogging(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	data := s.newSettingsPageData(cfg)
+	data := s.newSettingsPageData(&updated)
 	s.respondConfigUpdate(w, r, settingsTemplateLogging, flashKeyLogging, "Logging settings updated", data)
 }
 
@@ -177,7 +177,7 @@ func (s *Server) handleUpdateTLS(w http.ResponseWriter, r *http.Request) {
 		purgeACMECache(payload.TLS.ACME.CacheDir, s.logger)
 	}
 
-	data := s.newSettingsPageData(cfg)
+	data := s.newSettingsPageData(&updated)
 	s.respondConfigUpdate(w, r, settingsTemplateTLS, flashKeyTLS, "DoT/TLS settings updated", data)
 }
 
@@ -235,9 +235,9 @@ func (s *Server) handleUpdateBlockPage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Hot-reload: update the block page middleware flag
-	s.blockPageEnabled = updated.BlockPage.Enabled && updated.BlockPage.BlockIP != ""
+	s.blockPageEnabled.Store(updated.BlockPage.Enabled && updated.BlockPage.BlockIP != "")
 
-	data := s.newSettingsPageData(cfg)
+	data := s.newSettingsPageData(&updated)
 	s.respondConfigUpdate(w, r, "", "block_page", "Block page settings updated", data)
 }
 

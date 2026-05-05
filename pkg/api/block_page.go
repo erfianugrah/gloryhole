@@ -112,7 +112,7 @@ type blockPageData struct {
 func (s *Server) blockPageMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Check dynamically so hot-reload works
-		if !s.blockPageEnabled {
+		if !s.blockPageEnabled.Load() {
 			next.ServeHTTP(w, r)
 			return
 		}

@@ -628,7 +628,9 @@ func (c *Config) Validate() error {
 
 	if c.Auth.Enabled {
 		c.Auth.normalize()
-		if strings.TrimSpace(c.Auth.APIKey) == "" && (c.Auth.Username == "" || c.Auth.Password == "") {
+		hasAPIKey := strings.TrimSpace(c.Auth.APIKey) != ""
+		hasCredentials := c.Auth.Username != "" && (c.Auth.Password != "" || c.Auth.PasswordHash != "")
+		if !hasAPIKey && !hasCredentials {
 			return fmt.Errorf("auth requires api_key or username/password when enabled")
 		}
 	}
