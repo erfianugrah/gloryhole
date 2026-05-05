@@ -57,9 +57,13 @@ func NewForwarder(cfg *config.Config, logger *logging.Logger) *Forwarder {
 	if cbCfg.TimeoutSeconds == 0 {
 		cbCfg.TimeoutSeconds = 30
 	}
-	// Circuit breaker enabled by default (unless explicitly disabled in config)
-	if !cbCfg.Enabled {
-		cbCfg.Enabled = true
+
+	// Disable circuit breaker when only upstream is localhost (managed Unbound).
+	// Circuit-breaking a supervised child process causes a death spiral:
+	// once open, no queries reach Unbound, so it can never prove healthy again.
+	if len(upstreams) == 1 && isLocalUpstream(upstreams[0]) {
+		cbCfg.Enabled = false
+		logger.Info("Circuit breaker disabled for local upstream", "upstream", upstreams[0])
 	}
 
 	f := &Forwarder{
@@ -392,6 +396,17 @@ func (f *Forwarder) Upstreams() []string {
 	out := make([]string, len(f.upstreams))
 	copy(out, f.upstreams)
 	return out
+}
+
+// isLocalUpstream returns true if the upstream address is a loopback address.
+// Used to skip circuit breaker for managed local processes (e.g. Unbound on 127.0.0.1:5353).
+func isLocalUpstream(addr string) bool {
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		return false
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
 
 // min returns the minimum of two integers
