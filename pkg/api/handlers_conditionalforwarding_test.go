@@ -8,7 +8,6 @@ import (
 	"net/http/httptest"
 	"os"
 	"testing"
-	"time"
 
 	"glory-hole/pkg/config"
 	"glory-hole/pkg/dns"
@@ -166,7 +165,6 @@ func TestHandleAddConditionalForwarding_DomainMatcher(t *testing.T) {
 		Domains:   []string{"*.local"},
 		Upstreams: []string{"192.168.1.1:53"},
 		Priority:  70,
-		Failover:  true,
 	}
 	bodyJSON, _ := json.Marshal(requestBody)
 
@@ -231,9 +229,6 @@ func TestHandleAddConditionalForwarding_AllMatchers(t *testing.T) {
 		QueryTypes:  []string{"A", "AAAA"},
 		Upstreams:   []string{"192.168.1.1:53", "192.168.1.2:53"},
 		Priority:    80,
-		Timeout:     "3s",
-		MaxRetries:  3,
-		Failover:    true,
 	}
 	bodyJSON, _ := json.Marshal(requestBody)
 
@@ -380,29 +375,11 @@ func TestHandleAddConditionalForwarding_InvalidPriority(t *testing.T) {
 	}
 }
 
-func TestHandleAddConditionalForwarding_InvalidTimeout(t *testing.T) {
-	server := createTestServerForConditionalForwarding(t, nil)
-
-	requestBody := ForwardingRuleAddRequest{
-		Name:      "Test",
-		Domains:   []string{"*.test"},
-		Upstreams: []string{"8.8.8.8:53"},
-		Timeout:   "invalid",
-	}
-	bodyJSON, _ := json.Marshal(requestBody)
-
-	req := httptest.NewRequest(http.MethodPost, "/api/conditionalforwarding", bytes.NewReader(bodyJSON))
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-
-	server.handleAddConditionalForwarding(w, req)
-
-	assert.Equal(t, http.StatusBadRequest, w.Code)
-
-	var response ErrorResponse
-	err := json.Unmarshal(w.Body.Bytes(), &response)
-	require.NoError(t, err)
-	assert.Contains(t, response.Message, "Invalid timeout format")
+// TestHandleAddConditionalForwarding_InvalidTimeout was removed in v0.26 —
+// the Timeout field on ForwardingRuleAddRequest was deleted because the
+// runtime never read it.
+func TestHandleAddConditionalForwarding_InvalidTimeout_Removed(t *testing.T) {
+	t.Skip("removed in v0.26 along with ForwardingRuleAddRequest.Timeout")
 }
 
 func TestHandleAddConditionalForwarding_InvalidJSON(t *testing.T) {
@@ -533,38 +510,11 @@ func TestPersistConditionalForwardingConfig_NoConfig(t *testing.T) {
 	assert.Contains(t, err.Error(), "no config available")
 }
 
-func TestHandleGetConditionalForwarding_TimeoutFormatting(t *testing.T) {
-	initialRules := []config.ForwardingRule{
-		{
-			Name:      "With Timeout",
-			Domains:   []string{"*.test"},
-			Upstreams: []string{"8.8.8.8:53"},
-			Priority:  80,
-			Timeout:   3 * time.Second,
-			Enabled:   true,
-		},
-		{
-			Name:      "No Timeout",
-			Domains:   []string{"*.test2"},
-			Upstreams: []string{"8.8.8.8:53"},
-			Priority:  70,
-			Enabled:   true,
-		},
-	}
-
-	server := createTestServerForConditionalForwarding(t, initialRules)
-
-	req := httptest.NewRequest(http.MethodGet, "/api/conditionalforwarding", nil)
-	w := httptest.NewRecorder()
-
-	server.handleGetConditionalForwarding(w, req)
-
-	var response ConditionalForwardingListResponse
-	err := json.Unmarshal(w.Body.Bytes(), &response)
-	require.NoError(t, err)
-
-	assert.Equal(t, "3s", response.Rules[0].Timeout)
-	assert.Equal(t, "", response.Rules[1].Timeout)
+// TestHandleGetConditionalForwarding_TimeoutFormatting was removed in v0.26
+// — the Timeout field was deleted from both config.ForwardingRule and
+// ForwardingRuleResponse (runtime never read it).
+func TestHandleGetConditionalForwarding_TimeoutFormatting_Removed(t *testing.T) {
+	t.Skip("removed in v0.26 along with ForwardingRule.Timeout / ForwardingRuleResponse.Timeout")
 }
 
 func TestHandleGetConditionalForwarding_HTMLResponse(t *testing.T) {

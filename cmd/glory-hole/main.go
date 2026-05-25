@@ -51,6 +51,17 @@ var (
 // (those will be cleaned up by the YAML-write step on first run).
 const whitelistMigratedSentinel = "whitelist_migrated_at"
 
+// conditionalForwardingMigratedSentinel mirrors whitelistMigratedSentinel for
+// the v0.26 Conditional Forwarding → Policy FORWARD migration. Same three
+// guards (sentinel, UNIQUE constraint, YAML persist) apply.
+const conditionalForwardingMigratedSentinel = "conditional_forwarding_migrated_at"
+
+// conditionalForwardingPolicyBand is the sort_order base for migrated CF rules.
+// Placed at 1000+ so they sort after any hand-curated low-numbered policies
+// the user added directly to the policy engine. Within the band, original
+// CF priority is preserved by inverting (CF Priority DESC → SortOrder ASC).
+const conditionalForwardingPolicyBand = 1000
+
 // migrateWhitelistToPolicies converts whitelist entries to ALLOW policies.
 // Idempotent: checks dynamic_config sentinel + relies on UNIQUE(name) index
 // on policy_rules (migration v15) + persists cfg.Whitelist = nil back to YAML.
@@ -169,6 +180,182 @@ func migrateWhitelistToPolicies(cfg *config.Config, stor storage.Storage, config
 	)
 
 	return migratedCount > 0
+}
+
+// migrateConditionalForwardingToPolicies converts cfg.ConditionalForwarding.Rules
+// into Policy FORWARD rules in SQLite. v0.26 deprecation step — the
+// conditional-forwarding code path is removed in v0.27.
+//
+// Same three idempotency guards as migrateWhitelistToPolicies:
+//
+//  1. Sentinel skip: dynamic_config[conditional_forwarding_migrated_at]
+//  2. UNIQUE(name) on policy_rules (migration v15) catches duplicates
+//  3. YAML persist (cfg.ConditionalForwarding.Rules = nil written back to disk)
+//
+// Each CF rule's matchers (Domains / ClientCIDRs / QueryTypes) AND-join into
+// a single Policy DSL expression. Priority direction is inverted to match
+// the policy engine's sort_order ASC convention.
+func migrateConditionalForwardingToPolicies(cfg *config.Config, stor storage.Storage, configPath string, logger *logging.Logger) bool {
+	if !cfg.ConditionalForwarding.Enabled || len(cfg.ConditionalForwarding.Rules) == 0 {
+		return false
+	}
+
+	ctx := context.Background()
+
+	// Guard 1: sentinel
+	if stor != nil {
+		if marker, err := stor.GetDynamicConfig(ctx, conditionalForwardingMigratedSentinel); err == nil && marker != "" {
+			logger.Warn("Conditional forwarding migration already ran; YAML still contains rules. Remove the conditional_forwarding: block from the YAML to silence this warning.",
+				"sentinel_set_at", marker,
+				"yaml_rule_count", len(cfg.ConditionalForwarding.Rules),
+			)
+			// Drain in-memory so deprecated rules don't show up at /api/conditionalforwarding
+			cfg.ConditionalForwarding.Rules = nil
+			cfg.ConditionalForwarding.Enabled = false
+			return false
+		}
+	}
+
+	logger.Info("Migrating conditional forwarding rules to policies",
+		"count", len(cfg.ConditionalForwarding.Rules))
+
+	var migratedCount, duplicateSkipped, invalidSkipped int
+
+	for _, rule := range cfg.ConditionalForwarding.Rules {
+		if !rule.Enabled {
+			continue
+		}
+		logic := buildPolicyLogicFromCFRule(rule)
+		if logic == "" {
+			logger.Warn("Conditional forwarding rule has no matchers — skipping (would silently match all queries)",
+				"rule", rule.Name)
+			invalidSkipped++
+			continue
+		}
+		if len(rule.Upstreams) == 0 {
+			logger.Warn("Conditional forwarding rule has no upstreams — skipping",
+				"rule", rule.Name)
+			invalidSkipped++
+			continue
+		}
+
+		name := fmt.Sprintf("Forward %s (migrated)", rule.Name)
+		actionData := strings.Join(rule.Upstreams, ",")
+
+		// Priority direction inversion: CF uses Priority DESC range 1-100,
+		// policy uses sort_order ASC. Invert + offset into the migrated band.
+		prio := rule.Priority
+		if prio == 0 {
+			prio = 50 // CF default
+		}
+		sortOrder := conditionalForwardingPolicyBand + (100 - prio)
+
+		if stor != nil {
+			_, err := stor.CreatePolicyRule(ctx, &storage.PolicyRule{
+				Name:       name,
+				Logic:      logic,
+				Action:     "FORWARD",
+				ActionData: actionData,
+				Enabled:    true,
+				SortOrder:  sortOrder,
+			})
+			if err != nil {
+				if strings.Contains(err.Error(), "UNIQUE constraint failed") {
+					duplicateSkipped++
+					continue
+				}
+				logger.Error("Failed to migrate conditional forwarding rule",
+					"rule", rule.Name, "error", err)
+				continue
+			}
+		} else {
+			cfg.Policy.Rules = append(cfg.Policy.Rules, config.PolicyRuleEntry{
+				Name:       name,
+				Logic:      logic,
+				Action:     "FORWARD",
+				ActionData: actionData,
+				Enabled:    true,
+			})
+		}
+		migratedCount++
+	}
+
+	cfg.Policy.Enabled = true
+	cfg.ConditionalForwarding.Rules = nil
+	cfg.ConditionalForwarding.Enabled = false
+
+	// Guard 3: YAML persist
+	if configPath != "" {
+		if err := config.Save(configPath, cfg); err != nil {
+			logger.Warn("Failed to persist YAML after conditional forwarding migration; sentinel + UNIQUE index still prevent duplicates on next boot.",
+				"path", configPath, "error", err)
+		} else {
+			logger.Info("Persisted YAML after conditional forwarding migration", "path", configPath)
+		}
+	}
+
+	if stor != nil {
+		if err := stor.SetDynamicConfig(ctx, conditionalForwardingMigratedSentinel, time.Now().UTC().Format(time.RFC3339)); err != nil {
+			logger.Warn("Failed to set conditional forwarding migration sentinel", "error", err)
+		}
+	}
+
+	logger.Info("Conditional forwarding migration complete",
+		"migrated", migratedCount,
+		"duplicate_skipped", duplicateSkipped,
+		"invalid_skipped", invalidSkipped,
+	)
+
+	return migratedCount > 0
+}
+
+// buildPolicyLogicFromCFRule synthesizes a Policy DSL expression from a CF
+// rule's matchers. Returns "" when the rule has zero matchers (caller should
+// reject this — a no-matcher rule would expand silently to "match all").
+func buildPolicyLogicFromCFRule(rule config.ForwardingRule) string {
+	var parts []string
+
+	if len(rule.Domains) > 0 {
+		domainParts := make([]string, 0, len(rule.Domains))
+		for _, d := range rule.Domains {
+			switch {
+			case strings.HasPrefix(d, "*."):
+				base := strings.TrimPrefix(d, "*.")
+				domainParts = append(domainParts, fmt.Sprintf(`(Domain == %q || DomainEndsWith(Domain, %q))`, base, "."+base))
+			case strings.ContainsAny(d, "()[]{}^$|\\+?"):
+				domainParts = append(domainParts, fmt.Sprintf(`DomainMatches(Domain, %q)`, d))
+			default:
+				domainParts = append(domainParts, fmt.Sprintf(`Domain == %q`, d))
+			}
+		}
+		if len(domainParts) == 1 {
+			parts = append(parts, domainParts[0])
+		} else {
+			parts = append(parts, "("+strings.Join(domainParts, " || ")+")")
+		}
+	}
+
+	if len(rule.ClientCIDRs) > 0 {
+		cidrParts := make([]string, 0, len(rule.ClientCIDRs))
+		for _, c := range rule.ClientCIDRs {
+			cidrParts = append(cidrParts, fmt.Sprintf(`IPInCIDR(ClientIP, %q)`, c))
+		}
+		if len(cidrParts) == 1 {
+			parts = append(parts, cidrParts[0])
+		} else {
+			parts = append(parts, "("+strings.Join(cidrParts, " || ")+")")
+		}
+	}
+
+	if len(rule.QueryTypes) > 0 {
+		qts := make([]string, 0, len(rule.QueryTypes))
+		for _, q := range rule.QueryTypes {
+			qts = append(qts, fmt.Sprintf("%q", q))
+		}
+		parts = append(parts, fmt.Sprintf(`QueryTypeIn(QueryType, %s)`, strings.Join(qts, ", ")))
+	}
+
+	return strings.Join(parts, " && ")
 }
 
 func main() {
@@ -396,6 +583,11 @@ func main() {
 	// Migrate whitelist entries to policies (one-time migration)
 	if migrateWhitelistToPolicies(cfg, stor, *configPath, logger) {
 		logger.Info("Whitelist migration complete — entries converted to ALLOW policies")
+	}
+
+	// Migrate conditional forwarding rules to policy FORWARD rules (v0.26 deprecation)
+	if migrateConditionalForwardingToPolicies(cfg, stor, *configPath, logger) {
+		logger.Info("Conditional forwarding migration complete — rules converted to FORWARD policies (use /api/policies)")
 	}
 
 	// Initialize local DNS records if configured

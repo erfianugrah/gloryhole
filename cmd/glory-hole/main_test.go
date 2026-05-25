@@ -196,3 +196,227 @@ func TestMigrateWhitelistToPolicies_PersistFailureNonFatal(t *testing.T) {
 		t.Error("bogus path should not have been created")
 	}
 }
+
+func countForwardMigratedRules(t *testing.T, stor storage.Storage) []*storage.PolicyRule {
+	t.Helper()
+	rules, err := stor.GetPolicyRules(context.Background())
+	if err != nil {
+		t.Fatalf("GetPolicyRules: %v", err)
+	}
+	out := make([]*storage.PolicyRule, 0)
+	for _, r := range rules {
+		if r.Action == "FORWARD" {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
+// TestMigrateConditionalForwardingToPolicies_FullShape exercises every matcher
+// dimension at once (domains incl. wildcard + exact, client_cidrs, query_types)
+// and asserts the synthesized DSL expression is correct.
+func TestMigrateConditionalForwardingToPolicies_FullShape(t *testing.T) {
+	stor, _ := newTestStorage(t)
+	logger := logging.NewDefault()
+
+	cfg := &config.Config{
+		ConditionalForwarding: config.ConditionalForwardingConfig{
+			Enabled: true,
+			Rules: []config.ForwardingRule{
+				{
+					Name:        "corp",
+					Domains:     []string{"*.corp.example.com", "internal.example.com"},
+					ClientCIDRs: []string{"10.0.0.0/8"},
+					QueryTypes:  []string{"A", "AAAA"},
+					Upstreams:   []string{"10.0.0.53:53", "10.0.0.54:53"},
+					Priority:    80,
+					Enabled:     true,
+				},
+			},
+		},
+	}
+	cfgPath := writeConfigFile(t, cfg)
+
+	if !migrateConditionalForwardingToPolicies(cfg, stor, cfgPath, logger) {
+		t.Fatal("expected migration to report changes")
+	}
+
+	rules := countForwardMigratedRules(t, stor)
+	if len(rules) != 1 {
+		t.Fatalf("want 1 FORWARD rule, got %d", len(rules))
+	}
+	r := rules[0]
+	if r.Name != "Forward corp (migrated)" {
+		t.Errorf("name: got %q", r.Name)
+	}
+	if r.Action != "FORWARD" {
+		t.Errorf("action: %q", r.Action)
+	}
+	if r.ActionData != "10.0.0.53:53,10.0.0.54:53" {
+		t.Errorf("action_data: %q", r.ActionData)
+	}
+	expected := `((Domain == "corp.example.com" || DomainEndsWith(Domain, ".corp.example.com")) || Domain == "internal.example.com") && IPInCIDR(ClientIP, "10.0.0.0/8") && QueryTypeIn(QueryType, "A", "AAAA")`
+	if r.Logic != expected {
+		t.Errorf("logic mismatch:\n  got:  %s\n  want: %s", r.Logic, expected)
+	}
+	// Priority 80 inverts to SortOrder 1000 + (100-80) = 1020
+	if r.SortOrder != 1020 {
+		t.Errorf("sort_order: want 1020, got %d", r.SortOrder)
+	}
+
+	if cfg.ConditionalForwarding.Enabled || len(cfg.ConditionalForwarding.Rules) != 0 {
+		t.Errorf("CF should be drained: enabled=%v rules=%d", cfg.ConditionalForwarding.Enabled, len(cfg.ConditionalForwarding.Rules))
+	}
+	reloaded, _ := config.Load(cfgPath)
+	if reloaded.ConditionalForwarding.Enabled || len(reloaded.ConditionalForwarding.Rules) != 0 {
+		t.Errorf("YAML still has CF block: enabled=%v rules=%d", reloaded.ConditionalForwarding.Enabled, len(reloaded.ConditionalForwarding.Rules))
+	}
+}
+
+func TestMigrateConditionalForwardingToPolicies_Idempotent_AcrossRestarts(t *testing.T) {
+	stor, _ := newTestStorage(t)
+	logger := logging.NewDefault()
+
+	cfg := &config.Config{
+		ConditionalForwarding: config.ConditionalForwardingConfig{
+			Enabled: true,
+			Rules: []config.ForwardingRule{
+				{Name: "a", Domains: []string{"a.test"}, Upstreams: []string{"1.1.1.1:53"}, Priority: 50, Enabled: true},
+				{Name: "b", Domains: []string{"b.test"}, Upstreams: []string{"1.1.1.1:53"}, Priority: 50, Enabled: true},
+			},
+		},
+	}
+	cfgPath := writeConfigFile(t, cfg)
+
+	migrateConditionalForwardingToPolicies(cfg, stor, cfgPath, logger)
+	if got := len(countForwardMigratedRules(t, stor)); got != 2 {
+		t.Fatalf("first boot: want 2, got %d", got)
+	}
+
+	cfg2, err := config.Load(cfgPath)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	cfg2.ConditionalForwarding = config.ConditionalForwardingConfig{
+		Enabled: true,
+		Rules: []config.ForwardingRule{
+			{Name: "a", Domains: []string{"a.test"}, Upstreams: []string{"1.1.1.1:53"}, Priority: 50, Enabled: true},
+			{Name: "c", Domains: []string{"c.test"}, Upstreams: []string{"1.1.1.1:53"}, Priority: 50, Enabled: true},
+		},
+	}
+
+	if migrateConditionalForwardingToPolicies(cfg2, stor, cfgPath, logger) {
+		t.Error("second boot: sentinel should have prevented migration")
+	}
+	if got := len(countForwardMigratedRules(t, stor)); got != 2 {
+		t.Errorf("second boot: rule count must stay at 2 (sentinel guard), got %d", got)
+	}
+}
+
+func TestMigrateConditionalForwardingToPolicies_RejectsEmptyMatchers(t *testing.T) {
+	stor, _ := newTestStorage(t)
+	logger := logging.NewDefault()
+
+	cfg := &config.Config{
+		ConditionalForwarding: config.ConditionalForwardingConfig{
+			Enabled: true,
+			Rules: []config.ForwardingRule{
+				{Name: "no-matchers", Upstreams: []string{"1.1.1.1:53"}, Priority: 50, Enabled: true},
+				{Name: "valid", Domains: []string{"x.test"}, Upstreams: []string{"1.1.1.1:53"}, Priority: 50, Enabled: true},
+			},
+		},
+	}
+	cfgPath := writeConfigFile(t, cfg)
+
+	migrateConditionalForwardingToPolicies(cfg, stor, cfgPath, logger)
+	rules := countForwardMigratedRules(t, stor)
+	if len(rules) != 1 {
+		t.Fatalf("want 1 valid rule (no-matchers skipped), got %d", len(rules))
+	}
+	if rules[0].Name != "Forward valid (migrated)" {
+		t.Errorf("wrong rule survived: %q", rules[0].Name)
+	}
+}
+
+func TestMigrateConditionalForwardingToPolicies_DisabledRulesSkipped(t *testing.T) {
+	stor, _ := newTestStorage(t)
+	logger := logging.NewDefault()
+
+	cfg := &config.Config{
+		ConditionalForwarding: config.ConditionalForwardingConfig{
+			Enabled: true,
+			Rules: []config.ForwardingRule{
+				{Name: "off", Domains: []string{"x.test"}, Upstreams: []string{"1.1.1.1:53"}, Priority: 50, Enabled: false},
+				{Name: "on", Domains: []string{"y.test"}, Upstreams: []string{"1.1.1.1:53"}, Priority: 50, Enabled: true},
+			},
+		},
+	}
+	cfgPath := writeConfigFile(t, cfg)
+	migrateConditionalForwardingToPolicies(cfg, stor, cfgPath, logger)
+
+	rules := countForwardMigratedRules(t, stor)
+	if len(rules) != 1 || rules[0].Name != "Forward on (migrated)" {
+		t.Errorf("only enabled rule should migrate, got %v", rules)
+	}
+}
+
+func TestBuildPolicyLogicFromCFRule_Permutations(t *testing.T) {
+	tests := []struct {
+		name string
+		rule config.ForwardingRule
+		want string
+	}{
+		{
+			name: "single exact domain",
+			rule: config.ForwardingRule{Domains: []string{"example.com"}},
+			want: `Domain == "example.com"`,
+		},
+		{
+			name: "wildcard domain",
+			rule: config.ForwardingRule{Domains: []string{"*.example.com"}},
+			want: `(Domain == "example.com" || DomainEndsWith(Domain, ".example.com"))`,
+		},
+		{
+			name: "regex-like domain",
+			rule: config.ForwardingRule{Domains: []string{`(foo|bar)\.test`}},
+			want: `DomainMatches(Domain, "(foo|bar)\\.test")`,
+		},
+		{
+			name: "two domains OR-joined",
+			rule: config.ForwardingRule{Domains: []string{"a.test", "b.test"}},
+			want: `(Domain == "a.test" || Domain == "b.test")`,
+		},
+		{
+			name: "single CIDR",
+			rule: config.ForwardingRule{ClientCIDRs: []string{"10.0.0.0/8"}},
+			want: `IPInCIDR(ClientIP, "10.0.0.0/8")`,
+		},
+		{
+			name: "qtype only",
+			rule: config.ForwardingRule{QueryTypes: []string{"A"}},
+			want: `QueryTypeIn(QueryType, "A")`,
+		},
+		{
+			name: "all three matchers AND-joined",
+			rule: config.ForwardingRule{
+				Domains:     []string{"x.test"},
+				ClientCIDRs: []string{"10.0.0.0/8"},
+				QueryTypes:  []string{"A", "AAAA"},
+			},
+			want: `Domain == "x.test" && IPInCIDR(ClientIP, "10.0.0.0/8") && QueryTypeIn(QueryType, "A", "AAAA")`,
+		},
+		{
+			name: "no matchers returns empty",
+			rule: config.ForwardingRule{},
+			want: ``,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := buildPolicyLogicFromCFRule(tc.rule)
+			if got != tc.want {
+				t.Errorf("\n  got:  %s\n  want: %s", got, tc.want)
+			}
+		})
+	}
+}

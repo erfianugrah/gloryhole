@@ -75,7 +75,6 @@ func TestServeDNS_ConditionalForwardingErrorPath(t *testing.T) {
 					Upstreams: []string{"192.0.2.1:53"}, // Non-routable IP (will fail)
 					Enabled:   true,
 					Priority:  50,
-					Timeout:   100 * time.Millisecond,
 				},
 			},
 		},

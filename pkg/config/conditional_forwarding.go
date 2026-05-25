@@ -1,25 +1,38 @@
 package config
 
-import "time"
+// DEPRECATED in v0.26 — see docs/plans/2026-05-25-v026-policy-consolidation.md
+//
+// ConditionalForwardingConfig is functionally subsumed by Policy FORWARD
+// rules. The first-boot migrator (cmd/glory-hole/main.go::migrateConditionalForwardingToPolicies)
+// converts existing rules into policy_rules entries. This struct is retained
+// in v0.26 for migration-source compatibility and removed in v0.27 along
+// with the API endpoints, UI page, and forwarder.RuleEvaluator.
 
-// ConditionalForwardingConfig holds conditional forwarding configuration
+// ConditionalForwardingConfig holds conditional forwarding configuration.
+//
+// Deprecated: use Policy FORWARD rules instead.
 type ConditionalForwardingConfig struct {
 	Rules   []ForwardingRule `yaml:"rules"`
 	Enabled bool             `yaml:"enabled"`
 }
 
-// ForwardingRule defines a conditional forwarding rule
+// ForwardingRule defines a conditional forwarding rule.
+//
+// Deprecated: use Policy FORWARD rules instead.
+//
+// The Timeout / MaxRetries / Failover fields were removed in v0.26 — they
+// were declared in YAML and round-tripped through the API but never read at
+// runtime (compileRule didn't copy them; ForwardWithUpstreams uses global
+// forwarder defaults). YAML files containing these keys will continue to
+// load (yaml.v3 ignores unknown fields by default).
 type ForwardingRule struct {
-	Name        string        `yaml:"name"`
-	Domains     []string      `yaml:"domains"`
-	ClientCIDRs []string      `yaml:"client_cidrs"`
-	QueryTypes  []string      `yaml:"query_types"`
-	Upstreams   []string      `yaml:"upstreams"`
-	Priority    int           `yaml:"priority"`
-	Timeout     time.Duration `yaml:"timeout"`
-	MaxRetries  int           `yaml:"max_retries"`
-	Failover    bool          `yaml:"failover"`
-	Enabled     bool          `yaml:"enabled"`
+	Name        string   `yaml:"name"`
+	Domains     []string `yaml:"domains"`
+	ClientCIDRs []string `yaml:"client_cidrs"`
+	QueryTypes  []string `yaml:"query_types"`
+	Upstreams   []string `yaml:"upstreams"`
+	Priority    int      `yaml:"priority"`
+	Enabled     bool     `yaml:"enabled"`
 }
 
 // DefaultConditionalForwardingConfig returns default configuration

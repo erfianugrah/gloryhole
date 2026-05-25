@@ -11,7 +11,11 @@ import (
 	"glory-hole/pkg/config"
 )
 
-// ForwardingRuleResponse represents a forwarding rule in API responses
+// ForwardingRuleResponse represents a forwarding rule in API responses.
+//
+// Deprecated in v0.26: timeout / max_retries / failover JSON fields were
+// removed because the server never read them at runtime. The endpoint itself
+// is also deprecated — see ForwardingRuleAddRequest.
 type ForwardingRuleResponse struct {
 	ID          string   `json:"id"` // Unique identifier (name:index)
 	Name        string   `json:"name"`
@@ -20,9 +24,6 @@ type ForwardingRuleResponse struct {
 	QueryTypes  []string `json:"query_types,omitempty"`
 	Upstreams   []string `json:"upstreams"`
 	Priority    int      `json:"priority"`
-	Timeout     string   `json:"timeout,omitempty"`
-	MaxRetries  int      `json:"max_retries,omitempty"`
-	Failover    bool     `json:"failover"`
 	Enabled     bool     `json:"enabled"`
 }
 
@@ -33,7 +34,12 @@ type ConditionalForwardingListResponse struct {
 	Enabled bool                     `json:"enabled"`
 }
 
-// ForwardingRuleAddRequest represents a request to add a forwarding rule
+// ForwardingRuleAddRequest represents a request to add a forwarding rule.
+//
+// Deprecated: this whole endpoint family (`/api/conditionalforwarding`) is
+// scheduled for removal in v0.27 — functionally subsumed by Policy FORWARD
+// rules at `/api/policies`. v0.26 retains the endpoint for backward compat
+// with external tooling but emits a deprecation warning per add/update call.
 type ForwardingRuleAddRequest struct {
 	Name        string   `json:"name"`
 	Domains     []string `json:"domains,omitempty"`
@@ -41,9 +47,6 @@ type ForwardingRuleAddRequest struct {
 	QueryTypes  []string `json:"query_types,omitempty"`
 	Upstreams   []string `json:"upstreams"`
 	Priority    int      `json:"priority"`
-	Timeout     string   `json:"timeout,omitempty"`
-	MaxRetries  int      `json:"max_retries,omitempty"`
-	Failover    bool     `json:"failover"`
 }
 
 // handleGetConditionalForwarding returns all conditional forwarding rules
@@ -59,12 +62,6 @@ func (s *Server) handleGetConditionalForwarding(w http.ResponseWriter, r *http.R
 			// Generate unique ID
 			id := fmt.Sprintf("%s:%d", rule.Name, idx)
 
-			// Convert timeout to string
-			timeoutStr := ""
-			if rule.Timeout > 0 {
-				timeoutStr = rule.Timeout.String()
-			}
-
 			rules = append(rules, ForwardingRuleResponse{
 				ID:          id,
 				Name:        rule.Name,
@@ -73,9 +70,6 @@ func (s *Server) handleGetConditionalForwarding(w http.ResponseWriter, r *http.R
 				QueryTypes:  rule.QueryTypes,
 				Upstreams:   rule.Upstreams,
 				Priority:    rule.Priority,
-				Timeout:     timeoutStr,
-				MaxRetries:  rule.MaxRetries,
-				Failover:    rule.Failover,
 				Enabled:     rule.Enabled,
 			})
 		}
@@ -145,20 +139,14 @@ func (s *Server) handleAddConditionalForwarding(w http.ResponseWriter, r *http.R
 		QueryTypes:  req.QueryTypes,
 		Upstreams:   req.Upstreams,
 		Priority:    req.Priority,
-		MaxRetries:  req.MaxRetries,
-		Failover:    req.Failover,
 		Enabled:     true, // New rules are enabled by default
 	}
 
-	// Parse timeout if provided
-	if req.Timeout != "" {
-		timeout, err := parseDurationField(req.Timeout, "timeout")
-		if err != nil {
-			s.writeError(w, http.StatusBadRequest, fmt.Sprintf("Invalid timeout format: %v", err))
-			return
-		}
-		rule.Timeout = timeout
-	}
+	// Deprecation hint for callers still using this endpoint.
+	s.logger.Warn("DEPRECATED: /api/conditionalforwarding will be removed in v0.27 — use Policy FORWARD rules at /api/policies instead",
+		"endpoint", "POST /api/conditionalforwarding",
+		"rule_name", req.Name,
+	)
 
 	// Persist to config
 	if err := s.persistConditionalForwardingConfig(func(cfg *config.Config) error {
