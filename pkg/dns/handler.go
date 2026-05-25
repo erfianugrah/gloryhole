@@ -4,7 +4,6 @@ package dns
 
 import (
 	"context"
-	"net"
 	"strconv"
 	"strings"
 	"sync"
@@ -97,32 +96,22 @@ type handlerDeps struct {
 type Handler struct {
 	deps atomic.Pointer[handlerDeps]
 
-	// Legacy blocklist maps — guarded by lookupMu.
-	Blocklist      map[string]struct{}
-	Overrides      map[string]net.IP
-	CNAMEOverrides map[string]string
-	lookupMu       sync.RWMutex
-	hasOverrides   atomic.Bool // true when Overrides or CNAMEOverrides are non-empty
+	// Legacy blocklist map — guarded by lookupMu. Overrides / CNAMEOverrides
+	// were removed in v0.26: the maps were never written outside test code, so
+	// the override branches in handleFastBlocklistPath / handleLegacyBlocklistPath
+	// were unreachable. Equivalent functionality is achieved via Policy REDIRECT
+	// (single-IP overrides) and LocalRecords (CNAME chains, TXT, MX, etc.).
+	Blocklist map[string]struct{}
+	lookupMu  sync.RWMutex
 }
 
 // NewHandler creates a new DNS handler
 func NewHandler() *Handler {
 	h := &Handler{
-		Blocklist:      make(map[string]struct{}),
-		Overrides:      make(map[string]net.IP),
-		CNAMEOverrides: make(map[string]string),
+		Blocklist: make(map[string]struct{}),
 	}
 	h.deps.Store(&handlerDeps{})
 	return h
-}
-
-// RefreshOverrideFlag updates the hasOverrides atomic flag after modifying
-// Overrides or CNAMEOverrides maps. Call after any mutation.
-func (h *Handler) RefreshOverrideFlag() {
-	h.lookupMu.RLock()
-	has := len(h.Overrides) > 0 || len(h.CNAMEOverrides) > 0
-	h.lookupMu.RUnlock()
-	h.hasOverrides.Store(has)
 }
 
 // clone returns a shallow copy of the current deps for clone-and-swap.

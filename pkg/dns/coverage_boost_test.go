@@ -52,102 +52,8 @@ func TestServeDNS_BlocklistManagerPath(t *testing.T) {
 }
 
 // TestServeDNS_BlocklistManagerWithOverride tests override path
-func TestServeDNS_BlocklistManagerWithOverride(t *testing.T) {
-	handler := NewHandler()
-
-	logger, _ := logging.New(&config.LoggingConfig{
-		Level:  "error",
-		Format: "text",
-		Output: "stdout",
-	})
-
-	cfg := &config.Config{
-		Blocklists: []string{},
-	}
-
-	mgr := blocklist.NewManager(cfg, logger, nil, nil)
-	handler.SetBlocklistManager(mgr)
-
-	// Add override for A record
-	handler.Overrides["override.local."] = net.ParseIP("192.168.1.1")
-	handler.RefreshOverrideFlag()
-
-	w := &mockResponseWriter{
-		remoteAddr: &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 12345},
-	}
-
-	req := new(dns.Msg)
-	req.SetQuestion("override.local.", dns.TypeA)
-
-	handler.ServeDNS(context.Background(), w, req)
-
-	if w.msg == nil {
-		t.Fatal("Expected response message")
-	}
-	if w.msg.Rcode != dns.RcodeSuccess {
-		t.Errorf("Expected RcodeSuccess, got %d", w.msg.Rcode)
-	}
-	if len(w.msg.Answer) != 1 {
-		t.Fatalf("Expected 1 answer, got %d", len(w.msg.Answer))
-	}
-
-	aRecord, ok := w.msg.Answer[0].(*dns.A)
-	if !ok {
-		t.Fatalf("Expected A record, got %T", w.msg.Answer[0])
-	}
-	if !aRecord.A.Equal(net.ParseIP("192.168.1.1")) {
-		t.Errorf("Expected 192.168.1.1, got %s", aRecord.A)
-	}
-}
 
 // TestServeDNS_BlocklistManagerWithCNAMEOverride tests CNAME override path
-func TestServeDNS_BlocklistManagerWithCNAMEOverride(t *testing.T) {
-	handler := NewHandler()
-
-	logger, _ := logging.New(&config.LoggingConfig{
-		Level:  "error",
-		Format: "text",
-		Output: "stdout",
-	})
-
-	cfg := &config.Config{
-		Blocklists: []string{},
-	}
-
-	mgr := blocklist.NewManager(cfg, logger, nil, nil)
-	handler.SetBlocklistManager(mgr)
-
-	// Add CNAME override
-	handler.CNAMEOverrides["alias.local."] = "target.local."
-	handler.RefreshOverrideFlag()
-
-	w := &mockResponseWriter{
-		remoteAddr: &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 12345},
-	}
-
-	req := new(dns.Msg)
-	req.SetQuestion("alias.local.", dns.TypeA)
-
-	handler.ServeDNS(context.Background(), w, req)
-
-	if w.msg == nil {
-		t.Fatal("Expected response message")
-	}
-	if w.msg.Rcode != dns.RcodeSuccess {
-		t.Errorf("Expected RcodeSuccess, got %d", w.msg.Rcode)
-	}
-	if len(w.msg.Answer) != 1 {
-		t.Fatalf("Expected 1 answer, got %d", len(w.msg.Answer))
-	}
-
-	cnameRecord, ok := w.msg.Answer[0].(*dns.CNAME)
-	if !ok {
-		t.Fatalf("Expected CNAME record, got %T", w.msg.Answer[0])
-	}
-	if cnameRecord.Target != "target.local." {
-		t.Errorf("Expected target.local., got %s", cnameRecord.Target)
-	}
-}
 
 // TestServeDNS_TCPClientIP tests client IP extraction from TCP connection
 func TestServeDNS_TCPClientIP(t *testing.T) {
@@ -267,76 +173,8 @@ func TestServeDNS_LegacyBlocklistPath(t *testing.T) {
 }
 
 // TestServeDNS_LegacyPathWithAAA AOverride tests legacy path with IPv6 override
-func TestServeDNS_LegacyPathWithAAAAOverride(t *testing.T) {
-	handler := NewHandler()
-
-	// Add IPv6 override (legacy path, no BlocklistManager)
-	handler.Overrides["ipv6.local."] = net.ParseIP("fe80::1")
-	handler.RefreshOverrideFlag()
-
-	w := &mockResponseWriter{
-		remoteAddr: &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 12345},
-	}
-
-	req := new(dns.Msg)
-	req.SetQuestion("ipv6.local.", dns.TypeAAAA)
-
-	handler.ServeDNS(context.Background(), w, req)
-
-	if w.msg == nil {
-		t.Fatal("Expected response message")
-	}
-	if w.msg.Rcode != dns.RcodeSuccess {
-		t.Errorf("Expected RcodeSuccess, got %d", w.msg.Rcode)
-	}
-	if len(w.msg.Answer) != 1 {
-		t.Fatalf("Expected 1 answer, got %d", len(w.msg.Answer))
-	}
-
-	aaaaRecord, ok := w.msg.Answer[0].(*dns.AAAA)
-	if !ok {
-		t.Fatalf("Expected AAAA record, got %T", w.msg.Answer[0])
-	}
-	if !aaaaRecord.AAAA.Equal(net.ParseIP("fe80::1")) {
-		t.Errorf("Expected fe80::1, got %s", aaaaRecord.AAAA)
-	}
-}
 
 // TestServeDNS_LegacyPathWithCNAME tests legacy path with CNAME override
-func TestServeDNS_LegacyPathWithCNAME(t *testing.T) {
-	handler := NewHandler()
-
-	// Add CNAME override (legacy path)
-	handler.CNAMEOverrides["www.local."] = "server.local."
-	handler.RefreshOverrideFlag()
-
-	w := &mockResponseWriter{
-		remoteAddr: &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 12345},
-	}
-
-	req := new(dns.Msg)
-	req.SetQuestion("www.local.", dns.TypeCNAME)
-
-	handler.ServeDNS(context.Background(), w, req)
-
-	if w.msg == nil {
-		t.Fatal("Expected response message")
-	}
-	if w.msg.Rcode != dns.RcodeSuccess {
-		t.Errorf("Expected RcodeSuccess, got %d", w.msg.Rcode)
-	}
-	if len(w.msg.Answer) != 1 {
-		t.Fatalf("Expected 1 answer, got %d", len(w.msg.Answer))
-	}
-
-	cnameRecord, ok := w.msg.Answer[0].(*dns.CNAME)
-	if !ok {
-		t.Fatalf("Expected CNAME record, got %T", w.msg.Answer[0])
-	}
-	if cnameRecord.Target != "server.local." {
-		t.Errorf("Expected server.local., got %s", cnameRecord.Target)
-	}
-}
 
 // TestServeDNS_ConditionalForwardingEvaluation tests RuleEvaluator path
 func TestServeDNS_ConditionalForwardingEvaluation(t *testing.T) {

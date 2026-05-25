@@ -43,7 +43,6 @@ type Metrics struct {
 	DNSCacheMisses        metric.Int64Counter
 	DNSBlockedQueries     metric.Int64Counter
 	DNSForwardedQueries   metric.Int64Counter
-	DNSWhitelistedQueries metric.Int64Counter
 
 	// SERVFAIL→TCP retry workaround (forwarder)
 	ServfailTCPRetryTotal metric.Int64Counter
@@ -259,14 +258,6 @@ func (t *Telemetry) InitMetrics() (*Metrics, error) {
 		return nil, fmt.Errorf("failed to create forwarded queries counter: %w", err)
 	}
 
-	whitelistedQueries, err := meter.Int64Counter(
-		"dns.queries.whitelisted",
-		metric.WithDescription("Number of whitelisted DNS queries"),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create whitelisted queries counter: %w", err)
-	}
-
 	rateLimitViolations, err := meter.Int64Counter(
 		"rate_limit.violations",
 		metric.WithDescription("Number of rate limit violations"),
@@ -331,7 +322,6 @@ func (t *Telemetry) InitMetrics() (*Metrics, error) {
 		DNSCacheMisses:        cacheMisses,
 		DNSBlockedQueries:     blockedQueries,
 		DNSForwardedQueries:   forwardedQueries,
-		DNSWhitelistedQueries: whitelistedQueries,
 		RateLimitViolations:   rateLimitViolations,
 		RateLimitDropped:      rateLimitDropped,
 		ActiveClients:         activeClients,

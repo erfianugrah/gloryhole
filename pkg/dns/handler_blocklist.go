@@ -19,27 +19,9 @@ func (h *Handler) handleBlocklistAndOverrides(ctx context.Context, w dns.Respons
 
 func (h *Handler) handleFastBlocklistPath(ctx context.Context, w dns.ResponseWriter, r, msg *dns.Msg, domain string, qtype uint16, qtypeLabel string, trace *blockTraceRecorder, outcome *serveDNSOutcome) bool {
 	blockMatch := h.getBlocklistManager().Match(domain)
-	blocked := blockMatch.Blocked
-
-	overrideIP, hasOverride, cnameTarget, hasCNAME := h.lookupOverrides(domain, qtype, blocked)
-
-	if blocked {
+	if blockMatch.Blocked {
 		return h.handleBlockedDomain(ctx, w, r, msg, qtypeLabel, trace, outcome, blockMatch)
 	}
-
-	if hasOverride && respondWithOverride(msg, qtype, domain, overrideIP) {
-		outcome.responseCode = dns.RcodeSuccess
-		h.writeMsg(w, msg)
-		return true
-	}
-
-	if hasCNAME {
-		respondWithCNAME(msg, domain, cnameTarget)
-		outcome.responseCode = dns.RcodeSuccess
-		h.writeMsg(w, msg)
-		return true
-	}
-
 	return false
 }
 
@@ -51,8 +33,6 @@ func (h *Handler) handleLegacyBlocklistPath(ctx context.Context, w dns.ResponseW
 	h.lookupMu.RLock()
 	_, blocked := h.Blocklist[domain]
 	h.lookupMu.RUnlock()
-
-	overrideIP, hasOverride, cnameTarget, hasCNAME := h.lookupOverrides(domain, qtype, blocked)
 
 	if blocked {
 		// Record trace BEFORE response - this appears in query logs
@@ -95,19 +75,6 @@ func (h *Handler) handleLegacyBlocklistPath(ctx context.Context, w dns.ResponseW
 			c.SetBlocked(ctx, r, msg, trace.Entries())
 		}
 
-		h.writeMsg(w, msg)
-		return true
-	}
-
-	if hasOverride && respondWithOverride(msg, qtype, domain, overrideIP) {
-		outcome.responseCode = dns.RcodeSuccess
-		h.writeMsg(w, msg)
-		return true
-	}
-
-	if hasCNAME {
-		respondWithCNAME(msg, domain, cnameTarget)
-		outcome.responseCode = dns.RcodeSuccess
 		h.writeMsg(w, msg)
 		return true
 	}
@@ -172,26 +139,3 @@ func (h *Handler) handleBlockedDomain(ctx context.Context, w dns.ResponseWriter,
 	return true
 }
 
-func (h *Handler) lookupOverrides(domain string, qtype uint16, blocked bool) (net.IP, bool, string, bool) {
-	// Fast path: skip lock when no overrides are configured (common case)
-	if !h.hasOverrides.Load() {
-		return nil, false, "", false
-	}
-
-	h.lookupMu.RLock()
-	defer h.lookupMu.RUnlock()
-
-	var overrideIP net.IP
-	var hasOverride bool
-	if !blocked && (qtype == dns.TypeA || qtype == dns.TypeAAAA) {
-		overrideIP, hasOverride = h.Overrides[domain]
-	}
-
-	var cnameTarget string
-	var hasCNAME bool
-	if !blocked && !hasOverride && (qtype == dns.TypeCNAME || qtype == dns.TypeA || qtype == dns.TypeAAAA) {
-		cnameTarget, hasCNAME = h.CNAMEOverrides[domain]
-	}
-
-	return overrideIP, hasOverride, cnameTarget, hasCNAME
-}

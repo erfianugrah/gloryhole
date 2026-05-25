@@ -53,22 +53,3 @@ func addCNAMERecord(msg *dns.Msg, domain, target string, ttl uint32) {
 	msg.Answer = append(msg.Answer, rr)
 }
 
-func respondWithOverride(msg *dns.Msg, qtype uint16, domain string, ip net.IP) bool {
-	switch qtype {
-	case dns.TypeA:
-		if ip.To4() != nil {
-			addARecord(msg, domain, ip, overrideTTL)
-			return true
-		}
-	case dns.TypeAAAA:
-		if ip.To16() != nil && ip.To4() == nil {
-			addAAAARecord(msg, domain, ip, overrideTTL)
-			return true
-		}
-	}
-	return false
-}
-
-func respondWithCNAME(msg *dns.Msg, domain, target string) {
-	addCNAMERecord(msg, domain, target, overrideTTL)
-}

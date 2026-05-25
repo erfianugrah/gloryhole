@@ -68,104 +68,11 @@ func TestServeDNS_BlockedDomain(t *testing.T) {
 	}
 }
 
-func TestServeDNS_LocalOverride_A(t *testing.T) {
-	handler := NewHandler()
-	handler.Overrides["nas.local."] = net.ParseIP("192.168.1.100")
-	handler.RefreshOverrideFlag()
-
-	w := &mockResponseWriter{
-		remoteAddr: &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 12345},
-	}
-
-	r := new(dns.Msg)
-	r.SetQuestion("nas.local.", dns.TypeA)
-
-	handler.ServeDNS(context.Background(), w, r)
-
-	if w.msg == nil {
-		t.Fatal("Expected response message")
-	}
-	if w.msg.Rcode != dns.RcodeSuccess {
-		t.Errorf("Expected RcodeSuccess, got %d", w.msg.Rcode)
-	}
-	if len(w.msg.Answer) != 1 {
-		t.Fatalf("Expected 1 answer, got %d", len(w.msg.Answer))
-	}
-
-	aRecord, ok := w.msg.Answer[0].(*dns.A)
-	if !ok {
-		t.Fatalf("Expected A record, got %T", w.msg.Answer[0])
-	}
-	if !aRecord.A.Equal(net.ParseIP("192.168.1.100")) {
-		t.Errorf("Expected IP 192.168.1.100, got %s", aRecord.A)
-	}
-}
-
-func TestServeDNS_LocalOverride_AAAA(t *testing.T) {
-	handler := NewHandler()
-	handler.Overrides["nas.local."] = net.ParseIP("fe80::1")
-	handler.RefreshOverrideFlag()
-
-	w := &mockResponseWriter{
-		remoteAddr: &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 12345},
-	}
-
-	r := new(dns.Msg)
-	r.SetQuestion("nas.local.", dns.TypeAAAA)
-
-	handler.ServeDNS(context.Background(), w, r)
-
-	if w.msg == nil {
-		t.Fatal("Expected response message")
-	}
-	if w.msg.Rcode != dns.RcodeSuccess {
-		t.Errorf("Expected RcodeSuccess, got %d", w.msg.Rcode)
-	}
-	if len(w.msg.Answer) != 1 {
-		t.Fatalf("Expected 1 answer, got %d", len(w.msg.Answer))
-	}
-
-	aaaaRecord, ok := w.msg.Answer[0].(*dns.AAAA)
-	if !ok {
-		t.Fatalf("Expected AAAA record, got %T", w.msg.Answer[0])
-	}
-	if !aaaaRecord.AAAA.Equal(net.ParseIP("fe80::1")) {
-		t.Errorf("Expected IP fe80::1, got %s", aaaaRecord.AAAA)
-	}
-}
-
-func TestServeDNS_CNAMEOverride(t *testing.T) {
-	handler := NewHandler()
-	handler.CNAMEOverrides["storage.local."] = "nas.local."
-	handler.RefreshOverrideFlag()
-
-	w := &mockResponseWriter{
-		remoteAddr: &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 12345},
-	}
-
-	r := new(dns.Msg)
-	r.SetQuestion("storage.local.", dns.TypeA)
-
-	handler.ServeDNS(context.Background(), w, r)
-
-	if w.msg == nil {
-		t.Fatal("Expected response message")
-	}
-	if w.msg.Rcode != dns.RcodeSuccess {
-		t.Errorf("Expected RcodeSuccess, got %d", w.msg.Rcode)
-	}
-	if len(w.msg.Answer) != 1 {
-		t.Fatalf("Expected 1 answer, got %d", len(w.msg.Answer))
-	}
-
-	cnameRecord, ok := w.msg.Answer[0].(*dns.CNAME)
-	if !ok {
-		t.Fatalf("Expected CNAME record, got %T", w.msg.Answer[0])
-	}
-	if cnameRecord.Target != "nas.local." {
-		t.Errorf("Expected target nas.local., got %s", cnameRecord.Target)
-	}
-}
+// TestServeDNS_LocalOverride_A / _AAAA / TestServeDNS_CNAMEOverride were
+// removed in v0.26: they targeted Handler.Overrides / Handler.CNAMEOverrides
+// which were never populated outside test code (see v0.26 plan §6b). Same
+// functionality is now covered by Policy REDIRECT (single-IP) and
+// LocalRecords (CNAME chains, TXT, MX, ...).
 
 func TestServeDNS_NoMatch(t *testing.T) {
 	handler := NewHandler()
@@ -190,8 +97,7 @@ func TestServeDNS_NoMatch(t *testing.T) {
 
 func TestServeDNS_ConcurrentAccess(t *testing.T) {
 	handler := NewHandler()
-	handler.Overrides["nas.local."] = net.ParseIP("192.168.1.100")
-	handler.RefreshOverrideFlag()
+	handler.Blocklist["blocked.local."] = struct{}{}
 
 	// Test concurrent access to handler
 	done := make(chan bool)
@@ -201,7 +107,7 @@ func TestServeDNS_ConcurrentAccess(t *testing.T) {
 				remoteAddr: &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 12345},
 			}
 			r := new(dns.Msg)
-			r.SetQuestion("nas.local.", dns.TypeA)
+			r.SetQuestion("blocked.local.", dns.TypeA)
 			handler.ServeDNS(context.Background(), w, r)
 			done <- true
 		}()
@@ -220,11 +126,5 @@ func TestNewHandler(t *testing.T) {
 	}
 	if handler.Blocklist == nil {
 		t.Error("Blocklist not initialized")
-	}
-	if handler.Overrides == nil {
-		t.Error("Overrides not initialized")
-	}
-	if handler.CNAMEOverrides == nil {
-		t.Error("CNAMEOverrides not initialized")
 	}
 }

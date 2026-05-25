@@ -9,7 +9,6 @@ import (
 const (
 	traceStagePolicy    = "policy"
 	traceStageBlocklist = "blocklist"
-	traceStageWhitelist = "whitelist"
 	traceStageRateLimit = "rate_limit"
 	traceStageCache     = "cache"
 )
