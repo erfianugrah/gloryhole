@@ -114,15 +114,21 @@ func NewForwarder(cfg *config.Config, logger *logging.Logger, metrics *telemetry
 	return f
 }
 
-// retryServfailOverTCP performs one TCP query against the same upstream after a
-// SERVFAIL UDP response. Returns (nil, false) on TCP error or unchanged SERVFAIL,
-// (resp, true) when TCP returns a different (non-SERVFAIL) Rcode.
+// retryOverTCP performs one TCP query against the same upstream after either
+// a SERVFAIL UDP response or a UDP transport error (timeout / connection
+// refused / unreachable). Returns (nil, false) on TCP error or unchanged
+// SERVFAIL, (resp, true) when TCP returns a different (non-SERVFAIL) Rcode.
 //
 // Workaround for environments where UDP packets to specific resolver IPs are
-// silently dropped or filtered (e.g. Fly.io edge anycast — gotcha #24 in
-// knot-fly AGENTS.md). Records `forwarder.servfail_tcp_retry.total{outcome=...}`
-// telemetry on every retry attempt.
-func (f *Forwarder) retryServfailOverTCP(ctx context.Context, r *dns.Msg, upstream string) (*dns.Msg, bool) {
+// silently dropped, filtered, or actively refused while TCP works to the same
+// IP (e.g. Fly.io edge anycast — gotcha #24 in knot-fly AGENTS.md, where
+// inbound UDP from intra-Fly to anycast is blocked but TCP traverses).
+//
+// Records `forwarder.servfail_tcp_retry.total{upstream,trigger,outcome}` on
+// every retry attempt.
+//   trigger ∈ {servfail, net_error}
+//   outcome ∈ {recovered, still_servfail, tcp_error}
+func (f *Forwarder) retryOverTCP(ctx context.Context, r *dns.Msg, upstream, trigger string) (*dns.Msg, bool) {
 	tcpClient := &dns.Client{Net: "tcp", Timeout: f.timeout}
 	tcpResp, _, tcpErr := tcpClient.ExchangeContext(ctx, r, upstream)
 
@@ -139,13 +145,15 @@ func (f *Forwarder) retryServfailOverTCP(ctx context.Context, r *dns.Msg, upstre
 	if f.metrics != nil && f.metrics.ServfailTCPRetryTotal != nil {
 		f.metrics.ServfailTCPRetryTotal.Add(ctx, 1, metric.WithAttributes(
 			attribute.String("upstream", upstream),
+			attribute.String("trigger", trigger),
 			attribute.String("outcome", outcome),
 		))
 	}
 
-	f.logger.Debug("SERVFAIL TCP retry",
+	f.logger.Debug("TCP retry",
 		"upstream", upstream,
 		"domain", r.Question[0].Name,
+		"trigger", trigger,
 		"outcome", outcome,
 	)
 
@@ -218,6 +226,18 @@ func (f *Forwarder) Forward(ctx context.Context, r *dns.Msg) (*dns.Msg, error) {
 				"error", queryErr,
 				"attempt", i+1,
 			)
+
+			// UDP transport error → TCP retry against the SAME upstream BEFORE
+			// falling through to the next one. Targets the case where UDP to a
+			// resolver IP is silently dropped, filtered, or actively refused
+			// (e.g. Fly.io edge anycast inbound from intra-Fly), while TCP
+			// works. Disabled via cfg.Forwarder.ServfailTCPRetry=false.
+			if f.servfailTCPRetry {
+				if tcpResp, ok := f.retryOverTCP(ctx, r, upstream, "net_error"); ok {
+					return tcpResp, nil
+				}
+			}
+
 			lastErr = queryErr
 			continue
 		}
@@ -244,10 +264,10 @@ func (f *Forwarder) Forward(ctx context.Context, r *dns.Msg) (*dns.Msg, error) {
 		)
 
 		// SERVFAIL→TCP retry against the SAME upstream (not the next one).
-		// Targets the failure mode where UDP to a resolver is dropped/filtered
-		// but TCP to the same IP works. Disabled via cfg.Forwarder.ServfailTCPRetry=false.
+		// Targets the case where the upstream returned a SERVFAIL response
+		// because IT couldn't reach an authoritative server over UDP.
 		if resp.Rcode == dns.RcodeServerFailure && f.servfailTCPRetry {
-			if tcpResp, ok := f.retryServfailOverTCP(ctx, r, upstream); ok {
+			if tcpResp, ok := f.retryOverTCP(ctx, r, upstream, "servfail"); ok {
 				return tcpResp, nil
 			}
 		}
@@ -410,6 +430,15 @@ func (f *Forwarder) ForwardWithUpstreams(ctx context.Context, r *dns.Msg, upstre
 				"error", err,
 				"attempt", i+1,
 			)
+
+			// UDP transport error → TCP retry against the SAME upstream BEFORE
+			// falling through to the next one (see Forward() for rationale).
+			if f.servfailTCPRetry {
+				if tcpResp, ok := f.retryOverTCP(ctx, r, upstream, "net_error"); ok {
+					return tcpResp, nil
+				}
+			}
+
 			lastErr = err
 			continue
 		}
@@ -432,7 +461,7 @@ func (f *Forwarder) ForwardWithUpstreams(ctx context.Context, r *dns.Msg, upstre
 
 		// SERVFAIL→TCP retry against the SAME upstream (see Forward() for rationale).
 		if resp.Rcode == dns.RcodeServerFailure && f.servfailTCPRetry {
-			if tcpResp, ok := f.retryServfailOverTCP(ctx, r, upstream); ok {
+			if tcpResp, ok := f.retryOverTCP(ctx, r, upstream, "servfail"); ok {
 				return tcpResp, nil
 			}
 		}

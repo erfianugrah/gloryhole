@@ -825,3 +825,159 @@ func TestForwardWithUpstreams_ServfailTCPRetry_Recovered(t *testing.T) {
 		t.Fatalf("expected 1 answer, got %d", len(resp.Answer))
 	}
 }
+
+// blackholeUDPListener listens on UDP but never replies, forcing the client
+// into i/o timeout. Mirrors the Fly silent-drop case for v6 anycast.
+func blackholeUDPListener(t *testing.T) (net.PacketConn, int) {
+	t.Helper()
+	conn, err := net.ListenPacket("udp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("blackhole udp listen: %v", err)
+	}
+	return conn, conn.LocalAddr().(*net.UDPAddr).Port
+}
+
+// mockTCPOnlyAnswer starts a TCP-only DNS server on the given port (assumes
+// caller already holds a UDP listener on the same port that drops packets).
+func mockTCPOnlyAnswer(t *testing.T, port int, handler dns.HandlerFunc) func() {
+	t.Helper()
+	tcpListener, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port))
+	if err != nil {
+		t.Fatalf("tcp listen on port %d: %v", port, err)
+	}
+	tcpServer := &dns.Server{Listener: tcpListener, Handler: handler}
+	done := make(chan struct{})
+	go func() {
+		_ = tcpServer.ActivateAndServe()
+		close(done)
+	}()
+	time.Sleep(50 * time.Millisecond)
+	return func() {
+		_ = tcpServer.Shutdown()
+		<-done
+	}
+}
+
+// TestForward_NetErrorTCPRetry_Recovered models the Fly intra-anycast case:
+// UDP packets to the upstream are silently dropped (or refused), TCP works.
+// With the retry enabled, the forwarder must recover via TCP without falling
+// over to a different upstream.
+func TestForward_NetErrorTCPRetry_Recovered(t *testing.T) {
+	udpConn, port := blackholeUDPListener(t)
+	defer udpConn.Close()
+
+	cleanupTCP := mockTCPOnlyAnswer(t, port, answerHandler("neterr.test.", "10.0.0.55"))
+	defer cleanupTCP()
+
+	addr := fmt.Sprintf("127.0.0.1:%d", port)
+	cfg := &config.Config{UpstreamDNSServers: []string{addr}}
+	logger := logging.NewDefault()
+	fwd := NewForwarder(cfg, logger, nil)
+	fwd.SetTimeout(300 * time.Millisecond) // short — UDP must time out fast
+
+	req := new(dns.Msg)
+	req.SetQuestion("neterr.test.", dns.TypeA)
+
+	resp, err := fwd.Forward(context.Background(), req)
+	if err != nil {
+		t.Fatalf("Forward failed: %v", err)
+	}
+	if resp.Rcode != dns.RcodeSuccess {
+		t.Fatalf("expected NOERROR after TCP retry, got %s", dns.RcodeToString[resp.Rcode])
+	}
+	if len(resp.Answer) != 1 {
+		t.Fatalf("expected 1 answer from TCP retry, got %d", len(resp.Answer))
+	}
+	a, ok := resp.Answer[0].(*dns.A)
+	if !ok || a.A.String() != "10.0.0.55" {
+		t.Fatalf("expected A 10.0.0.55, got %v", resp.Answer[0])
+	}
+}
+
+// TestForward_NetErrorTCPRetry_BothFail: UDP times out and TCP also errors
+// (no TCP listener bound). Forwarder should fall through to the standard
+// "all upstream servers failed" path and surface the original error.
+func TestForward_NetErrorTCPRetry_BothFail(t *testing.T) {
+	udpConn, _ := blackholeUDPListener(t)
+	defer udpConn.Close()
+
+	addr := udpConn.LocalAddr().String()
+	cfg := &config.Config{UpstreamDNSServers: []string{addr}}
+	logger := logging.NewDefault()
+	fwd := NewForwarder(cfg, logger, nil)
+	fwd.SetTimeout(200 * time.Millisecond)
+
+	req := new(dns.Msg)
+	req.SetQuestion("bothfail.test.", dns.TypeA)
+
+	_, err := fwd.Forward(context.Background(), req)
+	if err == nil {
+		t.Fatal("expected error when UDP and TCP both unreachable")
+	}
+}
+
+// TestForward_NetErrorTCPRetry_Disabled: same setup as Recovered, but the
+// feature is explicitly disabled. UDP times out, retry is skipped, error
+// surfaces from the only-upstream path.
+func TestForward_NetErrorTCPRetry_Disabled(t *testing.T) {
+	udpConn, port := blackholeUDPListener(t)
+	defer udpConn.Close()
+
+	cleanupTCP := mockTCPOnlyAnswer(t, port, answerHandler("disabled-ne.test.", "10.0.0.99"))
+	defer cleanupTCP()
+
+	addr := fmt.Sprintf("127.0.0.1:%d", port)
+	disabled := false
+	cfg := &config.Config{
+		UpstreamDNSServers: []string{addr},
+		Forwarder: config.ForwarderConfig{
+			ServfailTCPRetry: &disabled,
+		},
+	}
+	logger := logging.NewDefault()
+	fwd := NewForwarder(cfg, logger, nil)
+	fwd.SetTimeout(300 * time.Millisecond)
+
+	req := new(dns.Msg)
+	req.SetQuestion("disabled-ne.test.", dns.TypeA)
+
+	_, err := fwd.Forward(context.Background(), req)
+	if err == nil {
+		t.Fatal("expected error when retry disabled and UDP times out")
+	}
+}
+
+// TestForwardWithUpstreams_NetErrorTCPRetry_Recovered: same on the
+// conditional-forwarding path. This is the exact production case
+// (policy FORWARD rule → ForwardWithUpstreams → UDP refused → TCP retry).
+func TestForwardWithUpstreams_NetErrorTCPRetry_Recovered(t *testing.T) {
+	udpConn, port := blackholeUDPListener(t)
+	defer udpConn.Close()
+
+	cleanupTCP := mockTCPOnlyAnswer(t, port, answerHandler("cond-neterr.test.", "10.0.0.42"))
+	defer cleanupTCP()
+
+	addr := fmt.Sprintf("127.0.0.1:%d", port)
+	cfg := &config.Config{UpstreamDNSServers: []string{"1.1.1.1:53"}}
+	logger := logging.NewDefault()
+	fwd := NewForwarder(cfg, logger, nil)
+	fwd.SetTimeout(300 * time.Millisecond)
+
+	req := new(dns.Msg)
+	req.SetQuestion("cond-neterr.test.", dns.TypeA)
+
+	resp, err := fwd.ForwardWithUpstreams(context.Background(), req, []string{addr})
+	if err != nil {
+		t.Fatalf("ForwardWithUpstreams failed: %v", err)
+	}
+	if resp.Rcode != dns.RcodeSuccess {
+		t.Fatalf("expected NOERROR after TCP retry, got %s", dns.RcodeToString[resp.Rcode])
+	}
+	if len(resp.Answer) != 1 {
+		t.Fatalf("expected 1 answer, got %d", len(resp.Answer))
+	}
+	a, ok := resp.Answer[0].(*dns.A)
+	if !ok || a.A.String() != "10.0.0.42" {
+		t.Fatalf("expected A 10.0.0.42, got %v", resp.Answer[0])
+	}
+}
