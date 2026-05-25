@@ -289,6 +289,22 @@ var migrations = []Migration{
 			ALTER TABLE queries ADD COLUMN unbound_resp_size INTEGER;
 		`,
 	},
+	{
+		Version:     15,
+		Description: "Dedupe policy_rules.name and add UNIQUE constraint to prevent migrator-driven row accumulation",
+		SQL: `
+			-- Remove duplicate rows produced by pre-v0.26 migrators that ran on every
+			-- restart with stale YAML still containing migrated entries. Keep the
+			-- lowest-id row per name (oldest, most likely user-edited).
+			DELETE FROM policy_rules
+			WHERE id NOT IN (
+				SELECT MIN(id) FROM policy_rules GROUP BY name
+			);
+
+			CREATE UNIQUE INDEX IF NOT EXISTS idx_policy_rules_name_uq
+				ON policy_rules(name);
+		`,
+	},
 }
 
 // getMigrations returns all migrations sorted by version

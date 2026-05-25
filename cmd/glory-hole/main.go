@@ -45,18 +45,51 @@ var (
 	gitCommit = "unknown" // Set via -ldflags "-X main.gitCommit=$(git rev-parse --short HEAD)"
 )
 
+// whitelistMigratedSentinel is the dynamic_config key set after the one-shot
+// whitelist → policy migration runs successfully. Presence (any non-empty
+// value) means: do NOT re-run, even if the YAML still has whitelist entries
+// (those will be cleaned up by the YAML-write step on first run).
+const whitelistMigratedSentinel = "whitelist_migrated_at"
+
 // migrateWhitelistToPolicies converts whitelist entries to ALLOW policies.
-// Writes directly to SQLite if storage is available, otherwise appends to
-// cfg.Policy.Rules for the first-boot YAML seed path to pick up.
-func migrateWhitelistToPolicies(cfg *config.Config, stor storage.Storage, logger *logging.Logger) bool {
+// Idempotent: checks dynamic_config sentinel + relies on UNIQUE(name) index
+// on policy_rules (migration v15) + persists cfg.Whitelist = nil back to YAML.
+//
+// Three independent guards prevent the v0.25-and-earlier duplicate-row
+// accumulation bug:
+//   1. Sentinel skip — if dynamic_config[whitelist_migrated_at] is set, return.
+//   2. UNIQUE constraint — even if sentinel was somehow lost, duplicate inserts
+//      fail at the DB layer.
+//   3. YAML persist — cfg.Whitelist = nil is written back to disk so the
+//      source-of-truth for next boot is empty.
+func migrateWhitelistToPolicies(cfg *config.Config, stor storage.Storage, configPath string, logger *logging.Logger) bool {
 	if len(cfg.Whitelist) == 0 {
 		return false
 	}
 
+	ctx := context.Background()
+
+	// Guard 1: sentinel check. Already ran — the YAML still has entries because
+	// either an old binary couldn't write back, the volume was restored from a
+	// backup, or the user manually re-added a whitelist: block. Either way:
+	// log the entries we're skipping (for human triage) and bail.
+	if stor != nil {
+		if marker, err := stor.GetDynamicConfig(ctx, whitelistMigratedSentinel); err == nil && marker != "" {
+			logger.Warn("Whitelist migration already ran; YAML still contains whitelist entries (likely YAML edited or restored from backup). Skipping re-migration; remove the whitelist: block from the YAML to silence this warning.",
+				"sentinel_set_at", marker,
+				"yaml_entry_count", len(cfg.Whitelist),
+			)
+			// Still nil out in-memory so the now-deprecated field doesn't leak
+			// into API responses; YAML is the user's problem to clean up.
+			cfg.Whitelist = nil
+			return false
+		}
+	}
+
 	logger.Info("Migrating whitelist entries to policies", "count", len(cfg.Whitelist))
 
-	ctx := context.Background()
 	var migratedCount int
+	var duplicateSkipped int
 
 	for i, entry := range cfg.Whitelist {
 		var logic string
@@ -75,7 +108,8 @@ func migrateWhitelistToPolicies(cfg *config.Config, stor storage.Storage, logger
 		}
 
 		if stor != nil {
-			// Write directly to SQLite
+			// Guard 2: UNIQUE(name) on policy_rules (migration v15) makes this
+			// insert fail safely on duplicate — we count + skip rather than abort.
 			_, err := stor.CreatePolicyRule(ctx, &storage.PolicyRule{
 				Name:      name,
 				Logic:     logic,
@@ -84,6 +118,10 @@ func migrateWhitelistToPolicies(cfg *config.Config, stor storage.Storage, logger
 				SortOrder: i,
 			})
 			if err != nil {
+				if strings.Contains(err.Error(), "UNIQUE constraint failed") {
+					duplicateSkipped++
+					continue
+				}
 				logger.Error("Failed to migrate whitelist entry to DB",
 					"entry", entry, "error", err)
 				continue
@@ -103,8 +141,32 @@ func migrateWhitelistToPolicies(cfg *config.Config, stor storage.Storage, logger
 	cfg.Policy.Enabled = true
 	cfg.Whitelist = nil
 
+	// Guard 3: persist YAML so source-of-truth doesn't keep triggering migration.
+	// Best-effort — if the file is read-only (e.g. baked into image), the sentinel
+	// alone keeps idempotency.
+	if configPath != "" {
+		if err := config.Save(configPath, cfg); err != nil {
+			logger.Warn("Failed to persist YAML after whitelist migration; sentinel + UNIQUE index still prevent duplicates on next boot.",
+				"path", configPath, "error", err,
+			)
+		} else {
+			logger.Info("Persisted YAML after whitelist migration", "path", configPath)
+		}
+	}
+
+	// Set sentinel last — only if we got far enough to attempt all entries.
+	if stor != nil {
+		if err := stor.SetDynamicConfig(ctx, whitelistMigratedSentinel, time.Now().UTC().Format(time.RFC3339)); err != nil {
+			logger.Warn("Failed to set whitelist migration sentinel; UNIQUE index still prevents duplicates on next boot.",
+				"error", err,
+			)
+		}
+	}
+
 	logger.Info("Whitelist migration complete",
-		"migrated", migratedCount)
+		"migrated", migratedCount,
+		"duplicate_skipped", duplicateSkipped,
+	)
 
 	return migratedCount > 0
 }
@@ -332,7 +394,7 @@ func main() {
 	}
 
 	// Migrate whitelist entries to policies (one-time migration)
-	if migrateWhitelistToPolicies(cfg, stor, logger) {
+	if migrateWhitelistToPolicies(cfg, stor, *configPath, logger) {
 		logger.Info("Whitelist migration complete — entries converted to ALLOW policies")
 	}
 
