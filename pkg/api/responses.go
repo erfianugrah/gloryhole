@@ -239,7 +239,6 @@ type ConfigResponse struct {
 	Telemetry            config.TelemetryConfig  `json:"telemetry"`
 	UpstreamDNSServers   []string                `json:"upstream_dns_servers"`
 	Blocklists           []string                `json:"blocklists"`
-	Whitelist            []string                `json:"whitelist"`
 	AutoUpdateBlocklists bool                    `json:"auto_update_blocklists"`
 	UpdateInterval       string                  `json:"update_interval"`
 }
@@ -345,7 +344,6 @@ func convertConfigResponse(cfg *config.Config) ConfigResponse {
 		Telemetry:            cfg.Telemetry,
 		UpstreamDNSServers:   cfg.UpstreamDNSServers,
 		Blocklists:           cfg.Blocklists,
-		Whitelist:            cfg.Whitelist,
 		AutoUpdateBlocklists: cfg.AutoUpdateBlocklists,
 		UpdateInterval:       durationToString(cfg.UpdateInterval),
 	}

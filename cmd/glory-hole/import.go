@@ -76,11 +76,14 @@ func (i *PiholeImporter) Import() (*config.Config, error) {
 		return nil, fmt.Errorf("failed to import blocklists: %w", err)
 	}
 
-	// Step 2: Import whitelist/blacklist from domainlist table
-	whitelist, blacklist, err := i.importDomainLists()
+	// Step 2: Import whitelist/blacklist from Pi-hole's domainlist table.
+	// As of v0.26 these become Policy ALLOW + BLOCK rules directly, instead of
+	// the deprecated cfg.Whitelist field.
+	whitelistDomains, blacklistDomains, err := i.importDomainLists()
 	if err != nil {
 		return nil, fmt.Errorf("failed to import domain lists: %w", err)
 	}
+	policyRules := piholeDomainListsToPolicyRules(whitelistDomains, blacklistDomains)
 
 	// Step 3: Import local DNS records (if custom.list provided)
 	var localRecords []config.LocalRecordEntry
@@ -127,7 +130,6 @@ func (i *PiholeImporter) Import() (*config.Config, error) {
 			EnableBlocklist: true,
 		},
 		Blocklists:           blocklists,
-		Whitelist:            whitelist,
 		UpdateInterval:       24 * time.Hour,
 		AutoUpdateBlocklists: true,
 		UpstreamDNSServers:   upstreams,
@@ -161,10 +163,11 @@ func (i *PiholeImporter) Import() (*config.Config, error) {
 		cfg.LocalRecords.Records = localRecords
 	}
 
-	// Note: Blacklist is not part of the config structure yet
-	// This would require adding blacklist support to Glory-Hole
-	if len(blacklist) > 0 {
-		fmt.Printf("⚠ Note: Found %d blacklist entries (not yet supported by Glory-Hole)\n", len(blacklist))
+	if len(policyRules) > 0 {
+		cfg.Policy.Enabled = true
+		cfg.Policy.Rules = append(cfg.Policy.Rules, policyRules...)
+		fmt.Printf("✓ Imported %d Pi-hole domain entries as policy rules (whitelist=%d, blacklist=%d)\n",
+			len(policyRules), len(whitelistDomains), len(blacklistDomains))
 		fmt.Println()
 	}
 
@@ -607,4 +610,52 @@ func formatNumber(n int) string {
 		result.WriteRune(c)
 	}
 	return result.String()
+}
+
+// piholeDomainListsToPolicyRules converts Pi-hole's `domainlist` table entries
+// (whitelist exact / whitelist regex / blacklist exact / blacklist regex) into
+// Glory-Hole policy rule entries that can be persisted to YAML and seeded into
+// SQLite on first boot.
+//
+// Naming + DSL convention matches migrateWhitelistToPolicies in main.go so
+// rules are interchangeable between import-time and migrate-from-old-config-time.
+//
+//   * domain        → Domain == "x"
+//   * regex pattern → DomainMatches(Domain, "x")
+//   * "*.x"         → Domain == "x" || DomainEndsWith(Domain, ".x")
+func piholeDomainListsToPolicyRules(whitelist, blacklist []string) []config.PolicyRuleEntry {
+	rules := make([]config.PolicyRuleEntry, 0, len(whitelist)+len(blacklist))
+
+	for _, entry := range whitelist {
+		logic, name := domainEntryToLogicAndName(entry, "Allow")
+		rules = append(rules, config.PolicyRuleEntry{
+			Name: name, Logic: logic, Action: "ALLOW", Enabled: true,
+		})
+	}
+	for _, entry := range blacklist {
+		logic, name := domainEntryToLogicAndName(entry, "Block")
+		rules = append(rules, config.PolicyRuleEntry{
+			Name: name, Logic: logic, Action: "BLOCK", Enabled: true,
+		})
+	}
+
+	return rules
+}
+
+// domainEntryToLogicAndName picks the right Policy DSL form for a domain
+// expression (regex, wildcard, exact) and returns (logic, human-readable name).
+func domainEntryToLogicAndName(entry, verb string) (logic, name string) {
+	switch {
+	case strings.HasPrefix(entry, "*."):
+		baseDomain := strings.TrimPrefix(entry, "*.")
+		logic = fmt.Sprintf(`Domain == %q || DomainEndsWith(Domain, %q)`, baseDomain, "."+baseDomain)
+		name = fmt.Sprintf("%s *.%s (imported)", verb, baseDomain)
+	case strings.ContainsAny(entry, "()[]{}^$|\\+?"):
+		logic = fmt.Sprintf(`DomainMatches(Domain, %q)`, entry)
+		name = fmt.Sprintf("%s pattern %s (imported)", verb, entry)
+	default:
+		logic = fmt.Sprintf(`Domain == %q`, entry)
+		name = fmt.Sprintf("%s %s (imported)", verb, entry)
+	}
+	return logic, name
 }

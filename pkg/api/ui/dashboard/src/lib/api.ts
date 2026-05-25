@@ -323,7 +323,6 @@ export interface ConfigResponse {
              add_source?: boolean; max_size?: number; max_backups?: number; max_age?: number };
   upstream_dns_servers: string[];
   blocklists: string[];
-  whitelist: string[];
 }
 
 // ─── Statistics ──────────────────────────────────────────────────────

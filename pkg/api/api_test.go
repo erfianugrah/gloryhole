@@ -397,7 +397,6 @@ func TestHandleGetConfig(t *testing.T) {
 		},
 		UpstreamDNSServers:   []string{"1.1.1.1:53", "8.8.8.8:53"},
 		Blocklists:           []string{"https://example.com/block.txt"},
-		Whitelist:            []string{"allowed.com"},
 		AutoUpdateBlocklists: true,
 		UpdateInterval:       12 * time.Hour,
 	}
