@@ -56,7 +56,7 @@ func TestE2E_FullDNSServer(t *testing.T) {
 	handler := NewHandler()
 
 	// Setup forwarder
-	fwd := forwarder.NewForwarder(cfg, logger)
+	fwd := forwarder.NewForwarder(cfg, logger, nil)
 	handler.SetForwarder(fwd)
 
 	// Setup local records
@@ -242,7 +242,7 @@ func TestE2E_UIExpressionPolicies(t *testing.T) {
 	metrics, _ := telem.InitMetrics()
 
 	handler := NewHandler()
-	fwd := forwarder.NewForwarder(cfg, logger)
+	fwd := forwarder.NewForwarder(cfg, logger, nil)
 	handler.SetForwarder(fwd)
 
 	// Setup policy engine with expressions matching the fixed UI output
@@ -376,7 +376,7 @@ func TestE2E_ConcurrentQueries(t *testing.T) {
 
 	// Create handler with forwarder
 	handler := NewHandler()
-	fwd := forwarder.NewForwarder(cfg, logger)
+	fwd := forwarder.NewForwarder(cfg, logger, nil)
 	handler.SetForwarder(fwd)
 
 	// Create and start server
@@ -492,7 +492,7 @@ func TestE2E_AllRecordTypes(t *testing.T) {
 	handler := NewHandler()
 
 	// Setup forwarder
-	fwd := forwarder.NewForwarder(cfg, logger)
+	fwd := forwarder.NewForwarder(cfg, logger, nil)
 	handler.SetForwarder(fwd)
 
 	// Setup local records with all types
@@ -841,7 +841,7 @@ func TestE2E_MultipleRecordsSameDomain(t *testing.T) {
 	}
 
 	handler := NewHandler()
-	fwd := forwarder.NewForwarder(cfg, logger)
+	fwd := forwarder.NewForwarder(cfg, logger, nil)
 	handler.SetForwarder(fwd)
 
 	localMgr := localrecords.NewManager()

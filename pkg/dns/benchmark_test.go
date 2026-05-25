@@ -166,7 +166,7 @@ func BenchmarkHandler_FullStack(b *testing.B) {
 	cfg := &config.Config{
 		UpstreamDNSServers: []string{"1.1.1.1:53"},
 	}
-	fwd := forwarder.NewForwarder(cfg, logger)
+	fwd := forwarder.NewForwarder(cfg, logger, nil)
 	handler.SetForwarder(fwd)
 
 	msg := new(dns.Msg)

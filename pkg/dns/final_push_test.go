@@ -81,7 +81,7 @@ func TestServeDNS_ConditionalForwardingErrorPath(t *testing.T) {
 		},
 	}
 
-	fwd := forwarder.NewForwarder(cfg, logger)
+	fwd := forwarder.NewForwarder(cfg, logger, nil)
 	handler.SetForwarder(fwd)
 
 	evaluator, err := forwarder.NewRuleEvaluator(&cfg.ConditionalForwarding)
@@ -119,7 +119,7 @@ func TestServeDNS_PolicyEngineForwardErrorPath(t *testing.T) {
 	cfg := &config.Config{
 		UpstreamDNSServers: []string{"1.1.1.1:53"},
 	}
-	handler.SetForwarder(forwarder.NewForwarder(cfg, logger))
+	handler.SetForwarder(forwarder.NewForwarder(cfg, logger, nil))
 
 	engine := policy.NewEngine(nil)
 	rule := &policy.Rule{
@@ -424,7 +424,7 @@ func TestServeDNS_PolicyEngineAllowWithCache(t *testing.T) {
 	cfg := &config.Config{
 		UpstreamDNSServers: []string{"1.1.1.1:53"},
 	}
-	handler.SetForwarder(forwarder.NewForwarder(cfg, logger))
+	handler.SetForwarder(forwarder.NewForwarder(cfg, logger, nil))
 
 	engine := policy.NewEngine(nil)
 	rule := &policy.Rule{

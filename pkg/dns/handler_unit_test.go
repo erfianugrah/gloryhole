@@ -91,7 +91,7 @@ func TestHandler_SetForwarder(t *testing.T) {
 		Format: "text",
 		Output: "stdout",
 	})
-	fwd := forwarder.NewForwarder(cfg, logger)
+	fwd := forwarder.NewForwarder(cfg, logger, nil)
 
 	handler.SetForwarder(fwd)
 
@@ -301,7 +301,7 @@ func TestServeDNS_PolicyEngineAllow(t *testing.T) {
 	cfg := &config.Config{
 		UpstreamDNSServers: []string{"8.8.8.8:53"},
 	}
-	handler.SetForwarder(forwarder.NewForwarder(cfg, logger))
+	handler.SetForwarder(forwarder.NewForwarder(cfg, logger, nil))
 
 	req := new(dns.Msg)
 	req.SetQuestion("allowed.test.", dns.TypeA)

@@ -47,7 +47,7 @@ func TestIntegration_DNSWithCache(t *testing.T) {
 
 	// Create handler with cache
 	handler := dns.NewHandler()
-	fwd := forwarder.NewForwarder(cfg, logger)
+	fwd := forwarder.NewForwarder(cfg, logger, nil)
 	handler.SetForwarder(fwd)
 
 	// Setup cache
@@ -118,7 +118,7 @@ func TestIntegration_PolicyEngineRedirect(t *testing.T) {
 
 	// Create handler with policy engine
 	handler := dns.NewHandler()
-	fwd := forwarder.NewForwarder(cfg, logger)
+	fwd := forwarder.NewForwarder(cfg, logger, nil)
 	handler.SetForwarder(fwd)
 
 	// Setup policy engine with REDIRECT rule
@@ -210,7 +210,7 @@ func TestIntegration_DNSWithStorage(t *testing.T) {
 
 	// Create handler with storage
 	handler := dns.NewHandler()
-	fwd := forwarder.NewForwarder(cfg, logger)
+	fwd := forwarder.NewForwarder(cfg, logger, nil)
 	handler.SetForwarder(fwd)
 	handler.SetStorage(stor)
 
@@ -279,7 +279,7 @@ func TestIntegration_APIWithDNS(t *testing.T) {
 
 	// Create DNS handler with policy engine
 	handler := dns.NewHandler()
-	fwd := forwarder.NewForwarder(dnsCfg, logger)
+	fwd := forwarder.NewForwarder(dnsCfg, logger, nil)
 	handler.SetForwarder(fwd)
 
 	policyEngine := policy.NewEngine(nil)
@@ -396,7 +396,7 @@ func TestIntegration_LocalRecordsWithCache(t *testing.T) {
 
 	// Create handler
 	handler := dns.NewHandler()
-	fwd := forwarder.NewForwarder(cfg, logger)
+	fwd := forwarder.NewForwarder(cfg, logger, nil)
 	handler.SetForwarder(fwd)
 
 	// Setup local records
@@ -484,7 +484,7 @@ func TestIntegration_UIGeneratedPolicies(t *testing.T) {
 	metrics, _ := telem.InitMetrics()
 
 	handler := dns.NewHandler()
-	fwd := forwarder.NewForwarder(dnsCfg, logger)
+	fwd := forwarder.NewForwarder(dnsCfg, logger, nil)
 	handler.SetForwarder(fwd)
 
 	policyEngine := policy.NewEngine(nil)
@@ -591,7 +591,7 @@ func TestIntegration_ComplexPolicyRules(t *testing.T) {
 
 	// Create handler
 	handler := dns.NewHandler()
-	fwd := forwarder.NewForwarder(cfg, logger)
+	fwd := forwarder.NewForwarder(cfg, logger, nil)
 	handler.SetForwarder(fwd)
 
 	// Setup complex policy rules

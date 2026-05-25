@@ -12,23 +12,29 @@ import (
 
 	"glory-hole/pkg/config"
 	"glory-hole/pkg/logging"
+	"glory-hole/pkg/telemetry"
 
 	"github.com/miekg/dns"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
 )
 
 // Forwarder handles forwarding DNS queries to upstream servers
 type Forwarder struct {
-	clientPool sync.Pool
-	logger     *logging.Logger
-	upstreams  []string
-	health     *UpstreamHealth // Circuit breaker for each upstream
-	timeout    time.Duration
-	retries    int
-	index      atomic.Uint32
+	clientPool       sync.Pool
+	logger           *logging.Logger
+	metrics          *telemetry.Metrics
+	upstreams        []string
+	health           *UpstreamHealth // Circuit breaker for each upstream
+	timeout          time.Duration
+	retries          int
+	index            atomic.Uint32
+	servfailTCPRetry bool // When upstream returns SERVFAIL over UDP, retry once over TCP
 }
 
-// NewForwarder creates a new DNS forwarder
-func NewForwarder(cfg *config.Config, logger *logging.Logger) *Forwarder {
+// NewForwarder creates a new DNS forwarder.
+// metrics may be nil (telemetry recording becomes a no-op).
+func NewForwarder(cfg *config.Config, logger *logging.Logger, metrics *telemetry.Metrics) *Forwarder {
 	rawUpstreams := cfg.UpstreamDNSServers
 	if len(rawUpstreams) == 0 {
 		// Default to Cloudflare and Google DNS — don't mutate input config
@@ -67,10 +73,12 @@ func NewForwarder(cfg *config.Config, logger *logging.Logger) *Forwarder {
 	}
 
 	f := &Forwarder{
-		upstreams: upstreams,
-		timeout:   2 * time.Second, // Default 2 second timeout
-		retries:   2,               // Try up to 2 different upstreams
-		logger:    logger,
+		upstreams:        upstreams,
+		timeout:          2 * time.Second, // Default 2 second timeout
+		retries:          2,               // Try up to 2 different upstreams
+		logger:           logger,
+		metrics:          metrics,
+		servfailTCPRetry: cfg.Forwarder.ServfailTCPRetryEnabled(),
 	}
 
 	// Initialize circuit breaker health tracking
@@ -100,9 +108,51 @@ func NewForwarder(cfg *config.Config, logger *logging.Logger) *Forwarder {
 		"timeout", f.timeout,
 		"retries", f.retries,
 		"circuit_breaker", cbCfg.Enabled,
+		"servfail_tcp_retry", f.servfailTCPRetry,
 	)
 
 	return f
+}
+
+// retryServfailOverTCP performs one TCP query against the same upstream after a
+// SERVFAIL UDP response. Returns (nil, false) on TCP error or unchanged SERVFAIL,
+// (resp, true) when TCP returns a different (non-SERVFAIL) Rcode.
+//
+// Workaround for environments where UDP packets to specific resolver IPs are
+// silently dropped or filtered (e.g. Fly.io edge anycast — gotcha #24 in
+// knot-fly AGENTS.md). Records `forwarder.servfail_tcp_retry.total{outcome=...}`
+// telemetry on every retry attempt.
+func (f *Forwarder) retryServfailOverTCP(ctx context.Context, r *dns.Msg, upstream string) (*dns.Msg, bool) {
+	tcpClient := &dns.Client{Net: "tcp", Timeout: f.timeout}
+	tcpResp, _, tcpErr := tcpClient.ExchangeContext(ctx, r, upstream)
+
+	outcome := "recovered"
+	switch {
+	case tcpErr != nil:
+		outcome = "tcp_error"
+	case tcpResp == nil:
+		outcome = "tcp_error"
+	case tcpResp.Rcode == dns.RcodeServerFailure:
+		outcome = "still_servfail"
+	}
+
+	if f.metrics != nil && f.metrics.ServfailTCPRetryTotal != nil {
+		f.metrics.ServfailTCPRetryTotal.Add(ctx, 1, metric.WithAttributes(
+			attribute.String("upstream", upstream),
+			attribute.String("outcome", outcome),
+		))
+	}
+
+	f.logger.Debug("SERVFAIL TCP retry",
+		"upstream", upstream,
+		"domain", r.Question[0].Name,
+		"outcome", outcome,
+	)
+
+	if outcome == "recovered" {
+		return tcpResp, true
+	}
+	return nil, false
 }
 
 // Forward forwards a DNS query to upstream servers
@@ -192,6 +242,15 @@ func (f *Forwarder) Forward(ctx context.Context, r *dns.Msg) (*dns.Msg, error) {
 			"rtt", rtt,
 			"answers", len(resp.Answer),
 		)
+
+		// SERVFAIL→TCP retry against the SAME upstream (not the next one).
+		// Targets the failure mode where UDP to a resolver is dropped/filtered
+		// but TCP to the same IP works. Disabled via cfg.Forwarder.ServfailTCPRetry=false.
+		if resp.Rcode == dns.RcodeServerFailure && f.servfailTCPRetry {
+			if tcpResp, ok := f.retryServfailOverTCP(ctx, r, upstream); ok {
+				return tcpResp, nil
+			}
+		}
 
 		return resp, nil
 	}
@@ -370,6 +429,13 @@ func (f *Forwarder) ForwardWithUpstreams(ctx context.Context, r *dns.Msg, upstre
 			"rtt", rtt,
 			"answers", len(resp.Answer),
 		)
+
+		// SERVFAIL→TCP retry against the SAME upstream (see Forward() for rationale).
+		if resp.Rcode == dns.RcodeServerFailure && f.servfailTCPRetry {
+			if tcpResp, ok := f.retryServfailOverTCP(ctx, r, upstream); ok {
+				return tcpResp, nil
+			}
+		}
 
 		return resp, nil
 	}

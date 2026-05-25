@@ -72,6 +72,25 @@ upstream_dns_servers:
   - "1.1.1.1:53"
   - "8.8.8.8:53"
 
+# Forwarder behaviour
+forwarder:
+  # When an upstream returns SERVFAIL over UDP, retry the same upstream once
+  # over TCP before giving up. Workaround for environments where UDP packets
+  # to a specific resolver IP are silently dropped or filtered while TCP works
+  # (e.g. a Fly.io anycast IP serving authoritative DNS — see knot-fly
+  # gotcha #24). Standard resolvers don't auto-fall-back UDP→TCP except on
+  # TC truncation, so SERVFAIL would otherwise be returned to the client.
+  # Default: true. Set to false to disable.
+  servfail_tcp_retry: true
+
+  # Circuit breaker for upstream health (auto-disabled when the only upstream
+  # is loopback, e.g. managed Unbound on 127.0.0.1:5353).
+  circuit_breaker:
+    enabled: true
+    failure_threshold: 5    # consecutive failures before opening the breaker
+    success_threshold: 2    # consecutive successes to close from half-open
+    timeout_seconds: 30     # cool-down before half-open probe
+
 # Update settings
 update_interval: "24h"
 auto_update_blocklists: true

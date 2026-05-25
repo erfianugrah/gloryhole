@@ -364,7 +364,7 @@ func TestServeDNS_ConditionalForwardingEvaluation(t *testing.T) {
 		},
 	}
 
-	fwd := forwarder.NewForwarder(cfg, logger)
+	fwd := forwarder.NewForwarder(cfg, logger, nil)
 	handler.SetForwarder(fwd)
 
 	// Create RuleEvaluator

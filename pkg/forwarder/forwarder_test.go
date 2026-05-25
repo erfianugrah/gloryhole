@@ -2,6 +2,7 @@ package forwarder
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"testing"
 	"time"
@@ -99,7 +100,7 @@ func TestNewForwarder(t *testing.T) {
 	}
 	logger := logging.NewDefault()
 
-	fwd := NewForwarder(cfg, logger)
+	fwd := NewForwarder(cfg, logger, nil)
 
 	if fwd == nil {
 		t.Fatal("NewForwarder returned nil")
@@ -132,7 +133,7 @@ func TestForward_Success(t *testing.T) {
 		UpstreamDNSServers: []string{addr},
 	}
 	logger := logging.NewDefault()
-	fwd := NewForwarder(cfg, logger)
+	fwd := NewForwarder(cfg, logger, nil)
 
 	// Create DNS query
 	req := new(dns.Msg)
@@ -176,7 +177,7 @@ func TestForward_RoundRobin(t *testing.T) {
 		UpstreamDNSServers: []string{addr1, addr2},
 	}
 	logger := logging.NewDefault()
-	fwd := NewForwarder(cfg, logger)
+	fwd := NewForwarder(cfg, logger, nil)
 
 	ctx := context.Background()
 
@@ -203,7 +204,7 @@ func TestForward_Timeout(t *testing.T) {
 		UpstreamDNSServers: []string{"192.0.2.1:53"}, // TEST-NET-1, should not respond
 	}
 	logger := logging.NewDefault()
-	fwd := NewForwarder(cfg, logger)
+	fwd := NewForwarder(cfg, logger, nil)
 	fwd.SetTimeout(100 * time.Millisecond) // Short timeout
 
 	req := new(dns.Msg)
@@ -230,7 +231,7 @@ func TestForward_Retry(t *testing.T) {
 		UpstreamDNSServers: []string{"192.0.2.1:53", addr}, // First fails, second succeeds
 	}
 	logger := logging.NewDefault()
-	fwd := NewForwarder(cfg, logger)
+	fwd := NewForwarder(cfg, logger, nil)
 	fwd.SetTimeout(100 * time.Millisecond)
 	fwd.SetRetries(2)
 
@@ -258,7 +259,7 @@ func TestForward_AllServersFail(t *testing.T) {
 		UpstreamDNSServers: []string{"192.0.2.1:53", "192.0.2.2:53"}, // Both non-routable
 	}
 	logger := logging.NewDefault()
-	fwd := NewForwarder(cfg, logger)
+	fwd := NewForwarder(cfg, logger, nil)
 	fwd.SetTimeout(100 * time.Millisecond)
 	fwd.SetRetries(2)
 
@@ -283,7 +284,7 @@ func TestForward_SERVFAIL(t *testing.T) {
 		UpstreamDNSServers: []string{addr},
 	}
 	logger := logging.NewDefault()
-	fwd := NewForwarder(cfg, logger)
+	fwd := NewForwarder(cfg, logger, nil)
 
 	req := new(dns.Msg)
 	req.SetQuestion("servfail.test.", dns.TypeA)
@@ -340,7 +341,7 @@ func TestForward_SERVFAIL_PassThrough(t *testing.T) {
 		UpstreamDNSServers: []string{testPort, goodAddr},
 	}
 	logger := logging.NewDefault()
-	fwd := NewForwarder(cfg, logger)
+	fwd := NewForwarder(cfg, logger, nil)
 	fwd.SetRetries(2)
 
 	req := new(dns.Msg)
@@ -382,7 +383,7 @@ func TestForward_ContextCancellation(t *testing.T) {
 		UpstreamDNSServers: []string{"192.0.2.1:53"},
 	}
 	logger := logging.NewDefault()
-	fwd := NewForwarder(cfg, logger)
+	fwd := NewForwarder(cfg, logger, nil)
 	fwd.SetTimeout(5 * time.Second)
 
 	req := new(dns.Msg)
@@ -458,7 +459,7 @@ func TestForwardTCP_Success(t *testing.T) {
 		UpstreamDNSServers: []string{testPort},
 	}
 	logger := logging.NewDefault()
-	fwd := NewForwarder(cfg, logger)
+	fwd := NewForwarder(cfg, logger, nil)
 
 	req := new(dns.Msg)
 	req.SetQuestion("tcp.test.", dns.TypeA)
@@ -484,7 +485,7 @@ func TestForward_NoUpstreams(t *testing.T) {
 		UpstreamDNSServers: []string{},
 	}
 	logger := logging.NewDefault()
-	fwd := NewForwarder(cfg, logger)
+	fwd := NewForwarder(cfg, logger, nil)
 
 	// Should use default upstreams
 	if len(fwd.Upstreams()) == 0 {
@@ -504,7 +505,7 @@ func TestForwardWithUpstreams_Success(t *testing.T) {
 		UpstreamDNSServers: []string{"1.1.1.1:53"}, // Default upstreams (not used)
 	}
 	logger := logging.NewDefault()
-	fwd := NewForwarder(cfg, logger)
+	fwd := NewForwarder(cfg, logger, nil)
 
 	// Create DNS query
 	req := new(dns.Msg)
@@ -537,7 +538,7 @@ func TestForwardWithUpstreams_NoUpstreams(t *testing.T) {
 		UpstreamDNSServers: []string{"1.1.1.1:53"},
 	}
 	logger := logging.NewDefault()
-	fwd := NewForwarder(cfg, logger)
+	fwd := NewForwarder(cfg, logger, nil)
 
 	req := new(dns.Msg)
 	req.SetQuestion("test.com.", dns.TypeA)
@@ -566,7 +567,7 @@ func TestForwardWithUpstreams_Retry(t *testing.T) {
 		UpstreamDNSServers: []string{"1.1.1.1:53"},
 	}
 	logger := logging.NewDefault()
-	fwd := NewForwarder(cfg, logger)
+	fwd := NewForwarder(cfg, logger, nil)
 	fwd.SetTimeout(100 * time.Millisecond)
 	fwd.SetRetries(2)
 
@@ -587,5 +588,240 @@ func TestForwardWithUpstreams_Retry(t *testing.T) {
 
 	if len(resp.Answer) != 1 {
 		t.Fatalf("Expected 1 answer, got %d", len(resp.Answer))
+	}
+}
+
+// mockDualStackServer starts a UDP+TCP DNS server on the SAME port. Each
+// transport has its own response handler so tests can model the
+// "UDP returns SERVFAIL, TCP returns real answer" case driving the retry feature.
+//
+// Returns the shared "host:port" address and a cleanup func.
+func mockDualStackServer(
+	t *testing.T,
+	udpHandler dns.HandlerFunc,
+	tcpHandler dns.HandlerFunc,
+) (string, func()) {
+	t.Helper()
+
+	// Bind UDP first to get an ephemeral port, then bind TCP to the same port.
+	udpConn, err := net.ListenPacket("udp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("udp listen: %v", err)
+	}
+	port := udpConn.LocalAddr().(*net.UDPAddr).Port
+	tcpListener, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port))
+	if err != nil {
+		_ = udpConn.Close()
+		t.Fatalf("tcp listen on port %d: %v", port, err)
+	}
+
+	udpServer := &dns.Server{PacketConn: udpConn, Handler: udpHandler}
+	tcpServer := &dns.Server{Listener: tcpListener, Handler: tcpHandler}
+
+	udpDone := make(chan struct{})
+	tcpDone := make(chan struct{})
+	go func() {
+		_ = udpServer.ActivateAndServe()
+		close(udpDone)
+	}()
+	go func() {
+		_ = tcpServer.ActivateAndServe()
+		close(tcpDone)
+	}()
+
+	// Brief settle so both servers are accepting before tests exchange.
+	time.Sleep(50 * time.Millisecond)
+
+	addr := fmt.Sprintf("127.0.0.1:%d", port)
+	cleanup := func() {
+		_ = udpServer.Shutdown()
+		_ = tcpServer.Shutdown()
+		<-udpDone
+		<-tcpDone
+	}
+	return addr, cleanup
+}
+
+// servfailHandler is a dns.HandlerFunc that always returns SERVFAIL.
+func servfailHandler(w dns.ResponseWriter, r *dns.Msg) {
+	resp := new(dns.Msg)
+	resp.SetReply(r)
+	resp.SetRcode(r, dns.RcodeServerFailure)
+	_ = w.WriteMsg(resp)
+}
+
+// answerHandler returns a HandlerFunc that replies with a fixed A record for any query.
+func answerHandler(domain, ip string) dns.HandlerFunc {
+	return func(w dns.ResponseWriter, r *dns.Msg) {
+		resp := new(dns.Msg)
+		resp.SetReply(r)
+		if len(r.Question) > 0 {
+			rr := &dns.A{
+				Hdr: dns.RR_Header{
+					Name:   r.Question[0].Name,
+					Rrtype: dns.TypeA,
+					Class:  dns.ClassINET,
+					Ttl:    300,
+				},
+				A: net.ParseIP(ip),
+			}
+			resp.Answer = append(resp.Answer, rr)
+		}
+		_ = w.WriteMsg(resp)
+	}
+}
+
+func TestForward_ServfailTCPRetry_Recovered(t *testing.T) {
+	// UDP says SERVFAIL, TCP returns a real answer on the same port.
+	// Default config (ServfailTCPRetry nil → enabled) should retry over TCP
+	// and return the real answer.
+	addr, cleanup := mockDualStackServer(t,
+		dns.HandlerFunc(servfailHandler),
+		answerHandler("retry.test.", "10.0.0.42"),
+	)
+	defer cleanup()
+
+	cfg := &config.Config{UpstreamDNSServers: []string{addr}}
+	logger := logging.NewDefault()
+	fwd := NewForwarder(cfg, logger, nil)
+
+	req := new(dns.Msg)
+	req.SetQuestion("retry.test.", dns.TypeA)
+
+	resp, err := fwd.Forward(context.Background(), req)
+	if err != nil {
+		t.Fatalf("Forward failed: %v", err)
+	}
+	if resp == nil {
+		t.Fatal("nil response")
+	}
+	if resp.Rcode != dns.RcodeSuccess {
+		t.Fatalf("expected NOERROR after TCP retry, got %s", dns.RcodeToString[resp.Rcode])
+	}
+	if len(resp.Answer) != 1 {
+		t.Fatalf("expected 1 answer from TCP retry, got %d", len(resp.Answer))
+	}
+	a, ok := resp.Answer[0].(*dns.A)
+	if !ok || a.A.String() != "10.0.0.42" {
+		t.Fatalf("expected A 10.0.0.42, got %v", resp.Answer[0])
+	}
+}
+
+func TestForward_ServfailTCPRetry_StillServfail(t *testing.T) {
+	// Both UDP and TCP return SERVFAIL. After retry, original SERVFAIL is returned.
+	addr, cleanup := mockDualStackServer(t,
+		dns.HandlerFunc(servfailHandler),
+		dns.HandlerFunc(servfailHandler),
+	)
+	defer cleanup()
+
+	cfg := &config.Config{UpstreamDNSServers: []string{addr}}
+	logger := logging.NewDefault()
+	fwd := NewForwarder(cfg, logger, nil)
+
+	req := new(dns.Msg)
+	req.SetQuestion("still.test.", dns.TypeA)
+
+	resp, err := fwd.Forward(context.Background(), req)
+	if err != nil {
+		t.Fatalf("Forward failed: %v", err)
+	}
+	if resp.Rcode != dns.RcodeServerFailure {
+		t.Fatalf("expected SERVFAIL preserved, got %s", dns.RcodeToString[resp.Rcode])
+	}
+}
+
+func TestForward_ServfailTCPRetry_Disabled(t *testing.T) {
+	// UDP SERVFAIL, TCP would recover, but feature is disabled →
+	// caller sees SERVFAIL, no retry attempted.
+	addr, cleanup := mockDualStackServer(t,
+		dns.HandlerFunc(servfailHandler),
+		answerHandler("disabled.test.", "10.0.0.99"),
+	)
+	defer cleanup()
+
+	disabled := false
+	cfg := &config.Config{
+		UpstreamDNSServers: []string{addr},
+		Forwarder: config.ForwarderConfig{
+			ServfailTCPRetry: &disabled,
+		},
+	}
+	logger := logging.NewDefault()
+	fwd := NewForwarder(cfg, logger, nil)
+
+	req := new(dns.Msg)
+	req.SetQuestion("disabled.test.", dns.TypeA)
+
+	resp, err := fwd.Forward(context.Background(), req)
+	if err != nil {
+		t.Fatalf("Forward failed: %v", err)
+	}
+	if resp.Rcode != dns.RcodeServerFailure {
+		t.Fatalf("expected SERVFAIL (retry disabled), got %s", dns.RcodeToString[resp.Rcode])
+	}
+	if len(resp.Answer) != 0 {
+		t.Errorf("retry was disabled but TCP answer leaked through: %v", resp.Answer)
+	}
+}
+
+func TestForward_ServfailTCPRetry_TCPError(t *testing.T) {
+	// UDP returns SERVFAIL, TCP listener is absent (only UDP bound).
+	// Retry should fail at TCP dial and original SERVFAIL is returned.
+	udpConn, err := net.ListenPacket("udp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("udp listen: %v", err)
+	}
+	defer udpConn.Close()
+
+	udpServer := &dns.Server{PacketConn: udpConn, Handler: dns.HandlerFunc(servfailHandler)}
+	go func() { _ = udpServer.ActivateAndServe() }()
+	defer func() { _ = udpServer.Shutdown() }()
+	time.Sleep(50 * time.Millisecond)
+
+	addr := udpConn.LocalAddr().String()
+
+	cfg := &config.Config{UpstreamDNSServers: []string{addr}}
+	logger := logging.NewDefault()
+	// Use short timeout so a missing TCP listener fails fast (RST on linux loopback).
+	fwd := NewForwarder(cfg, logger, nil)
+	fwd.SetTimeout(200 * time.Millisecond)
+
+	req := new(dns.Msg)
+	req.SetQuestion("tcperror.test.", dns.TypeA)
+
+	resp, err := fwd.Forward(context.Background(), req)
+	if err != nil {
+		t.Fatalf("Forward failed: %v", err)
+	}
+	if resp.Rcode != dns.RcodeServerFailure {
+		t.Fatalf("expected SERVFAIL preserved on TCP error, got %s", dns.RcodeToString[resp.Rcode])
+	}
+}
+
+func TestForwardWithUpstreams_ServfailTCPRetry_Recovered(t *testing.T) {
+	// Same UDP-SERVFAIL + TCP-recovers scenario, but on the conditional path.
+	addr, cleanup := mockDualStackServer(t,
+		dns.HandlerFunc(servfailHandler),
+		answerHandler("conditional-retry.test.", "10.0.0.7"),
+	)
+	defer cleanup()
+
+	cfg := &config.Config{UpstreamDNSServers: []string{"1.1.1.1:53"}}
+	logger := logging.NewDefault()
+	fwd := NewForwarder(cfg, logger, nil)
+
+	req := new(dns.Msg)
+	req.SetQuestion("conditional-retry.test.", dns.TypeA)
+
+	resp, err := fwd.ForwardWithUpstreams(context.Background(), req, []string{addr})
+	if err != nil {
+		t.Fatalf("ForwardWithUpstreams failed: %v", err)
+	}
+	if resp.Rcode != dns.RcodeSuccess {
+		t.Fatalf("expected NOERROR after TCP retry, got %s", dns.RcodeToString[resp.Rcode])
+	}
+	if len(resp.Answer) != 1 {
+		t.Fatalf("expected 1 answer, got %d", len(resp.Answer))
 	}
 }

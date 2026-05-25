@@ -54,7 +54,7 @@ func TestConditionalForwarding_DomainMatching(t *testing.T) {
 	metrics, _ := telem.InitMetrics()
 
 	handler := NewHandler()
-	fwd := forwarder.NewForwarder(cfg, logger)
+	fwd := forwarder.NewForwarder(cfg, logger, nil)
 	handler.SetForwarder(fwd)
 
 	// Initialize conditional forwarding
@@ -166,7 +166,7 @@ func TestConditionalForwarding_PriorityOrdering(t *testing.T) {
 	metrics, _ := telem.InitMetrics()
 
 	handler := NewHandler()
-	fwd := forwarder.NewForwarder(cfg, logger)
+	fwd := forwarder.NewForwarder(cfg, logger, nil)
 	handler.SetForwarder(fwd)
 
 	ruleEvaluator, err := forwarder.NewRuleEvaluator(&cfg.ConditionalForwarding)
@@ -253,7 +253,7 @@ func TestConditionalForwarding_PolicyForward(t *testing.T) {
 	metrics, _ := telem.InitMetrics()
 
 	handler := NewHandler()
-	fwd := forwarder.NewForwarder(cfg, logger)
+	fwd := forwarder.NewForwarder(cfg, logger, nil)
 	handler.SetForwarder(fwd)
 
 	// Setup policy engine with FORWARD action

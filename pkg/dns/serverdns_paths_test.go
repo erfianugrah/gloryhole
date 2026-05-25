@@ -40,7 +40,7 @@ func TestServeDNS_PolicyEngineForwardWithCache(t *testing.T) {
 	cfg := &config.Config{
 		UpstreamDNSServers: []string{"1.1.1.1:53"},
 	}
-	handler.SetForwarder(forwarder.NewForwarder(cfg, logger))
+	handler.SetForwarder(forwarder.NewForwarder(cfg, logger, nil))
 
 	engine := policy.NewEngine(nil)
 	rule := &policy.Rule{
@@ -440,7 +440,7 @@ func TestServeDNS_CacheSet(t *testing.T) {
 	cfg := &config.Config{
 		UpstreamDNSServers: []string{"1.1.1.1:53"},
 	}
-	handler.SetForwarder(forwarder.NewForwarder(cfg, logger))
+	handler.SetForwarder(forwarder.NewForwarder(cfg, logger, nil))
 
 	w := &mockResponseWriter{
 		remoteAddr: &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 12345},

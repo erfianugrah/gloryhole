@@ -50,6 +50,24 @@ type UnboundConfig struct {
 // ForwarderConfig holds DNS forwarder configuration
 type ForwarderConfig struct {
 	CircuitBreaker CircuitBreakerConfig `yaml:"circuit_breaker"` // Circuit breaker for upstream health
+
+	// ServfailTCPRetry: when an upstream returns SERVFAIL over UDP, retry the
+	// same upstream once over TCP before giving up. Workaround for environments
+	// where UDP to a given resolver is silently dropped while TCP works
+	// (e.g. Fly.io anycast IPs serving authoritative DNS — gotcha #24 in the
+	// knot-fly project's AGENTS.md). Standard resolvers don't auto-fall-back
+	// UDP→TCP except on TC truncation, so SERVFAIL would otherwise be final.
+	// Pointer so absent/nil = enabled (default), explicit `false` = disabled.
+	ServfailTCPRetry *bool `yaml:"servfail_tcp_retry,omitempty"`
+}
+
+// ServfailTCPRetryEnabled reports whether the SERVFAIL→TCP retry workaround is on.
+// Default-on: nil pointer reads as true.
+func (f ForwarderConfig) ServfailTCPRetryEnabled() bool {
+	if f.ServfailTCPRetry == nil {
+		return true
+	}
+	return *f.ServfailTCPRetry
 }
 
 // CircuitBreakerConfig holds circuit breaker settings

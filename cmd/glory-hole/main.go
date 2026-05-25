@@ -784,7 +784,7 @@ func main() {
 			dnsResolver = resolver.New(newCfg.UpstreamDNSServers, logger)
 			httpClient = dnsResolver.NewHTTPClient(60 * time.Second)
 
-			handler.SetForwarder(forwarder.NewForwarder(newCfg, logger))
+			handler.SetForwarder(forwarder.NewForwarder(newCfg, logger, metrics))
 
 			if blocklistMgr != nil {
 				blocklistMgr.UpdateConfig(newCfg)
@@ -1017,7 +1017,7 @@ func main() {
 				} else {
 					unboundSupervisor = sup
 					newCfg.UpstreamDNSServers = []string{sup.ListenAddr()}
-					handler.SetForwarder(forwarder.NewForwarder(newCfg, logger))
+					handler.SetForwarder(forwarder.NewForwarder(newCfg, logger, metrics))
 					apiServer.SetUnboundSupervisor(sup)
 					logger.Info("Unbound started via hot-reload", "addr", sup.ListenAddr())
 				}
@@ -1032,7 +1032,7 @@ func main() {
 				}
 				apiServer.SetUnboundSupervisor(nil)
 				// Restore original upstreams from new config
-				handler.SetForwarder(forwarder.NewForwarder(newCfg, logger))
+				handler.SetForwarder(forwarder.NewForwarder(newCfg, logger, metrics))
 				logger.Info("Unbound stopped, reverted to direct forwarding",
 					"upstreams", newCfg.UpstreamDNSServers)
 			}

@@ -45,6 +45,9 @@ type Metrics struct {
 	DNSForwardedQueries   metric.Int64Counter
 	DNSWhitelistedQueries metric.Int64Counter
 
+	// SERVFAIL→TCP retry workaround (forwarder)
+	ServfailTCPRetryTotal metric.Int64Counter
+
 	// Rate limiting metrics
 	RateLimitViolations metric.Int64Counter
 	RateLimitDropped    metric.Int64Counter
@@ -312,6 +315,14 @@ func (t *Telemetry) InitMetrics() (*Metrics, error) {
 		return nil, fmt.Errorf("failed to create storage queries dropped counter: %w", err)
 	}
 
+	servfailTCPRetryTotal, err := meter.Int64Counter(
+		"forwarder.servfail_tcp_retry.total",
+		metric.WithDescription("Number of UDP→TCP retries triggered by SERVFAIL responses, labeled by outcome (recovered|still_servfail|tcp_error)"),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create servfail tcp retry counter: %w", err)
+	}
+
 	return &Metrics{
 		DNSQueriesTotal:       queriesTotal,
 		DNSQueriesByType:      queriesByType,
@@ -327,6 +338,7 @@ func (t *Telemetry) InitMetrics() (*Metrics, error) {
 		BlocklistSize:         blocklistSize,
 		CacheSize:             cacheSize,
 		StorageQueriesDropped: storageQueriesDropped,
+		ServfailTCPRetryTotal: servfailTCPRetryTotal,
 	}, nil
 }
 

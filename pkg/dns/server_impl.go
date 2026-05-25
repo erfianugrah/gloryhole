@@ -58,7 +58,7 @@ func NewServer(cfg *config.Config, handler *Handler, logger *logging.Logger, met
 
 	// Initialize forwarder if upstream servers are configured
 	if len(cfg.UpstreamDNSServers) > 0 {
-		fwd := forwarder.NewForwarder(cfg, logger)
+		fwd := forwarder.NewForwarder(cfg, logger, metrics)
 		handler.SetForwarder(fwd)
 	}
 
