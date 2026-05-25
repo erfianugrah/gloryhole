@@ -226,9 +226,9 @@ func TestHandleEDNS0_PreservesDOBit(t *testing.T) {
 
 func TestHandleEDNS0_BufferSizeNegotiation(t *testing.T) {
 	testCases := []struct {
-		name           string
-		requestedSize  uint16
-		expectedSize   uint16
+		name          string
+		requestedSize uint16
+		expectedSize  uint16
 	}{
 		{
 			name:          "Zero size",

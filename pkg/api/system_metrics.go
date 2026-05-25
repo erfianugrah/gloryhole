@@ -70,7 +70,7 @@ func collectSystemMetrics(ctx context.Context) systemMetrics {
 			sum += sensor.Temperature
 			count++
 			if strings.Contains(strings.ToLower(sensor.SensorKey), "package") ||
-			   strings.Contains(strings.ToLower(sensor.SensorKey), "cpu") {
+				strings.Contains(strings.ToLower(sensor.SensorKey), "cpu") {
 				metrics.TemperatureC = sensor.Temperature
 				metrics.temperatureOK = true
 				break

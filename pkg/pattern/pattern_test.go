@@ -413,10 +413,10 @@ func BenchmarkMatcherMatch(b *testing.B) {
 	require.NoError(b, err)
 
 	testDomains := []string{
-		"example.com",           // Exact hit
-		"foo.cdn.example.com",   // Wildcard hit
-		"ads.tracker.com",       // Regex hit
-		"nomatch.com",           // Miss (tries all tiers)
+		"example.com",         // Exact hit
+		"foo.cdn.example.com", // Wildcard hit
+		"ads.tracker.com",     // Regex hit
+		"nomatch.com",         // Miss (tries all tiers)
 	}
 
 	b.ResetTimer()

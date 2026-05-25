@@ -9,8 +9,9 @@ import (
 // for all hostname resolution, ensuring consistent DNS behavior across the application.
 //
 // Example:
-//   resolver := resolver.New([]string{"1.1.1.1:53"}, logger)
-//   client := resolver.NewHTTPClient(60 * time.Second)
+//
+//	resolver := resolver.New([]string{"1.1.1.1:53"}, logger)
+//	client := resolver.NewHTTPClient(60 * time.Second)
 func (r *Resolver) NewHTTPClient(timeout time.Duration) *http.Client {
 	// If no upstreams configured, use default HTTP client
 	if len(r.upstreams) == 0 {

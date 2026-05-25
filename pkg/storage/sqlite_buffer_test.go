@@ -124,7 +124,7 @@ func TestBufferStats(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		query := &QueryLog{
 			Domain:   "example.com",
-			ClientIP:  "1.2.3.4",
+			ClientIP: "1.2.3.4",
 		}
 		if logErr := sqliteStor.LogQuery(context.Background(), query); logErr != nil {
 			t.Errorf("Failed to log query: %v", logErr)
@@ -167,7 +167,7 @@ func TestBufferOverflow(t *testing.T) {
 			WALMode:     true,
 			CacheSize:   4096,
 		},
-		BufferSize:    5, // Very small
+		BufferSize:    5,                // Very small
 		FlushInterval: 10 * time.Second, // Long interval so buffer fills up
 		BatchSize:     10,
 		Enabled:       true,

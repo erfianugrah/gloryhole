@@ -305,8 +305,8 @@ func TestServeDNS_MalformedQuery(t *testing.T) {
 
 // errorResponseWriter is a mock that simulates WriteMsg failures
 type errorResponseWriter struct {
-	remoteAddr      net.Addr
-	writeAttempted  bool
+	remoteAddr     net.Addr
+	writeAttempted bool
 }
 
 func (w *errorResponseWriter) WriteMsg(msg *dns.Msg) error {

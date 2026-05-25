@@ -44,7 +44,7 @@ func TestDomainMatcher_WildcardSuffix(t *testing.T) {
 		{"router.local", true},
 		{"server.lan", true},
 		{"sub.nas.local", true}, // Matches nested subdomains
-		{"local", true},          // Matches root
+		{"local", true},         // Matches root
 		{"lan", true},
 		{"nas.home", false},
 		{"other.com", false},
@@ -113,10 +113,10 @@ func TestDomainMatcher_Regex(t *testing.T) {
 
 func TestDomainMatcher_Mixed(t *testing.T) {
 	patterns := []string{
-		"nas.local",   // Exact
-		"*.home",      // Wildcard suffix
-		"internal.*",  // Wildcard prefix
-		"/test\\d+/",  // Regex
+		"nas.local",  // Exact
+		"*.home",     // Wildcard suffix
+		"internal.*", // Wildcard prefix
+		"/test\\d+/", // Regex
 	}
 	matcher, err := NewDomainMatcher(patterns)
 	if err != nil {
@@ -127,10 +127,10 @@ func TestDomainMatcher_Mixed(t *testing.T) {
 		domain string
 		want   bool
 	}{
-		{"nas.local", true},      // Exact match
-		{"router.home", true},    // Wildcard suffix
-		{"internal.corp", true},  // Wildcard prefix
-		{"test123.com", true},    // Regex
+		{"nas.local", true},     // Exact match
+		{"router.home", true},   // Wildcard suffix
+		{"internal.corp", true}, // Wildcard prefix
+		{"test123.com", true},   // Regex
 		{"other.local", false},
 		{"test.com", false},
 	}
@@ -280,7 +280,7 @@ func TestQueryTypeMatcher(t *testing.T) {
 		{"A", true},
 		{"AAAA", true},
 		{"PTR", true},
-		{"a", true},    // Case insensitive
+		{"a", true}, // Case insensitive
 		{"aaaa", true},
 		{"MX", false},
 		{"CNAME", false},

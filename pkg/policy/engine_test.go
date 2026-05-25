@@ -687,10 +687,10 @@ func TestParseUpstreams(t *testing.T) {
 
 func TestGetUpstreams(t *testing.T) {
 	tests := []struct {
-		name       string
-		rule       *Rule
-		want       []string
-		wantNil    bool
+		name    string
+		rule    *Rule
+		want    []string
+		wantNil bool
 	}{
 		{
 			name: "FORWARD action with valid upstreams",

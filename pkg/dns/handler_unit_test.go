@@ -135,9 +135,9 @@ func TestHandler_SetPolicyEngine(t *testing.T) {
 // REMOVED: 		t.Fatal("expected rate limiter instance")
 // REMOVED: 	}
 // REMOVED: 	defer rl.Stop()
-// REMOVED: 
+// REMOVED:
 // REMOVED: 	handler.SetRateLimiter(rl)
-// REMOVED: 
+// REMOVED:
 // REMOVED: 	if handler.RateLimiter == nil {
 // REMOVED: 		t.Error("SetRateLimiter() failed to set limiter")
 // REMOVED: 	}
@@ -221,17 +221,17 @@ func TestServeDNS_CacheHit(t *testing.T) {
 // REMOVED: 	}
 // REMOVED: 	defer rl.Stop()
 // REMOVED: 	handler.SetRateLimiter(rl)
-// REMOVED: 
+// REMOVED:
 // REMOVED: 	req := new(dns.Msg)
 // REMOVED: 	req.SetQuestion("ratelimit.test.", dns.TypeA)
-// REMOVED: 
+// REMOVED:
 // REMOVED: 	w1 := &mockResponseWriter{remoteAddr: &net.UDPAddr{IP: net.ParseIP("10.0.0.1"), Port: 5300}}
 // REMOVED: 	ctx := context.Background()
 // REMOVED: 	handler.ServeDNS(ctx, w1, req)
-// REMOVED: 
+// REMOVED:
 // REMOVED: 	w2 := &mockResponseWriter{remoteAddr: &net.UDPAddr{IP: net.ParseIP("10.0.0.1"), Port: 5301}}
 // REMOVED: 	handler.ServeDNS(ctx, w2, req)
-// REMOVED: 
+// REMOVED:
 // REMOVED: 	if w2.msg != nil {
 // REMOVED: 		t.Fatalf("expected second response to be dropped by rate limiter")
 // REMOVED: 	}

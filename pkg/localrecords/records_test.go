@@ -516,6 +516,7 @@ func TestString(t *testing.T) {
 		})
 	}
 }
+
 // TXT Record Tests
 
 func TestAddRecord_TXTRecord_SingleString(t *testing.T) {
@@ -574,8 +575,8 @@ func TestAddRecord_TXTRecord_MultipleStrings(t *testing.T) {
 	// Verify all strings are present
 	expected := map[string]bool{
 		"v=spf1 include:_spf.google.com ~all": false,
-		"google-site-verification=abc123xyz":   false,
-		"another-verification=def456":          false,
+		"google-site-verification=abc123xyz":  false,
+		"another-verification=def456":         false,
 	}
 
 	for _, txt := range records[0].TxtRecords {
@@ -1371,17 +1372,17 @@ func TestAddRecord_SRVRecord_MultiplePriorities(t *testing.T) {
 	// Verify priority 10 records come first, sorted by weight (higher weight first)
 	// Order should be: priority=10 weight=60, priority=10 weight=40, priority=20 weight=100
 	if records[0].Priority != 10 || records[0].Weight != 60 {
-		t.Errorf("expected first record priority=10 weight=60, got priority=%d weight=%d", 
+		t.Errorf("expected first record priority=10 weight=60, got priority=%d weight=%d",
 			records[0].Priority, records[0].Weight)
 	}
 
 	if records[1].Priority != 10 || records[1].Weight != 40 {
-		t.Errorf("expected second record priority=10 weight=40, got priority=%d weight=%d", 
+		t.Errorf("expected second record priority=10 weight=40, got priority=%d weight=%d",
 			records[1].Priority, records[1].Weight)
 	}
 
 	if records[2].Priority != 20 || records[2].Weight != 100 {
-		t.Errorf("expected third record priority=20 weight=100, got priority=%d weight=%d", 
+		t.Errorf("expected third record priority=20 weight=100, got priority=%d weight=%d",
 			records[2].Priority, records[2].Weight)
 	}
 }
@@ -1414,7 +1415,6 @@ func TestAddRecord_SRVRecord_DifferentServices(t *testing.T) {
 		t.Errorf("expected 3 total records, got %d", mgr.Count())
 	}
 }
-
 
 func TestAddRecord_SRVRecord_NoTarget(t *testing.T) {
 	mgr := NewManager()
@@ -1625,6 +1625,7 @@ func TestAddRecord_SRVRecord_Wildcard(t *testing.T) {
 		t.Error("wildcard should not match parent domain")
 	}
 }
+
 // ========================
 // NS Record Tests
 // ========================
@@ -1893,14 +1894,14 @@ func TestAddRecord_SOARecord(t *testing.T) {
 func TestAddRecord_SOARecord_AllFields(t *testing.T) {
 	mgr := NewManager()
 
-	record := NewSOARecord("example.local", "ns1.example.local", "admin.example.local", 
+	record := NewSOARecord("example.local", "ns1.example.local", "admin.example.local",
 		2023010101, // Serial
 		7200,       // Refresh (2 hours)
 		1800,       // Retry (30 minutes)
 		604800,     // Expire (7 days)
 		86400,      // Minimum TTL (1 day)
 	)
-	
+
 	if err := mgr.AddRecord(record); err != nil {
 		t.Fatalf("AddRecord() error = %v", err)
 	}

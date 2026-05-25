@@ -43,10 +43,10 @@ type Server struct {
 	unboundSupervisor *unbound.Supervisor // Unbound process supervisor (nil if disabled)
 	startTime         time.Time
 	version           string
-	configPath        string       // Path to config file for persistence
-	allowedOrigins    []string     // Allowed CORS origins
-	blockPageEnabled  atomic.Bool  // Serve block page for unrecognized hosts
-	trustedProxies    []*net.IPNet // CIDRs whose proxy headers (X-Forwarded-For) are trusted
+	configPath        string         // Path to config file for persistence
+	allowedOrigins    []string       // Allowed CORS origins
+	blockPageEnabled  atomic.Bool    // Serve block page for unrecognized hosts
+	trustedProxies    []*net.IPNet   // CIDRs whose proxy headers (X-Forwarded-For) are trusted
 	bgWg              sync.WaitGroup // Tracks background goroutines for clean shutdown
 	authMu            sync.RWMutex
 	authEnabled       bool

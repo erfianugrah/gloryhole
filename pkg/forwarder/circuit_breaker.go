@@ -43,18 +43,18 @@ func (s CircuitState) String() string {
 
 // CircuitBreaker implements the circuit breaker pattern for a single upstream
 type CircuitBreaker struct {
-	state           atomic.Int32  // Current state (StateC losed/Open/HalfOpen)
-	failures        atomic.Int64  // Consecutive failure count
-	successes       atomic.Int64  // Consecutive success count in half-open
-	lastFailTime    atomic.Int64  // Unix nano timestamp of last failure
-	lastStateChange atomic.Int64  // Unix nano timestamp of last state change
-	halfOpenReqs    atomic.Int32  // Number of requests in half-open state
+	state           atomic.Int32 // Current state (StateC losed/Open/HalfOpen)
+	failures        atomic.Int64 // Consecutive failure count
+	successes       atomic.Int64 // Consecutive success count in half-open
+	lastFailTime    atomic.Int64 // Unix nano timestamp of last failure
+	lastStateChange atomic.Int64 // Unix nano timestamp of last state change
+	halfOpenReqs    atomic.Int32 // Number of requests in half-open state
 
 	// Configuration
-	failureThreshold  int           // Failures before opening circuit
-	successThreshold  int           // Successes to close circuit from half-open
-	timeout           time.Duration // How long to wait before half-open
-	halfOpenMax       int           // Max requests in half-open state
+	failureThreshold int           // Failures before opening circuit
+	successThreshold int           // Successes to close circuit from half-open
+	timeout          time.Duration // How long to wait before half-open
+	halfOpenMax      int           // Max requests in half-open state
 }
 
 // NewCircuitBreaker creates a new circuit breaker

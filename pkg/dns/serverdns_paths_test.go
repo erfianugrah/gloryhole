@@ -423,7 +423,7 @@ func TestServeDNS_CacheSet(t *testing.T) {
 
 	logger, _ := logging.New(&config.LoggingConfig{
 		Level:  "error",
-		Format:  "text",
+		Format: "text",
 		Output: "stdout",
 	})
 

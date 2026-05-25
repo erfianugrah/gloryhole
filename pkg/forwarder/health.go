@@ -8,10 +8,10 @@ import (
 
 // CircuitBreakerConfig holds circuit breaker configuration
 type CircuitBreakerConfig struct {
-	Enabled          bool          `yaml:"enabled"`           // Enable circuit breaker (default: true)
-	FailureThreshold int           `yaml:"failure_threshold"` // Failures before opening (default: 5)
-	SuccessThreshold int           `yaml:"success_threshold"` // Successes to close from half-open (default: 2)
-	TimeoutSeconds   int           `yaml:"timeout_seconds"`   // Seconds before half-open (default: 30)
+	Enabled          bool `yaml:"enabled"`           // Enable circuit breaker (default: true)
+	FailureThreshold int  `yaml:"failure_threshold"` // Failures before opening (default: 5)
+	SuccessThreshold int  `yaml:"success_threshold"` // Successes to close from half-open (default: 2)
+	TimeoutSeconds   int  `yaml:"timeout_seconds"`   // Seconds before half-open (default: 30)
 }
 
 // DefaultCircuitBreakerConfig returns default circuit breaker configuration
