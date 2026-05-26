@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Bumped `github.com/miekg/dns` v1.1.68 → v1.1.72 (transitively pulled `golang.org/x/mod` 0.30.0 → 0.31.0 and `golang.org/x/tools` 0.39.0 → 0.40.0). v1 is in maintenance mode upstream; v2 lives at `codeberg.org/miekg/dns` and is still pre-1.0 with active breaking changes — we stay on v1 until v2 stabilises (~2028).
+
+### Documentation
+- Design doc for v0.27 §3 implementation: `InClientGroup(ClientIP, "kids")` DSL helper, atomic-pointer cache mirroring the BlocklistManager pattern, sub-50 ns hot-path budget. Answers the v0.26 plan's open question on §3 sequencing (design now, implement in v0.27).
+- Plan for v0.28: `net.IP` → `netip.Addr` migration. 68 non-test sites across 8 packages, sequenced in 9 leaf-first commits. Fixes a latent v4-mapped-v6 bug in `pkg/unbound/dnstap_reader.go` along the way. Independent of the (deferred) miekg/dns v2 port but explicitly recommended by the v2 porting guide as a prerequisite step.
+
 ## [0.17.0] - 2026-03-14
 
 ### Added
