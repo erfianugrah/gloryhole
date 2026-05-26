@@ -1,12 +1,15 @@
 package config
 
-// DEPRECATED in v0.26 — see docs/plans/2026-05-25-v026-policy-consolidation.md
+// LEGACY in v0.27 — see docs/plans/2026-05-25-v026-policy-consolidation.md §1
+// and docs/plans/2026-05-26-v027-cf-deletion-and-clientgroups.md.
 //
-// ConditionalForwardingConfig is functionally subsumed by Policy FORWARD
-// rules. The first-boot migrator (cmd/glory-hole/main.go::migrateConditionalForwardingToPolicies)
-// converts existing rules into policy_rules entries. This struct is retained
-// in v0.26 for migration-source compatibility and removed in v0.27 along
-// with the API endpoints, UI page, and forwarder.RuleEvaluator.
+// The runtime, API, UI, and forwarder.RuleEvaluator were removed in v0.27.
+// This config schema is retained as a migration source: the first-boot
+// migrator (cmd/glory-hole/main.go::migrateConditionalForwardingToPolicies)
+// reads `conditional_forwarding:` blocks from old YAML and converts them
+// into policy_rules entries with Action=FORWARD. New configs should write
+// Policy rules directly. Slated for full removal in v0.28+ once the
+// upgrade window has passed.
 
 // ConditionalForwardingConfig holds conditional forwarding configuration.
 //
