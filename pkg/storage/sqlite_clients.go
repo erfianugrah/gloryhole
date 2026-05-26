@@ -158,6 +158,43 @@ func (s *SQLiteStorage) UpdateClientProfile(ctx context.Context, profile *Client
 	return nil
 }
 
+// ListClientProfiles returns every row in client_profiles, including those
+// with NULL group_name. Used by the policy ClientGroupResolver to build its
+// in-memory IP → groups cache. Returns rows ordered by client_ip ASC for
+// deterministic test fixtures.
+func (s *SQLiteStorage) ListClientProfiles(ctx context.Context) ([]*ClientProfile, error) {
+	if s == nil || s.db == nil {
+		return nil, ErrClosed
+	}
+
+	const statement = `
+		SELECT client_ip, COALESCE(display_name, ''), COALESCE(notes, ''), COALESCE(group_name, '')
+		FROM client_profiles
+		ORDER BY client_ip ASC;
+	`
+
+	rows, err := s.db.QueryContext(ctx, statement)
+	if err != nil {
+		return nil, fmt.Errorf("query client profiles failed: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var profiles []*ClientProfile
+	for rows.Next() {
+		var profile ClientProfile
+		if err := rows.Scan(&profile.ClientIP, &profile.DisplayName, &profile.Notes, &profile.GroupName); err != nil {
+			return nil, fmt.Errorf("scan client profile failed: %w", err)
+		}
+		profiles = append(profiles, &profile)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate client profiles failed: %w", err)
+	}
+
+	return profiles, nil
+}
+
 // GetClientGroups returns the configured client groups.
 func (s *SQLiteStorage) GetClientGroups(ctx context.Context) ([]*ClientGroup, error) {
 	if s == nil || s.db == nil {

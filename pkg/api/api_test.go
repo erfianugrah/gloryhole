@@ -129,6 +129,10 @@ func (m *mockStorage) Ping(ctx context.Context) error {
 	return nil
 }
 
+func (m *mockStorage) ListClientProfiles(ctx context.Context) ([]*storage.ClientProfile, error) {
+	return nil, nil
+}
+
 func (m *mockStorage) GetClientSummaries(ctx context.Context, limit, offset int) ([]*storage.ClientSummary, error) {
 	return []*storage.ClientSummary{}, nil
 }

@@ -30,6 +30,7 @@ type Storage interface {
 
 	// Client Management
 	GetClientSummaries(ctx context.Context, limit, offset int) ([]*ClientSummary, error)
+	ListClientProfiles(ctx context.Context) ([]*ClientProfile, error)
 	UpdateClientProfile(ctx context.Context, profile *ClientProfile) error
 	GetClientGroups(ctx context.Context) ([]*ClientGroup, error)
 	UpsertClientGroup(ctx context.Context, group *ClientGroup) error

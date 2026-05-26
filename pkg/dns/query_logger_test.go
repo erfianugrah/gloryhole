@@ -87,6 +87,10 @@ func (m *mockStorage) GetTraceStatistics(ctx context.Context, since time.Time) (
 func (m *mockStorage) GetQueriesWithTraceFilter(ctx context.Context, filter storage.TraceFilter, limit, offset int) ([]*storage.QueryLog, error) {
 	return nil, nil
 }
+func (m *mockStorage) ListClientProfiles(ctx context.Context) ([]*storage.ClientProfile, error) {
+	return nil, nil
+}
+
 func (m *mockStorage) GetClientSummaries(ctx context.Context, limit, offset int) ([]*storage.ClientSummary, error) {
 	return nil, nil
 }

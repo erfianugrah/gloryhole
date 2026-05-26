@@ -145,6 +145,10 @@ func (n *NoOpStorage) GetClientSummaries(ctx context.Context, limit, offset int)
 	return []*ClientSummary{}, nil
 }
 
+func (n *NoOpStorage) ListClientProfiles(ctx context.Context) ([]*ClientProfile, error) {
+	return []*ClientProfile{}, nil
+}
+
 func (n *NoOpStorage) UpdateClientProfile(ctx context.Context, profile *ClientProfile) error {
 	return ErrNotEnabled
 }

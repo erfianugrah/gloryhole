@@ -199,6 +199,22 @@ func compileRuleLogic(logic string) (*vm.Program, error) {
 			},
 			new(func(string, string) bool),
 		),
+		// Client group membership (resolver populated via SetClientGroupResolver;
+		// noop default returns false for every (ip, group) pair).
+		expr.Function("InClientGroup",
+			func(params ...any) (any, error) {
+				ip, e := asString(params[0], "InClientGroup.ip")
+				if e != nil {
+					return false, e
+				}
+				group, e := asString(params[1], "InClientGroup.group")
+				if e != nil {
+					return false, e
+				}
+				return InClientGroup(ip, group), nil
+			},
+			new(func(string, string) bool),
+		),
 		// Query type functions
 		expr.Function("QueryTypeIn",
 			func(params ...any) (any, error) {
