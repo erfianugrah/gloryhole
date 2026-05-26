@@ -304,8 +304,8 @@ func BenchmarkInClientGroup(b *testing.B) {
 	}
 	SetClientGroupResolver(r)
 
-	hitIP := ipForIndex(50)    // exists, in "iot"
-	missIP := "192.0.2.99"     // never in cache
+	hitIP := ipForIndex(50) // exists, in "iot"
+	missIP := "192.0.2.99"  // never in cache
 	b.ResetTimer()
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {

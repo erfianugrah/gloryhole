@@ -126,8 +126,9 @@ func NewForwarder(cfg *config.Config, logger *logging.Logger, metrics *telemetry
 //
 // Records `forwarder.servfail_tcp_retry.total{upstream,trigger,outcome}` on
 // every retry attempt.
-//   trigger ∈ {servfail, net_error}
-//   outcome ∈ {recovered, still_servfail, tcp_error}
+//
+//	trigger ∈ {servfail, net_error}
+//	outcome ∈ {recovered, still_servfail, tcp_error}
 func (f *Forwarder) retryOverTCP(ctx context.Context, r *dns.Msg, upstream, trigger string) (*dns.Msg, bool) {
 	tcpClient := &dns.Client{Net: "tcp", Timeout: f.timeout}
 	tcpResp, _, tcpErr := tcpClient.ExchangeContext(ctx, r, upstream)

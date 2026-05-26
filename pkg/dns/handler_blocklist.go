@@ -138,4 +138,3 @@ func (h *Handler) handleBlockedDomain(ctx context.Context, w dns.ResponseWriter,
 	h.writeMsg(w, msg)
 	return true
 }
-

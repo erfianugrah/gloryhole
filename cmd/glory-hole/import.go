@@ -620,9 +620,9 @@ func formatNumber(n int) string {
 // Naming + DSL convention matches migrateWhitelistToPolicies in main.go so
 // rules are interchangeable between import-time and migrate-from-old-config-time.
 //
-//   * domain        → Domain == "x"
-//   * regex pattern → DomainMatches(Domain, "x")
-//   * "*.x"         → Domain == "x" || DomainEndsWith(Domain, ".x")
+//   - domain        → Domain == "x"
+//   - regex pattern → DomainMatches(Domain, "x")
+//   - "*.x"         → Domain == "x" || DomainEndsWith(Domain, ".x")
 func piholeDomainListsToPolicyRules(whitelist, blacklist []string) []config.PolicyRuleEntry {
 	rules := make([]config.PolicyRuleEntry, 0, len(whitelist)+len(blacklist))
 

@@ -52,4 +52,3 @@ func addCNAMERecord(msg *dns.Msg, domain, target string, ttl uint32) {
 	}
 	msg.Answer = append(msg.Answer, rr)
 }
-

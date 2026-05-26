@@ -123,22 +123,22 @@ func (h *Handler) clone() handlerDeps {
 
 // --- Getters: single atomic load per call ---
 
-func (h *Handler) getStorage() storage.Storage                { return h.deps.Load().storage }
-func (h *Handler) getQueryLogger() *QueryLogger               { return h.deps.Load().queryLogger }
-func (h *Handler) getBlocklistManager() *blocklist.Manager    { return h.deps.Load().blocklistManager }
-func (h *Handler) getLocalRecords() *localrecords.Manager     { return h.deps.Load().localRecords }
-func (h *Handler) getPolicyEngine() *policy.Engine            { return h.deps.Load().policyEngine }
-func (h *Handler) getForwarder() *forwarder.Forwarder         { return h.deps.Load().fwd }
-func (h *Handler) getCache() cache.Interface                  { return h.deps.Load().cache }
-func (h *Handler) getConfigWatcher() *config.Watcher          { return h.deps.Load().configWatcher }
-func (h *Handler) getKillSwitch() KillSwitchChecker           { return h.deps.Load().killSwitch }
-func (h *Handler) getDecisionTrace() bool                     { return h.deps.Load().decisionTrace }
-func (h *Handler) getBlockPageIP() string                     { return h.deps.Load().blockPageIP }
-func (h *Handler) getUnboundBuffer() *unbound.ReplyBuffer     { return h.deps.Load().unboundBuffer }
-func (h *Handler) getMetrics() *telemetry.Metrics             { return h.deps.Load().metrics }
-func (h *Handler) GetMetrics() *telemetry.Metrics             { return h.deps.Load().metrics }
-func (h *Handler) GetCache() cache.Interface                  { return h.deps.Load().cache }
-func (h *Handler) getLogger() *logging.Logger                 { return h.deps.Load().logger }
+func (h *Handler) getStorage() storage.Storage             { return h.deps.Load().storage }
+func (h *Handler) getQueryLogger() *QueryLogger            { return h.deps.Load().queryLogger }
+func (h *Handler) getBlocklistManager() *blocklist.Manager { return h.deps.Load().blocklistManager }
+func (h *Handler) getLocalRecords() *localrecords.Manager  { return h.deps.Load().localRecords }
+func (h *Handler) getPolicyEngine() *policy.Engine         { return h.deps.Load().policyEngine }
+func (h *Handler) getForwarder() *forwarder.Forwarder      { return h.deps.Load().fwd }
+func (h *Handler) getCache() cache.Interface               { return h.deps.Load().cache }
+func (h *Handler) getConfigWatcher() *config.Watcher       { return h.deps.Load().configWatcher }
+func (h *Handler) getKillSwitch() KillSwitchChecker        { return h.deps.Load().killSwitch }
+func (h *Handler) getDecisionTrace() bool                  { return h.deps.Load().decisionTrace }
+func (h *Handler) getBlockPageIP() string                  { return h.deps.Load().blockPageIP }
+func (h *Handler) getUnboundBuffer() *unbound.ReplyBuffer  { return h.deps.Load().unboundBuffer }
+func (h *Handler) getMetrics() *telemetry.Metrics          { return h.deps.Load().metrics }
+func (h *Handler) GetMetrics() *telemetry.Metrics          { return h.deps.Load().metrics }
+func (h *Handler) GetCache() cache.Interface               { return h.deps.Load().cache }
+func (h *Handler) getLogger() *logging.Logger              { return h.deps.Load().logger }
 
 // --- Setters: clone-and-swap (single writer assumed) ---
 

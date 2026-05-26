@@ -36,13 +36,13 @@ type Telemetry struct {
 // Metrics holds all application metrics
 type Metrics struct {
 	// DNS Query metrics
-	DNSQueriesTotal       metric.Int64Counter
-	DNSQueriesByType      metric.Int64Counter
-	DNSQueryDuration      metric.Float64Histogram
-	DNSCacheHits          metric.Int64Counter
-	DNSCacheMisses        metric.Int64Counter
-	DNSBlockedQueries     metric.Int64Counter
-	DNSForwardedQueries   metric.Int64Counter
+	DNSQueriesTotal     metric.Int64Counter
+	DNSQueriesByType    metric.Int64Counter
+	DNSQueryDuration    metric.Float64Histogram
+	DNSCacheHits        metric.Int64Counter
+	DNSCacheMisses      metric.Int64Counter
+	DNSBlockedQueries   metric.Int64Counter
+	DNSForwardedQueries metric.Int64Counter
 
 	// SERVFAIL→TCP retry workaround (forwarder)
 	ServfailTCPRetryTotal metric.Int64Counter

@@ -68,11 +68,11 @@ const conditionalForwardingPolicyBand = 1000
 //
 // Three independent guards prevent the v0.25-and-earlier duplicate-row
 // accumulation bug:
-//   1. Sentinel skip — if dynamic_config[whitelist_migrated_at] is set, return.
-//   2. UNIQUE constraint — even if sentinel was somehow lost, duplicate inserts
-//      fail at the DB layer.
-//   3. YAML persist — cfg.Whitelist = nil is written back to disk so the
-//      source-of-truth for next boot is empty.
+//  1. Sentinel skip — if dynamic_config[whitelist_migrated_at] is set, return.
+//  2. UNIQUE constraint — even if sentinel was somehow lost, duplicate inserts
+//     fail at the DB layer.
+//  3. YAML persist — cfg.Whitelist = nil is written back to disk so the
+//     source-of-truth for next boot is empty.
 func migrateWhitelistToPolicies(cfg *config.Config, stor storage.Storage, configPath string, logger *logging.Logger) bool {
 	if len(cfg.Whitelist) == 0 {
 		return false

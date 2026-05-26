@@ -35,13 +35,13 @@ type Server struct {
 	blocklistManager  *blocklist.Manager
 	policyEngine      *policy.Engine
 	clientGroupReload func(context.Context) error // Invalidates the policy.ClientGroupResolver cache. nil = no-op (e.g. tests).
-	cache             cache.Interface              // DNS cache for purge operations
-	configWatcher     *config.Watcher     // For kill-switch feature
-	killSwitch        *KillSwitchManager  // For duration-based temporary disabling
-	configSnapshot    *config.Config      // Used when watcher is unavailable (tests, static configs)
-	dnsHandler        *dns.Handler        // DNS handler for DNS-over-HTTPS (DoH) queries
-	dnsServer         *dns.Server         // DNS server for ACL updates
-	unboundSupervisor *unbound.Supervisor // Unbound process supervisor (nil if disabled)
+	cache             cache.Interface             // DNS cache for purge operations
+	configWatcher     *config.Watcher             // For kill-switch feature
+	killSwitch        *KillSwitchManager          // For duration-based temporary disabling
+	configSnapshot    *config.Config              // Used when watcher is unavailable (tests, static configs)
+	dnsHandler        *dns.Handler                // DNS handler for DNS-over-HTTPS (DoH) queries
+	dnsServer         *dns.Server                 // DNS server for ACL updates
+	unboundSupervisor *unbound.Supervisor         // Unbound process supervisor (nil if disabled)
 	startTime         time.Time
 	version           string
 	configPath        string         // Path to config file for persistence
