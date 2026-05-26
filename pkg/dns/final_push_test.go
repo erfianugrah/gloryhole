@@ -54,57 +54,6 @@ func TestServeDNS_LocalRecordCNAMEResolutionAAAAEmpty(t *testing.T) {
 	}
 }
 
-// TestServeDNS_ConditionalForwardingErrorPath tests conditional forwarding with forwarding error
-func TestServeDNS_ConditionalForwardingErrorPath(t *testing.T) {
-	handler := NewHandler()
-
-	logger, _ := logging.New(&config.LoggingConfig{
-		Level:  "error",
-		Format: "text",
-		Output: "stdout",
-	})
-
-	cfg := &config.Config{
-		UpstreamDNSServers: []string{"1.1.1.1:53"},
-		ConditionalForwarding: config.ConditionalForwardingConfig{
-			Enabled: true,
-			Rules: []config.ForwardingRule{
-				{
-					Name:      "test-rule",
-					Domains:   []string{"test.local"},
-					Upstreams: []string{"192.0.2.1:53"}, // Non-routable IP (will fail)
-					Enabled:   true,
-					Priority:  50,
-				},
-			},
-		},
-	}
-
-	fwd := forwarder.NewForwarder(cfg, logger, nil)
-	handler.SetForwarder(fwd)
-
-	evaluator, err := forwarder.NewRuleEvaluator(&cfg.ConditionalForwarding)
-	if err != nil {
-		t.Fatalf("Failed to create RuleEvaluator: %v", err)
-	}
-	handler.SetRuleEvaluator(evaluator)
-
-	w := &mockResponseWriter{
-		remoteAddr: &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 12345},
-	}
-
-	req := new(dns.Msg)
-	req.SetQuestion("server.test.local.", dns.TypeA)
-
-	handler.ServeDNS(context.Background(), w, req)
-
-	if w.msg == nil {
-		t.Fatal("Expected response message")
-	}
-	// Should return SERVFAIL when conditional forwarding fails
-	// (or might succeed if it falls through to default upstream)
-}
-
 // TestServeDNS_PolicyEngineForwardErrorPath tests policy forward with forwarding error
 func TestServeDNS_PolicyEngineForwardErrorPath(t *testing.T) {
 	handler := NewHandler()

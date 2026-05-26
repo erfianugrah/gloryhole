@@ -879,21 +879,6 @@ func main() {
 		}
 	}
 
-	// Initialize conditional forwarding rule evaluator
-	if cfg.ConditionalForwarding.Enabled {
-		ruleEvaluator, evalErr := forwarder.NewRuleEvaluator(&cfg.ConditionalForwarding)
-		if evalErr != nil {
-			logger.Error("Failed to initialize conditional forwarding",
-				"error", evalErr,
-			)
-		} else {
-			handler.SetRuleEvaluator(ruleEvaluator)
-			logger.Info("Conditional forwarding initialized",
-				"total_rules", ruleEvaluator.Count(),
-			)
-		}
-	}
-
 	// Set metrics collector for Prometheus metrics recording
 	handler.SetMetrics(metrics)
 
@@ -1106,23 +1091,6 @@ func main() {
 				if blocklistMgr != nil {
 					blocklistMgr.SetLogger(newLogger)
 				}
-			}
-		}
-
-		// Hot-reload conditional forwarding if changed
-		if !equalConditionalForwardingConfig(&cfg.ConditionalForwarding, &newCfg.ConditionalForwarding) {
-			logger.Info("Conditional forwarding configuration changed")
-			if newCfg.ConditionalForwarding.Enabled {
-				ruleEvaluator, err := forwarder.NewRuleEvaluator(&newCfg.ConditionalForwarding)
-				if err != nil {
-					logger.Error("Failed to reload conditional forwarding", "error", err)
-				} else {
-					handler.SetRuleEvaluator(ruleEvaluator)
-					logger.Info("Conditional forwarding reloaded", "total_rules", ruleEvaluator.Count())
-				}
-			} else {
-				handler.SetRuleEvaluator(nil)
-				logger.Info("Conditional forwarding disabled")
 			}
 		}
 
@@ -1429,25 +1397,6 @@ func equalLoggingConfig(a, b *config.LoggingConfig) bool {
 		a.MaxSize == b.MaxSize &&
 		a.MaxBackups == b.MaxBackups &&
 		a.MaxAge == b.MaxAge
-}
-
-// equalConditionalForwardingConfig compares two conditional forwarding configurations
-func equalConditionalForwardingConfig(a, b *config.ConditionalForwardingConfig) bool {
-	if a.Enabled != b.Enabled || len(a.Rules) != len(b.Rules) {
-		return false
-	}
-	for i := range a.Rules {
-		if a.Rules[i].Name != b.Rules[i].Name ||
-			!equalStringSlice(a.Rules[i].Domains, b.Rules[i].Domains) ||
-			!equalStringSlice(a.Rules[i].ClientCIDRs, b.Rules[i].ClientCIDRs) ||
-			!equalStringSlice(a.Rules[i].QueryTypes, b.Rules[i].QueryTypes) ||
-			!equalStringSlice(a.Rules[i].Upstreams, b.Rules[i].Upstreams) ||
-			a.Rules[i].Priority != b.Rules[i].Priority ||
-			a.Rules[i].Enabled != b.Rules[i].Enabled {
-			return false
-		}
-	}
-	return true
 }
 
 // equalUnboundConfig compares two Unbound configurations

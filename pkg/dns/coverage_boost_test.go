@@ -7,7 +7,6 @@ import (
 
 	"glory-hole/pkg/blocklist"
 	"glory-hole/pkg/config"
-	"glory-hole/pkg/forwarder"
 	"glory-hole/pkg/localrecords"
 	"glory-hole/pkg/logging"
 	"glory-hole/pkg/policy"
@@ -175,58 +174,6 @@ func TestServeDNS_LegacyBlocklistPath(t *testing.T) {
 // TestServeDNS_LegacyPathWithAAA AOverride tests legacy path with IPv6 override
 
 // TestServeDNS_LegacyPathWithCNAME tests legacy path with CNAME override
-
-// TestServeDNS_ConditionalForwardingEvaluation tests RuleEvaluator path
-func TestServeDNS_ConditionalForwardingEvaluation(t *testing.T) {
-	handler := NewHandler()
-
-	logger, _ := logging.New(&config.LoggingConfig{
-		Level:  "error",
-		Format: "text",
-		Output: "stdout",
-	})
-
-	cfg := &config.Config{
-		UpstreamDNSServers: []string{"1.1.1.1:53"},
-		ConditionalForwarding: config.ConditionalForwardingConfig{
-			Enabled: true,
-			Rules: []config.ForwardingRule{
-				{
-					Name:      "corp-rule",
-					Domains:   []string{"corp.local"},
-					Upstreams: []string{"192.168.1.1:53"},
-					Enabled:   true,
-					Priority:  50,
-				},
-			},
-		},
-	}
-
-	fwd := forwarder.NewForwarder(cfg, logger, nil)
-	handler.SetForwarder(fwd)
-
-	// Create RuleEvaluator
-	evaluator, err := forwarder.NewRuleEvaluator(&cfg.ConditionalForwarding)
-	if err != nil {
-		t.Fatalf("Failed to create RuleEvaluator: %v", err)
-	}
-	handler.SetRuleEvaluator(evaluator)
-
-	w := &mockResponseWriter{
-		remoteAddr: &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 12345},
-	}
-
-	req := new(dns.Msg)
-	req.SetQuestion("server.corp.local.", dns.TypeA)
-
-	// Will try to forward to conditional upstream (may fail in test)
-	handler.ServeDNS(context.Background(), w, req)
-
-	// Just verify we got a response
-	if w.msg == nil {
-		t.Fatal("Expected response message")
-	}
-}
 
 // TestServeDNS_PolicyEngineAllowNoForwarder tests policy allow without forwarder
 func TestServeDNS_PolicyEngineAllowNoForwarder(t *testing.T) {

@@ -81,7 +81,6 @@ type handlerDeps struct {
 	blocklistManager *blocklist.Manager
 	localRecords     *localrecords.Manager
 	policyEngine     *policy.Engine
-	ruleEvaluator    *forwarder.RuleEvaluator
 	fwd              *forwarder.Forwarder
 	cache            cache.Interface
 	configWatcher    *config.Watcher
@@ -129,7 +128,6 @@ func (h *Handler) getQueryLogger() *QueryLogger               { return h.deps.Lo
 func (h *Handler) getBlocklistManager() *blocklist.Manager    { return h.deps.Load().blocklistManager }
 func (h *Handler) getLocalRecords() *localrecords.Manager     { return h.deps.Load().localRecords }
 func (h *Handler) getPolicyEngine() *policy.Engine            { return h.deps.Load().policyEngine }
-func (h *Handler) getRuleEvaluator() *forwarder.RuleEvaluator { return h.deps.Load().ruleEvaluator }
 func (h *Handler) getForwarder() *forwarder.Forwarder         { return h.deps.Load().fwd }
 func (h *Handler) getCache() cache.Interface                  { return h.deps.Load().cache }
 func (h *Handler) getConfigWatcher() *config.Watcher          { return h.deps.Load().configWatcher }
@@ -207,12 +205,6 @@ func (h *Handler) SetKillSwitch(ks KillSwitchChecker) {
 func (h *Handler) SetDecisionTrace(enabled bool) {
 	d := h.clone()
 	d.decisionTrace = enabled
-	h.deps.Store(&d)
-}
-
-func (h *Handler) SetRuleEvaluator(re *forwarder.RuleEvaluator) {
-	d := h.clone()
-	d.ruleEvaluator = re
 	h.deps.Store(&d)
 }
 
@@ -391,10 +383,6 @@ func (h *Handler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 	// Cache check - contains upstream responses and blocklist decisions (with traces).
 	// Policy BLOCK/REDIRECT decisions are NOT cached.
 	if h.serveFromCache(ctx, w, r, msg, trace, outcome) {
-		return
-	}
-
-	if h.handleConditionalForwarding(ctx, w, r, msg, domain, clientIP, qtypeLabel, outcome) {
 		return
 	}
 
