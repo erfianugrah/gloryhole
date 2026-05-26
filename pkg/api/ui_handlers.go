@@ -148,11 +148,6 @@ func (s *Server) handleLocalRecordsPage(w http.ResponseWriter, r *http.Request) 
 	s.serveAstroPage(w, r, "localrecords/index.html")
 }
 
-// handleConditionalForwardingPage serves the conditional forwarding management page (Astro pre-rendered).
-func (s *Server) handleConditionalForwardingPage(w http.ResponseWriter, r *http.Request) {
-	s.serveAstroPage(w, r, "forwarding/index.html")
-}
-
 // handleSettingsPage serves the settings/configuration page (Astro pre-rendered).
 func (s *Server) handleSettingsPage(w http.ResponseWriter, r *http.Request) {
 	s.serveAstroPage(w, r, "settings/index.html")

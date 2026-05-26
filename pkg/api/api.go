@@ -185,10 +185,10 @@ func New(cfg *Config) *Server {
 	mux.HandleFunc("POST /api/localrecords", s.handleAddLocalRecord)
 	mux.HandleFunc("DELETE /api/localrecords/{id}", s.handleRemoveLocalRecord)
 
-	// Conditional Forwarding management
-	mux.HandleFunc("GET /api/conditionalforwarding", s.handleGetConditionalForwarding)
-	mux.HandleFunc("POST /api/conditionalforwarding", s.handleAddConditionalForwarding)
-	mux.HandleFunc("DELETE /api/conditionalforwarding/{id}", s.handleRemoveConditionalForwarding)
+	// Conditional Forwarding — removed in v0.27, 410-Gone stub points at /api/policies
+	mux.HandleFunc("GET /api/conditionalforwarding", s.handleConditionalForwardingGone)
+	mux.HandleFunc("POST /api/conditionalforwarding", s.handleConditionalForwardingGone)
+	mux.HandleFunc("DELETE /api/conditionalforwarding/{id}", s.handleConditionalForwardingGone)
 
 	// Feature kill-switches
 	mux.HandleFunc("GET /api/features", s.handleGetFeatures)
@@ -213,8 +213,6 @@ func New(cfg *Config) *Server {
 	mux.HandleFunc("GET /queries", s.handleQueriesPage)
 	mux.HandleFunc("GET /policies", s.handlePoliciesPage)
 	mux.HandleFunc("GET /localrecords", s.handleLocalRecordsPage)
-	mux.HandleFunc("GET /conditionalforwarding", s.handleConditionalForwardingPage)
-	mux.HandleFunc("GET /forwarding", s.handleConditionalForwardingPage)
 	mux.HandleFunc("GET /settings", s.handleSettingsPage)
 	mux.HandleFunc("GET /clients", s.handleClientsPage)
 	mux.HandleFunc("GET /blocklists", s.handleBlocklistsPage)
