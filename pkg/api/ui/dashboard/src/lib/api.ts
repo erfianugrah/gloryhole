@@ -215,20 +215,6 @@ export interface LocalRecordCreateRequest {
   wildcard?: boolean;
 }
 
-export interface ConditionalForwardingRule {
-  id: string;
-  name: string;
-  domains?: string[];
-  client_cidrs?: string[];
-  query_types?: string[];
-  upstreams: string[];
-  priority: number;
-  timeout?: string;
-  max_retries?: number;
-  failover: boolean;
-  enabled: boolean;
-}
-
 export interface ClientSummary {
   client_ip: string;
   display_name: string;
@@ -487,28 +473,6 @@ export function createLocalRecord(
 
 export function deleteLocalRecord(id: string): Promise<void> {
   return apiFetch<void>(`/api/localrecords/${id}`, { method: "DELETE" });
-}
-
-// ─── Conditional Forwarding ──────────────────────────────────────────
-
-export async function fetchForwardingRules(): Promise<ConditionalForwardingRule[]> {
-  const res = await apiFetch<{ rules: ConditionalForwardingRule[] }>("/api/conditionalforwarding");
-  return res.rules ?? [];
-}
-
-export function createForwardingRule(
-  rule: Omit<ConditionalForwardingRule, "id">
-): Promise<ConditionalForwardingRule> {
-  return apiFetch<ConditionalForwardingRule>("/api/conditionalforwarding", {
-    method: "POST",
-    body: JSON.stringify(rule),
-  });
-}
-
-export function deleteForwardingRule(id: string): Promise<void> {
-  return apiFetch<void>(`/api/conditionalforwarding/${id}`, {
-    method: "DELETE",
-  });
 }
 
 // ─── Clients ─────────────────────────────────────────────────────────

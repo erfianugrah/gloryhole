@@ -187,7 +187,6 @@ func TestServeAstroPage_AllPages(t *testing.T) {
 		{"queries", "queries/index.html"},
 		{"policies", "policies/index.html"},
 		{"localrecords", "localrecords/index.html"},
-		{"forwarding", "forwarding/index.html"},
 		{"blocklists", "blocklists/index.html"},
 		{"clients", "clients/index.html"},
 		{"settings", "settings/index.html"},
