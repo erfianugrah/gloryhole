@@ -34,7 +34,8 @@ type Server struct {
 	logger            *slog.Logger
 	blocklistManager  *blocklist.Manager
 	policyEngine      *policy.Engine
-	cache             cache.Interface     // DNS cache for purge operations
+	clientGroupReload func(context.Context) error // Invalidates the policy.ClientGroupResolver cache. nil = no-op (e.g. tests).
+	cache             cache.Interface              // DNS cache for purge operations
 	configWatcher     *config.Watcher     // For kill-switch feature
 	killSwitch        *KillSwitchManager  // For duration-based temporary disabling
 	configSnapshot    *config.Config      // Used when watcher is unavailable (tests, static configs)
@@ -391,6 +392,28 @@ func (s *Server) SetCache(c cache.Interface) {
 // SetPolicyEngine updates the policy engine reference used by API handlers.
 func (s *Server) SetPolicyEngine(pe *policy.Engine) {
 	s.policyEngine = pe
+}
+
+// SetClientGroupReloader installs the function used to invalidate the
+// policy.ClientGroupResolver cache after profile / group mutations. Wired
+// from main.go to (*policy.SQLiteResolver).Reload.
+//
+// Pass nil to disable invalidation (e.g. tests with no resolver). When nil,
+// reloadClientGroupCache is a no-op.
+func (s *Server) SetClientGroupReloader(fn func(context.Context) error) {
+	s.clientGroupReload = fn
+}
+
+// reloadClientGroupCache fires the invalidation hook after a successful
+// client_profile / client_group mutation. Failures log at WARN and do not
+// surface to the API caller — the next reload (or restart) will recover.
+func (s *Server) reloadClientGroupCache(ctx context.Context) {
+	if s.clientGroupReload == nil {
+		return
+	}
+	if err := s.clientGroupReload(ctx); err != nil && s.logger != nil {
+		s.logger.WarnContext(ctx, "client group cache reload failed", "error", err)
+	}
 }
 
 // SetUnboundSupervisor updates the Unbound supervisor reference.

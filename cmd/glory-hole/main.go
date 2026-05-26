@@ -861,6 +861,16 @@ func main() {
 		"enabled", cfg.Server.EnablePolicies,
 	)
 
+	// Initialize the policy ClientGroupResolver. Backed by SQLite
+	// client_profiles. The InClientGroup() DSL primitive resolves through
+	// this; default before this point is a noop returning false.
+	clientGroupResolver := policy.NewSQLiteResolver(stor)
+	if err := clientGroupResolver.Reload(ctx); err != nil {
+		logger.Warn("Initial client group cache build failed; InClientGroup() will return false until next reload",
+			"error", err)
+	}
+	policy.SetClientGroupResolver(clientGroupResolver)
+
 	// Load allowed_clients from SQLite (fallback to YAML for first boot)
 	if stor != nil {
 		aclJSON, aclErr := stor.GetDynamicConfig(ctx, "allowed_clients")
@@ -1002,6 +1012,7 @@ func main() {
 	})
 	apiServer.SetCache(dnsCache)
 	apiServer.SetDNSServer(server)
+	apiServer.SetClientGroupReloader(clientGroupResolver.Reload)
 
 	// Setup config change callback now that all components are created
 	// This enables hot-reload for configuration changes

@@ -113,6 +113,9 @@ func (s *Server) handleUpdateClient(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Group membership may have changed — refresh the policy resolver cache.
+	s.reloadClientGroupCache(ctx)
+
 	s.writeJSON(w, http.StatusOK, map[string]string{
 		"status": "ok",
 	})
@@ -230,6 +233,10 @@ func (s *Server) handleDeleteClientGroup(w http.ResponseWriter, r *http.Request)
 		s.writeError(w, http.StatusInternalServerError, "Failed to delete client group")
 		return
 	}
+
+	// Deletion cascades to client_profiles (group_name SET NULL) — refresh
+	// the policy resolver cache so rules using InClientGroup() see the change.
+	s.reloadClientGroupCache(ctx)
 
 	s.writeJSON(w, http.StatusOK, map[string]string{
 		"status": "ok",
