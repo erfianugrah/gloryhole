@@ -7,11 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **`InClientGroup(ClientIP, "kids")` policy DSL primitive** (v0.26 §3 design → v0.27 implementation). First-class client-group membership as a policy input. Replaces the awkward `IPInCIDR(ClientIP, "...")`-or-chains. Backed by an atomic-pointer cache (`pkg/policy/SQLiteResolver`) that mirrors the BlocklistManager pattern — lock-free reads, single-store invalidation. Bench: **17.3 ns/op, 0 allocs/op** on a 10k-profile cache (Ryzen 7 7800X3D), well under the design budget. Profile / group mutations via `PUT /api/clients/{client}` and `DELETE /api/clients/groups/{g}` invalidate the cache synchronously — next DNS query reflects the change without restart.
+- New `Storage.ListClientProfiles(ctx)` method to feed the resolver. Cleaner than reusing `GetClientSummaries` (which aggregates query stats unnecessarily).
+
 ### Changed
 - Bumped `github.com/miekg/dns` v1.1.68 → v1.1.72 (transitively pulled `golang.org/x/mod` 0.30.0 → 0.31.0 and `golang.org/x/tools` 0.39.0 → 0.40.0). v1 is in maintenance mode upstream; v2 lives at `codeberg.org/miekg/dns` and is still pre-1.0 with active breaking changes — we stay on v1 until v2 stabilises (~2028).
 
+### Removed
+- **Conditional Forwarding runtime, API, and UI** (v0.26 §1 deprecation → v0.27 deletion). One full release cycle of deprecation has elapsed since the v0.26 migrator shipped. Removed:
+  - `pkg/dns/handler_forwarding.go::handleConditionalForwarding` and the call site in `Handler.ServeDNS`.
+  - `pkg/forwarder/evaluator.go` (`RuleEvaluator`, `ConditionalRule`, `compileRule`) and `pkg/forwarder/matcher.go` (`DomainMatcher`, `CIDRMatcher`, `QueryTypeMatcher`).
+  - `cmd/glory-hole/main.go` boot-time evaluator init and hot-reload branch; `equalConditionalForwardingConfig` (now dead).
+  - `pkg/api/handlers_conditionalforwarding.go` and tests; `handleConditionalForwardingPage` UI page handler.
+  - Frontend `forwarding.astro`, `ForwardingPage.tsx`, `ConditionalForwardingRule` type and the 3 fetch/create/delete API client functions, sidebar nav entry.
+  - Total: ~2200 lines of code removed.
+- **`/api/conditionalforwarding*` routes**: replaced by a 410-Gone stub returning `{"error":"gone","migrate_to":"/api/policies","removed_in":"0.27.0"}` for any method. UI routes `/conditionalforwarding` and `/forwarding` hard-removed (404). Stub itself slated for removal in v0.28+.
+
+### Kept (as legacy migration sources)
+- `pkg/config/conditional_forwarding.go` YAML schema. The first-boot migrator (`migrateConditionalForwardingToPolicies`) still reads `conditional_forwarding:` blocks from older YAML on v0.25 → v0.27 upgrades and writes Policy FORWARD entries instead. Slated for full removal in v0.28+ once the upgrade window has passed.
+
 ### Documentation
-- Design doc for v0.27 §3 implementation: `InClientGroup(ClientIP, "kids")` DSL helper, atomic-pointer cache mirroring the BlocklistManager pattern, sub-50 ns hot-path budget. Answers the v0.26 plan's open question on §3 sequencing (design now, implement in v0.27).
+- Plan for v0.27: [`docs/plans/2026-05-26-v027-cf-deletion-and-clientgroups.md`](docs/plans/2026-05-26-v027-cf-deletion-and-clientgroups.md).
+- Design for `InClientGroup`: [`docs/designs/client-groups-as-policy-input.md`](docs/designs/client-groups-as-policy-input.md).
 - Plan for v0.28: `net.IP` → `netip.Addr` migration. 68 non-test sites across 8 packages, sequenced in 9 leaf-first commits. Fixes a latent v4-mapped-v6 bug in `pkg/unbound/dnstap_reader.go` along the way. Independent of the (deferred) miekg/dns v2 port but explicitly recommended by the v2 porting guide as a prerequisite step.
 
 ## [0.17.0] - 2026-03-14
