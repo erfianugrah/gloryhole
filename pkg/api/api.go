@@ -405,14 +405,15 @@ func (s *Server) SetClientGroupReloader(fn func(context.Context) error) {
 }
 
 // reloadClientGroupCache fires the invalidation hook after a successful
-// client_profile / client_group mutation. Failures log at WARN and do not
+// client_profile / client_group mutation. Failures log at ERROR (matching
+// the blocklist background-reload pattern in handlers.go) and do not
 // surface to the API caller — the next reload (or restart) will recover.
 func (s *Server) reloadClientGroupCache(ctx context.Context) {
 	if s.clientGroupReload == nil {
 		return
 	}
 	if err := s.clientGroupReload(ctx); err != nil && s.logger != nil {
-		s.logger.WarnContext(ctx, "client group cache reload failed", "error", err)
+		s.logger.ErrorContext(ctx, "client group cache reload failed", "error", err)
 	}
 }
 

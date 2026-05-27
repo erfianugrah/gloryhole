@@ -90,7 +90,12 @@ func NewSQLiteResolver(s storage.Storage) *SQLiteResolver {
 // many-to-many join table, only this function changes — the cache shape
 // already supports multi-group.
 func (r *SQLiteResolver) Reload(ctx context.Context) error {
-	if r == nil || r.storage == nil {
+	// r == nil is intentionally NOT guarded here — a nil receiver would
+	// panic on r.cache.Store regardless. Callers (main.go init, the API
+	// invalidation hook) hold a concrete *SQLiteResolver, so this is
+	// unreachable in practice. NewSQLiteResolver(nil) is the only legitimate
+	// path to a nil-storage resolver — treat that as an empty cache.
+	if r.storage == nil {
 		empty := make(map[string]map[string]struct{})
 		r.cache.Store(&empty)
 		return nil
