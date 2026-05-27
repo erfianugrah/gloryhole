@@ -835,47 +835,32 @@ func (s *SQLiteStorage) GetTopDomains(ctx context.Context, limit int, blocked bo
 		blockedValue = 1
 	}
 
-	// Optimized query: First get top domains by count (fast with index),
-	// then get timestamps only for those top domains (reduces self-joins from N to limit).
-	// This avoids computing MIN/MAX id for ALL domains, only the top ones.
+	// Single-pass aggregation: covering index idx_queries_blocked_ts_domain
+	// (blocked, timestamp, domain) lets SQLite satisfy this entirely from the
+	// index without row lookups. The previous two-pass CTE + self-join doubled
+	// the work for no benefit — MIN/MAX(timestamp) over the per-domain group
+	// is the same set of rows the COUNT(*) already touched.
 	query := `
-		WITH top_domains AS (
-			SELECT domain, COUNT(*) AS total_queries
-			FROM queries
-			WHERE blocked = ?`
+		SELECT
+			domain,
+			COUNT(*) AS total_queries,
+			MIN(timestamp) AS first_seen_raw,
+			MAX(timestamp) AS last_seen_raw
+		FROM queries
+		WHERE blocked = ?`
 
 	args := []interface{}{blockedValue}
 
-	// Add time filter if since is not zero
 	if !since.IsZero() {
 		query += ` AND timestamp >= ?`
 		args = append(args, FormatTimestamp(since))
 	}
 
 	query += `
-			GROUP BY domain
-			ORDER BY total_queries DESC
-			LIMIT ?
-		)
-		SELECT
-			td.domain,
-			td.total_queries,
-			MIN(q.timestamp) AS first_seen_raw,
-			MAX(q.timestamp) AS last_seen_raw
-		FROM top_domains td
-		LEFT JOIN queries q ON q.domain = td.domain AND q.blocked = ?`
-
-	args = append(args, limit, blockedValue)
-
-	// Reapply time filter to the join
-	if !since.IsZero() {
-		query += ` AND q.timestamp >= ?`
-		args = append(args, FormatTimestamp(since))
-	}
-
-	query += `
-		GROUP BY td.domain, td.total_queries
-		ORDER BY td.total_queries DESC`
+		GROUP BY domain
+		ORDER BY total_queries DESC
+		LIMIT ?`
+	args = append(args, limit)
 
 	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {

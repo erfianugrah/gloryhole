@@ -378,8 +378,11 @@ func (s *Server) handleTopDomains(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Get top domains from storage
-	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	// Get top domains from storage. 15s tolerates a 7-day aggregation on a
+	// 500MB+ database on a slow Fly volume; the underlying query is
+	// single-pass with a covering index, but cold-cache index walks on a
+	// network-attached volume can still take several seconds.
+	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
 	defer cancel()
 
 	domains, err := s.storage.GetTopDomains(ctx, limit, blocked, sinceTime)

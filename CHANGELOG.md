@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.27.1] - 2026-05-27
+
+### Fixed
+- **Dashboard 500s on Fly (`/api/top-domains`, `/api/stats/timeseries`, `/api/stats/query-types`)** caused by `query failed: context deadline exceeded` against a 500MB+ query log on a slow Fly volume. Two compounding issues:
+  - `GetTopDomains` ran a two-pass CTE + self-join (`WITH top_domains AS (...) ... LEFT JOIN queries q ON q.domain = td.domain`) to attach MIN/MAX timestamps. The second pass re-scanned the same 320k-row range for no benefit — MIN/MAX over the per-domain group is the same set the COUNT(*) already touched. Direct measurement on the live DB: **20.7s** for the two-pass form vs **4.1s** single-pass.
+  - No covering index existed for the `(blocked, timestamp, domain)` access pattern. The closest match (`idx_queries_blocked_timestamp`) required a row lookup per matched entry to read `domain`, forcing 320k random reads against the volume.
+
+### Added
+- **Migration 16**: `idx_queries_blocked_ts_domain(blocked, timestamp, domain)` covering index. SQLite now satisfies the entire `GetTopDomains` query from the index alone, no row lookups. Drops the now-redundant `idx_queries_blocked_timestamp` (same `(blocked, timestamp)` prefix) to recover one row’s worth of write amplification.
+
+### Changed
+- `GetTopDomains` rewritten as a single-pass `SELECT domain, COUNT(*), MIN(timestamp), MAX(timestamp) ... WHERE blocked=? AND timestamp >= ? GROUP BY domain ORDER BY total DESC LIMIT ?`. No CTE, no self-join.
+- `/api/top-domains` handler context timeout bumped 5s → 15s. The underlying query is now well under 5s with the covering index, but cold-cache scans on a network-attached Fly volume can still spike; 15s matches the cost profile of comparable aggregation endpoints (e.g. `handlers_storage.go` uses 30s).
+
 ## [0.27.0] - 2026-05-27
 
 ### Added

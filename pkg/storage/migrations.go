@@ -305,6 +305,23 @@ var migrations = []Migration{
 				ON policy_rules(name);
 		`,
 	},
+	{
+		Version:     16,
+		Description: "Add covering index for top-domains aggregation (blocked, timestamp, domain)",
+		SQL: `
+			-- Covering index for GetTopDomains: SQLite can satisfy the entire
+			-- WHERE blocked=? AND timestamp>=? + GROUP BY domain query from the
+			-- index alone, no row lookups. Cuts the query from ~20-50s to <5s
+			-- on a 500MB+ database on a slow Fly volume.
+			CREATE INDEX IF NOT EXISTS idx_queries_blocked_ts_domain
+				ON queries(blocked, timestamp, domain);
+
+			-- idx_queries_blocked_timestamp is now strictly redundant: the new
+			-- index has the same (blocked, timestamp) prefix. Drop to recover
+			-- write amplification.
+			DROP INDEX IF EXISTS idx_queries_blocked_timestamp;
+		`,
+	},
 }
 
 // getMigrations returns all migrations sorted by version
