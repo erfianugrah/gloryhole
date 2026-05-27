@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.27.0] - 2026-05-27
+
 ### Added
 - **`InClientGroup(ClientIP, "kids")` policy DSL primitive** (v0.26 §3 design → v0.27 implementation). First-class client-group membership as a policy input. Replaces the awkward `IPInCIDR(ClientIP, "...")`-or-chains. Backed by an atomic-pointer cache (`pkg/policy/SQLiteResolver`) that mirrors the BlocklistManager pattern — lock-free reads, single-store invalidation. Bench: **17.3 ns/op, 0 allocs/op** on a 10k-profile cache (Ryzen 7 7800X3D), well under the design budget. Profile / group mutations via `PUT /api/clients/{client}` and `DELETE /api/clients/groups/{g}` invalidate the cache synchronously — next DNS query reflects the change without restart.
 - New `Storage.ListClientProfiles(ctx)` method to feed the resolver. Cleaner than reusing `GetClientSummaries` (which aggregates query stats unnecessarily).
@@ -26,6 +28,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Kept (as legacy migration sources)
 - `pkg/config/conditional_forwarding.go` YAML schema. The first-boot migrator (`migrateConditionalForwardingToPolicies`) still reads `conditional_forwarding:` blocks from older YAML on v0.25 → v0.27 upgrades and writes Policy FORWARD entries instead. Slated for full removal in v0.28+ once the upgrade window has passed.
+
+### Fixed
+- **ClientGroupResolver reload stability**: dropped the dead `r == nil` branch in `SQLiteResolver.Reload` (the guard claimed to handle a nil receiver but immediately dereferenced `r.cache`, so it would panic before returning — runtime-confirmed). Bumped `reloadClientGroupCache` log level from `Warn` to `Error` for parity with the blocklist background-reload path (`handlers.go:431`). Added two error-path tests (`TestClientGroupInvalidation_ReloadErrorDoesNotBreakHandler`, `...GroupDelete...`) asserting both mutation handlers return 200 OK when the reload hook errors — the underlying DB mutation has already committed, so a transient reload failure must not bubble back to the caller.
 
 ### Documentation
 - Plan for v0.27: [`docs/plans/2026-05-26-v027-cf-deletion-and-clientgroups.md`](docs/plans/2026-05-26-v027-cf-deletion-and-clientgroups.md).
