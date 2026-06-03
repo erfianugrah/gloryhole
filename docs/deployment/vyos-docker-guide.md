@@ -40,6 +40,11 @@ chmod 644 /config/erfi/glory-hole/etc/config.yml
 
 #### 4. Configure Container
 
+> **VyOS scripting + image notes (learned deploying on 1.3 equuleus, `vyos-sg`):**
+> - Run config sessions over SSH via **`vbash`**, not `bash` — `ssh router 'vbash -s' <<EOF … EOF`. Piping the same commands to `bash -s` silently fails to persist `set`s (`configure`/`set`/`commit` need the vbash environment).
+> - `volume` and `port` attributes must each be a **separate per-leaf `set`** (as below). A combined one-liner (`… volume data source X destination Y mode rw`) is rejected.
+> - The **plain** `erfianugrah/glory-hole` image bakes `config.example.yml`, **not** `config.yml`, and its default `CMD` is `-config /etc/glory-hole/config.yml`. So either (a) mount your config **dir** at `/etc/glory-hole` containing `config.yml` (as this guide does), or (b) if you mount a single dir at `/var/lib/glory-hole`, override the command: `set container name glory-hole command '-config'` + `set container name glory-hole arguments '/var/lib/glory-hole/config.yml'`.
+
 ```bash
 # Enter configuration mode
 configure
@@ -234,15 +239,31 @@ docker run -d \
 ```bash
 configure
 
-# Set glory-hole as DNS server for DHCP clients
+# 1. DHCP clients: hand out glory-hole as the resolver (per shared-network/subnet)
 set service dhcp-server shared-network-name LAN subnet 10.0.0.0/8 name-server 10.0.10.4
 
-# Or set as system DNS (careful - this affects VyOS itself)
+# 2. The router itself + the `service dns forwarding` upstream
 set system name-server 10.0.10.4
+
+# 3. CRITICAL: point `service dns forwarding` at glory-hole.
+set service dns forwarding name-server 10.0.10.4
 
 commit
 save
 ```
+
+> **Gotcha — the secondary-DNS ad-block bypass.** If clients are handed a
+> *secondary* DNS that is the VyOS gateway IP, that path hits
+> `service dns forwarding`, which **recurses independently** (root hints) unless
+> you give it an upstream — so it silently **bypasses glory-hole's blocklists**.
+> Step 3 above (`set service dns forwarding name-server <glory-hole-ip>`) forces
+> that path through glory-hole too. Verify both paths block:
+> `dig +short @<glory-hole-ip> doubleclick.net` **and**
+> `dig +short @<gateway-ip> doubleclick.net` should both return empty.
+>
+> Note: if Tailscale runs on the router, it owns `/etc/resolv.conf` (MagicDNS),
+> so the router's *own* lookups go via Tailscale regardless of `system name-server`
+> — client DNS still flows through glory-hole; only the router's own queries differ.
 
 #### Client Configuration
 
@@ -291,6 +312,13 @@ show log container glory-hole
 # - Port 53 already in use (check with: ss -tulpn | grep :53)
 # - Config file syntax error (validate YAML)
 # - Insufficient permissions on volumes
+# - "open /etc/glory-hole/config.yml: no such file or directory" — the plain
+#   image has no baked config.yml. Either mount your config dir at
+#   /etc/glory-hole (containing config.yml), or override the command to point
+#   -config at your mounted path (see "Configure Container" notes above).
+# - Container exits ~0.5s after start with the unit showing "Succeeded": the
+#   detached run launched but glory-hole crashed — get the real reason with
+#   `sudo podman run --rm -v <hostdir>:/var/lib/glory-hole <image>` (foreground).
 ```
 
 ### DNS Not Resolving
